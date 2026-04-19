@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../widgets/track_selection_sheet.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -148,21 +149,23 @@ class _ButtonWithGlow extends StatelessWidget {
           ),
         ),
         // Button
-        _IniciarButton(),
+        _IniciarButton(onTap: () => showTrackSelectionSheet(context)),
       ],
     );
   }
 }
 
 class _IniciarButton extends StatelessWidget {
+  const _IniciarButton({required this.onTap});
+
+  final VoidCallback onTap;
+
   @override
   Widget build(BuildContext context) {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: () {
-          debugPrint('[Lapzy] INICIAR pressed');
-        },
+        onTap: onTap,
         borderRadius: BorderRadius.circular(14),
         splashColor: Colors.white.withAlpha(30),
         highlightColor: Colors.white.withAlpha(15),
