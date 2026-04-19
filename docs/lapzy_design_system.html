@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lapzy — Design System</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&family=Rajdhani:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0A0A0A;
+    --surface: #141414;
+    --surface-2: #1C1C1C;
+    --border: rgba(255,255,255,0.08);
+    --text-primary: #FFFFFF;
+    --text-secondary: rgba(255,255,255,0.5);
+    --text-muted: rgba(255,255,255,0.3);
+
+    --color-green: #00E676;
+    --color-purple: #BF5AF2;
+    --color-red: #FF3B30;
+    --color-s1: #00B0FF;
+    --color-s2: #FFD600;
+    --color-s3: #FF6D00;
+    --color-brand: #FF6D00;
+
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 16px;
+    --space-4: 24px;
+    --space-5: 32px;
+    --space-6: 48px;
+
+    --radius-sm: 4px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --radius-xl: 16px;
+  }
+
+  html { background: var(--bg); }
+
+  body {
+    background: var(--bg);
+    color: var(--text-primary);
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+    padding: 48px 32px;
+    max-width: 960px;
+    margin: 0 auto;
+  }
+
+  /* ── HEADER ── */
+  .ds-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-bottom: 56px;
+    padding-bottom: 32px;
+    border-bottom: 1px solid var(--border);
+  }
+  .logo-mark {
+    font-family: 'Rajdhani', monospace;
+    font-size: 40px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    line-height: 1;
+  }
+  .logo-mark .lap { color: #fff; }
+  .logo-mark .zy  { color: #FF6D00; }
+  .ds-meta { font-size: 12px; color: var(--text-muted); font-family: 'Courier New', monospace; text-align: right; }
+  .ds-meta strong { display: block; color: var(--text-secondary); font-size: 14px; }
+
+  /* ── SECTION ── */
+  .section { margin-bottom: 64px; }
+  .section-title {
+    font-family: 'Rajdhani', system-ui, sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 24px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* ── COLORS ── */
+  .color-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 12px;
+  }
+  .color-card {
+    background: var(--surface);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border);
+    overflow: hidden;
+  }
+  .color-card.brand-only { border: 1px dashed rgba(255,109,0,0.35); }
+  .color-swatch { height: 72px; display: flex; align-items: center; justify-content: center; }
+  .brand-badge {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    background: rgba(0,0,0,0.5);
+    color: #fff;
+    padding: 3px 8px;
+    border-radius: 3px;
+  }
+  .color-meta { padding: 12px 14px; }
+  .color-name { font-size: 13px; font-weight: 500; color: var(--text-primary); margin-bottom: 3px; }
+  .color-hex  { font-family: 'Courier New', monospace; font-size: 11px; color: var(--text-secondary); margin-bottom: 5px; }
+  .color-use  { font-size: 11px; color: var(--text-muted); line-height: 1.4; margin-bottom: 5px; }
+  .color-var  { font-family: 'Courier New', monospace; font-size: 10px; color: rgba(255,255,255,0.2); }
+
+  /* ── TYPOGRAPHY ── */
+  .type-sample {
+    background: var(--surface);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border);
+    padding: 24px 28px;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: baseline;
+    gap: 32px;
+    flex-wrap: wrap;
+  }
+  .type-meta { min-width: 110px; flex-shrink: 0; }
+  .type-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 4px; }
+  .type-sub   { font-size: 10px; color: rgba(255,255,255,0.2); font-family: 'Courier New', monospace; line-height: 1.6; }
+  .t-display { font-family: 'Rajdhani', monospace; font-size: 72px; font-weight: 700; color: var(--text-primary); line-height: 1; letter-spacing: -0.01em; }
+  .t-mono    { font-family: 'Rajdhani', monospace; font-size: 48px; font-weight: 500; color: var(--text-primary); letter-spacing: 0.04em; line-height: 1; }
+  .t-heading { font-family: 'Rajdhani', monospace; font-size: 32px; font-weight: 700; color: var(--text-primary); line-height: 1; }
+  .t-body    { font-family: 'Inter', system-ui, sans-serif; font-size: 16px; font-weight: 400; color: var(--text-primary); }
+  .t-caption { font-family: 'Inter', system-ui, sans-serif; font-size: 12px; font-weight: 400; color: var(--text-secondary); }
+
+  /* ── BUTTONS ── */
+  .row-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 12px;
+  }
+  .btn-row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin-bottom: 24px; }
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Inter', system-ui, sans-serif;
+    font-weight: 700;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    border: none;
+    cursor: pointer;
+    border-radius: var(--radius-md);
+    transition: opacity 0.12s, transform 0.08s;
+    text-decoration: none;
+  }
+  .btn:active { transform: scale(0.97); }
+  .btn-lg { height: 56px; padding: 0 36px; font-size: 15px; }
+  .btn-md { height: 44px; padding: 0 24px; font-size: 13px; }
+  .btn-sm { height: 32px; padding: 0 16px; font-size: 11px; }
+  .btn-primary     { background: var(--color-green); color: #000; }
+  .btn-primary:hover { opacity: 0.88; }
+  .btn-destructive { background: var(--color-red);   color: #fff; }
+  .btn-destructive:hover { opacity: 0.88; }
+  .btn-ghost {
+    background: transparent;
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+  }
+  .btn-ghost:hover { background: var(--surface); }
+  .btn-disabled  { opacity: 0.3; cursor: not-allowed; pointer-events: none; }
+  .btn-pressed   { transform: scale(0.97); opacity: 0.85; }
+  .state-group   { display: flex; align-items: center; gap: 10px; }
+  .state-lbl     { font-size: 11px; color: var(--text-muted); min-width: 52px; }
+
+  /* ── SECTOR BADGES ── */
+  .badge-block { margin-bottom: 20px; }
+  .badge-row   { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+  .badge-row-lbl { font-size: 11px; color: var(--text-muted); min-width: 52px; }
+  .sector-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Rajdhani', monospace;
+    font-weight: 700;
+    font-size: 13px;
+    letter-spacing: 0.06em;
+    width: 44px;
+    height: 44px;
+    border-radius: var(--radius-md);
+    border: 1.5px solid transparent;
+  }
+  .s-neutral { background: var(--surface-2); color: var(--text-secondary); border-color: var(--border); }
+  .s-s1 { background: rgba(0,176,255,0.12); color: #00B0FF; border-color: rgba(0,176,255,0.35); }
+  .s-s2 { background: rgba(255,214,0,0.12); color: #FFD600; border-color: rgba(255,214,0,0.35); }
+  .s-s3 { background: rgba(255,109,0,0.12); color: #FF6D00; border-color: rgba(255,109,0,0.35); }
+  .s-best { background: rgba(191,90,242,0.12); color: #BF5AF2; border-color: rgba(191,90,242,0.35); }
+
+  /* ── DELTA ── */
+  .delta {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-family: 'Rajdhani', monospace;
+    font-weight: 700;
+    font-size: 22px;
+    padding: 5px 14px;
+    border-radius: var(--radius-sm);
+  }
+  .delta-pos { color: var(--color-green); background: rgba(0,230,118,0.08); }
+  .delta-neg { color: var(--color-red);   background: rgba(255,59,48,0.08); }
+
+  /* ── LAP CARDS ── */
+  .lap-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 14px 20px;
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    margin-bottom: 8px;
+  }
+  .lap-num  { font-size: 12px; color: var(--text-muted); min-width: 22px; text-align: center; }
+  .lap-time { font-family: 'Rajdhani', monospace; font-size: 28px; font-weight: 700; color: var(--text-primary); flex: 1; letter-spacing: 0.04em; }
+  .lap-card.best-lap { border-color: rgba(191,90,242,0.3); background: rgba(191,90,242,0.06); }
+  .lap-card.best-lap .lap-time { color: var(--color-purple); }
+  .lap-card.best-lap .lap-num  { color: var(--color-purple); }
+  .pr-tag {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    color: var(--color-purple);
+    text-transform: uppercase;
+    padding: 3px 10px;
+    background: rgba(191,90,242,0.1);
+    border-radius: var(--radius-sm);
+  }
+
+  /* ── EVENT BORDERS ── */
+  .borders-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .border-demo {
+    border-radius: var(--radius-lg);
+    padding: 24px 16px;
+    text-align: center;
+    font-family: 'Rajdhani', monospace;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    background: var(--surface);
+  }
+  .border-green  { box-shadow: 0 0 0 3px var(--color-green);  color: var(--color-green); }
+  .border-purple { box-shadow: 0 0 0 3px var(--color-purple); color: var(--color-purple); }
+  .border-red    { box-shadow: 0 0 0 3px var(--color-red);    color: var(--color-red); }
+
+  /* ── SPACING ── */
+  .spacing-row  { display: flex; align-items: flex-end; gap: 20px; flex-wrap: wrap; }
+  .spacing-item { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .spacing-block {
+    background: rgba(0,176,255,0.18);
+    border: 1px solid rgba(0,176,255,0.35);
+    border-radius: 2px;
+    width: 36px;
+  }
+  .spacing-lbl { font-size: 11px; color: var(--text-muted); font-family: 'Courier New', monospace; text-align: center; line-height: 1.5; }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 600px) {
+    body { padding: 32px 16px; }
+    .color-grid  { grid-template-columns: repeat(2, 1fr); }
+    .borders-grid { grid-template-columns: 1fr; }
+    .type-sample { flex-direction: column; gap: 12px; }
+    .t-display { font-size: 52px; }
+    .t-mono    { font-size: 36px; }
+  }
+</style>
+</head>
+<body>
+
+  <header class="ds-header">
+    <div>
+      <div class="logo-mark"><span class="lap">LAP</span><span class="zy">ZY</span></div>
+      <div style="font-size:12px; color:var(--text-muted); margin-top:6px; letter-spacing:0.08em; text-transform:uppercase;">Design System</div>
+    </div>
+    <div class="ds-meta">
+      <strong>v0.9</strong>
+      Dark mode · Landscape first
+    </div>
+  </header>
+
+  <!-- COLORS -->
+  <section class="section">
+    <div class="section-title">Cores</div>
+    <div class="color-grid">
+
+      <div class="color-card">
+        <div class="color-swatch" style="background:#00E676;"></div>
+        <div class="color-meta">
+          <div class="color-name">Green</div>
+          <div class="color-hex">#00E676</div>
+          <div class="color-use">INICIAR · delta positivo · PR</div>
+          <div class="color-var">--color-green</div>
+        </div>
+      </div>
+
+      <div class="color-card">
+        <div class="color-swatch" style="background:#BF5AF2;"></div>
+        <div class="color-meta">
+          <div class="color-name">Purple</div>
+          <div class="color-hex">#BF5AF2</div>
+          <div class="color-use">Melhor volta · destaque PR</div>
+          <div class="color-var">--color-purple</div>
+        </div>
+      </div>
+
+      <div class="color-card">
+        <div class="color-swatch" style="background:#FF3B30;"></div>
+        <div class="color-meta">
+          <div class="color-name">Red</div>
+          <div class="color-hex">#FF3B30</div>
+          <div class="color-use">FINALIZAR · delta negativo · alerta</div>
+          <div class="color-var">--color-red</div>
+        </div>
+      </div>
+
+      <div class="color-card">
+        <div class="color-swatch" style="background:#00B0FF;"></div>
+        <div class="color-meta">
+          <div class="color-name">S1 — Setor 1</div>
+          <div class="color-hex">#00B0FF</div>
+          <div class="color-use">Badge de setor 1</div>
+          <div class="color-var">--color-s1</div>
+        </div>
+      </div>
+
+      <div class="color-card">
+        <div class="color-swatch" style="background:#FFD600;"></div>
+        <div class="color-meta">
+          <div class="color-name">S2 — Setor 2</div>
+          <div class="color-hex">#FFD600</div>
+          <div class="color-use">Badge de setor 2</div>
+          <div class="color-var">--color-s2</div>
+        </div>
+      </div>
+
+      <div class="color-card">
+        <div class="color-swatch" style="background:#FF6D00;"></div>
+        <div class="color-meta">
+          <div class="color-name">S3 — Setor 3</div>
+          <div class="color-hex">#FF6D00</div>
+          <div class="color-use">Badge de setor 3 (dado, não marca)</div>
+          <div class="color-var">--color-s3</div>
+        </div>
+      </div>
+
+      <div class="color-card">
+        <div class="color-swatch" style="background:linear-gradient(135deg,#0A0A0A 50%,#141414 50%);"></div>
+        <div class="color-meta">
+          <div class="color-name">Background · Surface</div>
+          <div class="color-hex">#0A0A0A · #141414</div>
+          <div class="color-use">App bg · cards e superfícies</div>
+          <div class="color-var">--bg · --surface</div>
+        </div>
+      </div>
+
+      <div class="color-card brand-only">
+        <div class="color-swatch" style="background:#FF6D00;">
+          <span class="brand-badge">BRAND ONLY</span>
+        </div>
+        <div class="color-meta">
+          <div class="color-name">Orange — Marca</div>
+          <div class="color-hex">#FF6D00</div>
+          <div class="color-use">Logo · ícone · splash — nunca em UI</div>
+          <div class="color-var">--color-brand</div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- TYPOGRAPHY -->
+  <section class="section">
+    <div class="section-title">Tipografia</div>
+
+    <div class="type-sample">
+      <div class="type-meta">
+        <div class="type-label">Display</div>
+        <div class="type-sub">Rajdhani 700<br>72px<br>Tempo atual</div>
+      </div>
+      <div class="t-display">1:23.456</div>
+    </div>
+
+    <div class="type-sample">
+      <div class="type-meta">
+        <div class="type-label">Lap Time</div>
+        <div class="type-sub">Rajdhani 500<br>48px<br>Melhor volta</div>
+      </div>
+      <div class="t-mono">1:24.120</div>
+    </div>
+
+    <div class="type-sample">
+      <div class="type-meta">
+        <div class="type-label">Heading</div>
+        <div class="type-sub">Rajdhani 700<br>32px<br>Títulos de seção</div>
+      </div>
+      <div class="t-heading">Melhor volta</div>
+    </div>
+
+    <div class="type-sample">
+      <div class="type-meta">
+        <div class="type-label">Body</div>
+        <div class="type-sub">Inter 400<br>16px<br>Texto geral</div>
+      </div>
+      <div class="t-body">Volta 7 · Pista do Jacaré</div>
+    </div>
+
+    <div class="type-sample">
+      <div class="type-meta">
+        <div class="type-label">Caption</div>
+        <div class="type-sub">Inter 400<br>12px<br>Metadados</div>
+      </div>
+      <div class="t-caption">Sessão encerrada às 14:32 · 12 voltas completadas</div>
+    </div>
+
+  </section>
+
+  <!-- BUTTONS -->
+  <section class="section">
+    <div class="section-title">Botões</div>
+
+    <div class="row-label" style="margin-bottom:12px;">Large — 56px</div>
+    <div class="btn-row">
+      <button class="btn btn-primary btn-lg">Iniciar</button>
+      <button class="btn btn-destructive btn-lg">Finalizar</button>
+      <button class="btn btn-ghost btn-lg">Histórico</button>
+    </div>
+
+    <div class="row-label" style="margin-bottom:12px;">Medium — 44px</div>
+    <div class="btn-row">
+      <button class="btn btn-primary btn-md">Iniciar</button>
+      <button class="btn btn-destructive btn-md">Finalizar</button>
+      <button class="btn btn-ghost btn-md">Histórico</button>
+    </div>
+
+    <div class="row-label" style="margin-bottom:12px;">Small — 32px</div>
+    <div class="btn-row">
+      <button class="btn btn-primary btn-sm">Iniciar</button>
+      <button class="btn btn-destructive btn-sm">Finalizar</button>
+      <button class="btn btn-ghost btn-sm">Histórico</button>
+    </div>
+
+    <div class="row-label" style="margin-bottom:12px;">Estados</div>
+    <div class="btn-row">
+      <div class="state-group"><span class="state-lbl">Default</span><button class="btn btn-primary btn-md">Iniciar</button></div>
+      <div class="state-group"><span class="state-lbl">Pressed</span><button class="btn btn-primary btn-md btn-pressed">Iniciar</button></div>
+      <div class="state-group"><span class="state-lbl">Disabled</span><button class="btn btn-primary btn-md btn-disabled" disabled>Iniciar</button></div>
+    </div>
+  </section>
+
+  <!-- COMPONENTS -->
+  <section class="section">
+    <div class="section-title">Componentes</div>
+
+    <!-- Sector Badges -->
+    <div class="row-label" style="margin-bottom:14px;">Badges de Setor</div>
+    <div class="badge-block">
+      <div class="badge-row">
+        <span class="badge-row-lbl">Neutro</span>
+        <div class="sector-badge s-neutral">S1</div>
+        <div class="sector-badge s-neutral">S2</div>
+        <div class="sector-badge s-neutral">S3</div>
+      </div>
+      <div class="badge-row">
+        <span class="badge-row-lbl">Ativo</span>
+        <div class="sector-badge s-s1">S1</div>
+        <div class="sector-badge s-s2">S2</div>
+        <div class="sector-badge s-s3">S3</div>
+      </div>
+      <div class="badge-row">
+        <span class="badge-row-lbl">Melhor</span>
+        <div class="sector-badge s-best">S1</div>
+        <div class="sector-badge s-best">S2</div>
+        <div class="sector-badge s-best">S3</div>
+      </div>
+    </div>
+
+    <!-- Delta -->
+    <div class="row-label" style="margin-bottom:14px; margin-top:8px;">Indicador de Delta</div>
+    <div style="display:flex; gap:14px; flex-wrap:wrap; margin-bottom:32px;">
+      <div class="delta delta-pos">▲ +0.234</div>
+      <div class="delta delta-neg">▼ −0.887</div>
+    </div>
+
+    <!-- Lap Cards -->
+    <div class="row-label" style="margin-bottom:14px;">Card de Volta</div>
+    <div class="lap-card">
+      <div class="lap-num">6</div>
+      <div class="lap-time">1:24.889</div>
+      <div class="delta delta-neg" style="font-size:16px; padding:3px 12px;">▼ −0.341</div>
+    </div>
+    <div class="lap-card best-lap">
+      <div class="lap-num">7</div>
+      <div class="lap-time">1:24.120</div>
+      <span class="pr-tag">PR</span>
+    </div>
+    <div class="lap-card" style="margin-bottom:32px;">
+      <div class="lap-num">8</div>
+      <div class="lap-time">1:25.230</div>
+      <div class="delta delta-neg" style="font-size:16px; padding:3px 12px;">▼ −1.110</div>
+    </div>
+
+    <!-- Event Borders -->
+    <div class="row-label" style="margin-bottom:14px;">Borda de Evento — Tela de Corrida</div>
+    <div class="borders-grid">
+      <div class="border-demo border-green">PR · Delta+</div>
+      <div class="border-demo border-purple">Melhor Volta</div>
+      <div class="border-demo border-red">Finalizar</div>
+    </div>
+  </section>
+
+  <!-- SPACING -->
+  <section class="section">
+    <div class="section-title">Espaçamento</div>
+    <div class="spacing-row">
+      <div class="spacing-item">
+        <div class="spacing-block" style="height:4px;"></div>
+        <div class="spacing-lbl">4px<br>--space-1</div>
+      </div>
+      <div class="spacing-item">
+        <div class="spacing-block" style="height:8px;"></div>
+        <div class="spacing-lbl">8px<br>--space-2</div>
+      </div>
+      <div class="spacing-item">
+        <div class="spacing-block" style="height:16px;"></div>
+        <div class="spacing-lbl">16px<br>--space-3</div>
+      </div>
+      <div class="spacing-item">
+        <div class="spacing-block" style="height:24px;"></div>
+        <div class="spacing-lbl">24px<br>--space-4</div>
+      </div>
+      <div class="spacing-item">
+        <div class="spacing-block" style="height:32px;"></div>
+        <div class="spacing-lbl">32px<br>--space-5</div>
+      </div>
+      <div class="spacing-item">
+        <div class="spacing-block" style="height:48px;"></div>
+        <div class="spacing-lbl">48px<br>--space-6</div>
+      </div>
+    </div>
+  </section>
+
+</body>
+</html>
