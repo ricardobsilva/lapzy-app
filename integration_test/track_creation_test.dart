@@ -8,6 +8,8 @@ void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   group('Criação de pista', () {
+    // ── NAVEGAÇÃO ─────────────────────────────────────────────────────────────
+
     group('navegação a partir da sheet de seleção', () {
       testWidgets(
           'fluxo: home → INICIAR → + NOVA PISTA → tela de criação abre',
@@ -25,25 +27,6 @@ void main() {
       });
 
       testWidgets(
-          'fluxo: home → INICIAR → + NOVA PISTA → seletor de modo visível',
-          (tester) async {
-        app.main();
-        await tester.pumpAndSettle();
-
-        await tester.tap(find.text('INICIAR'));
-        await tester.pumpAndSettle();
-
-        await tester.tap(find.text('+ NOVA PISTA'));
-        await tester.pumpAndSettle();
-
-        expect(find.text('TRILHA'), findsOneWidget);
-        expect(find.text('S/C'), findsOneWidget);
-        expect(find.text('S1'), findsOneWidget);
-        expect(find.text('S2'), findsOneWidget);
-        expect(find.text('S3'), findsOneWidget);
-      });
-
-      testWidgets(
           'fluxo: home → INICIAR → + NOVA PISTA → sheet fecha antes de abrir criação',
           (tester) async {
         app.main();
@@ -57,10 +40,9 @@ void main() {
 
         expect(find.text('SELECIONAR PISTA'), findsNothing);
       });
-    });
 
-    group('campo de nome', () {
-      testWidgets('aceita entrada de texto e exibe o valor digitado',
+      testWidgets(
+          'fluxo: home → INICIAR → + NOVA PISTA → barra de progresso visível com 4 passos',
           (tester) async {
         app.main();
         await tester.pumpAndSettle();
@@ -71,16 +53,14 @@ void main() {
         await tester.tap(find.text('+ NOVA PISTA'));
         await tester.pumpAndSettle();
 
-        await tester.enterText(
-            find.byKey(const Key('track_name_field')), 'Granja Viana');
-        await tester.pump();
-
-        expect(find.text('Granja Viana'), findsOneWidget);
+        expect(find.text('LARGADA'), findsOneWidget);
+        expect(find.text('SETORES'), findsOneWidget);
+        expect(find.text('NOME'), findsOneWidget);
+        expect(find.text('SALVAR'), findsOneWidget);
       });
-    });
 
-    group('botão SALVAR', () {
-      testWidgets('está desabilitado ao abrir a tela sem nome e sem pista traçada',
+      testWidgets(
+          'fluxo: home → INICIAR → + NOVA PISTA → não exibe label TRAÇADO',
           (tester) async {
         app.main();
         await tester.pumpAndSettle();
@@ -91,12 +71,72 @@ void main() {
         await tester.tap(find.text('+ NOVA PISTA'));
         await tester.pumpAndSettle();
 
-        final saveText =
-            tester.widget<Text>(find.byKey(const Key('save_button')));
-        expect(saveText.style!.color,
-            isNot(equals(const Color(0xFF00E676))));
+        expect(find.text('TRAÇADO'), findsNothing);
       });
     });
+
+    // ── PASSO INICIAL — LARGADA ───────────────────────────────────────────────
+
+    group('passo inicial (LARGADA)', () {
+      testWidgets('abre no passo LARGADA com painel correto', (tester) async {
+        app.main();
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('INICIAR'));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('+ NOVA PISTA'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Largada / Chegada'), findsOneWidget);
+      });
+
+      testWidgets('exibe botão TRAÇAR para entrar em modo de desenho',
+          (tester) async {
+        app.main();
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('INICIAR'));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('+ NOVA PISTA'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('TRAÇAR'), findsOneWidget);
+      });
+
+      testWidgets('hint correto no mapa aparece ao ativar modo traçar',
+          (tester) async {
+        app.main();
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('INICIAR'));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('+ NOVA PISTA'));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('TRAÇAR'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Arraste para marcar a largada'), findsOneWidget);
+      });
+
+      testWidgets('não exibe botão FECHAR PISTA (step removido)', (tester) async {
+        app.main();
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('INICIAR'));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('+ NOVA PISTA'));
+        await tester.pumpAndSettle();
+
+        expect(find.byKey(const Key('close_track_button')), findsNothing);
+      });
+    });
+
+    // ── BACK BUTTON ───────────────────────────────────────────────────────────
 
     group('botão voltar', () {
       testWidgets('retorna para a tela inicial ao pressionar voltar',
@@ -116,6 +156,5 @@ void main() {
         expect(find.text('INICIAR'), findsOneWidget);
       });
     });
-
   });
 }
