@@ -127,6 +127,34 @@ testWidgets('tela inicial exibe botão INICIAR centralizado', (tester) async { .
 
 ---
 
+## Organização por contexto com `group()`
+
+Use `group()` para agrupar testes por contexto, análogo ao `context` do RSpec.
+Nunca agrupe por seção com comentários — use blocos `group()` aninhados.
+
+```dart
+// ❌ PROIBIDO — comentário como separador
+// ── HAVERSINE ────────────────────
+test('haversine retorna 0 para pontos iguais', () { ... });
+test('haversine é simétrico', () { ... });
+
+// ✅ CORRETO — group() para cada contexto
+group('haversine', () {
+  group('quando os dois pontos são iguais', () {
+    test('retorna 0', () { ... });
+  });
+
+  group('simetria', () {
+    test('dist(a,b) é igual a dist(b,a)', () { ... });
+  });
+});
+```
+
+**Regra:** o nome do `test()` deve fazer sentido lido em sequência com os `group()` pai:
+> `haversine` → `quando os dois pontos são iguais` → `retorna 0`
+
+---
+
 ## Rodando Todos os Testes
 
 ```bash
