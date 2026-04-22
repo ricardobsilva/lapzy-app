@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lapzy/screens/track_creation_screen.dart';
 
-Widget _app() {
+// ── HELPERS ───────────────────────────────────────────────────────────────────
+
+Widget _app({int initialStep = 0}) {
   return MaterialApp(
     home: TrackCreationScreen(
       mapBuilder: () => const ColoredBox(color: Color(0xFF0A0A0A)),
+      initialStep: initialStep,
     ),
   );
 }
@@ -15,132 +18,190 @@ void _setPhoneSize(WidgetTester tester) {
   tester.view.devicePixelRatio = 1.0;
 }
 
+void _resetView(WidgetTester tester) {
+  tester.view.resetPhysicalSize();
+  tester.view.resetDevicePixelRatio();
+}
+
+// ── TESTES ────────────────────────────────────────────────────────────────────
+
 void main() {
   group('TrackCreationScreen', () {
+    // ── RENDERIZAÇÃO INICIAL ──────────────────────────────────────────────────
+
     group('quando a tela é exibida pela primeira vez', () {
       testWidgets('renderiza sem erros', (tester) async {
         _setPhoneSize(tester);
-        addTearDown(tester.view.resetPhysicalSize);
-        addTearDown(tester.view.resetDevicePixelRatio);
+        addTearDown(() => _resetView(tester));
 
         await tester.pumpWidget(_app());
 
         expect(find.byType(TrackCreationScreen), findsOneWidget);
       });
 
-      testWidgets('exibe campo de nome da pista', (tester) async {
+      testWidgets('exibe ícone de voltar', (tester) async {
         _setPhoneSize(tester);
-        addTearDown(tester.view.resetPhysicalSize);
-        addTearDown(tester.view.resetDevicePixelRatio);
+        addTearDown(() => _resetView(tester));
 
         await tester.pumpWidget(_app());
 
-        expect(find.byKey(const Key('track_name_field')), findsOneWidget);
-      });
-
-      testWidgets('exibe hint "Nome da pista" no campo vazio', (tester) async {
-        _setPhoneSize(tester);
-        addTearDown(tester.view.resetPhysicalSize);
-        addTearDown(tester.view.resetDevicePixelRatio);
-
-        await tester.pumpWidget(_app());
-
-        expect(find.text('Nome da pista'), findsOneWidget);
-      });
-
-      testWidgets('exibe botão SALVAR', (tester) async {
-        _setPhoneSize(tester);
-        addTearDown(tester.view.resetPhysicalSize);
-        addTearDown(tester.view.resetDevicePixelRatio);
-
-        await tester.pumpWidget(_app());
-
-        expect(find.byKey(const Key('save_button')), findsOneWidget);
+        expect(find.byIcon(Icons.arrow_back), findsOneWidget);
       });
     });
 
-    group('seletor de modo', () {
-      testWidgets('exibe aba TRILHA', (tester) async {
+    // ── BARRA DE PROGRESSO ────────────────────────────────────────────────────
+
+    group('barra de progresso', () {
+      testWidgets('exibe label LARGADA', (tester) async {
         _setPhoneSize(tester);
-        addTearDown(tester.view.resetPhysicalSize);
-        addTearDown(tester.view.resetDevicePixelRatio);
+        addTearDown(() => _resetView(tester));
 
         await tester.pumpWidget(_app());
 
-        expect(find.text('TRILHA'), findsOneWidget);
+        expect(find.text('LARGADA'), findsOneWidget);
       });
 
-      testWidgets('exibe aba S/C', (tester) async {
+      testWidgets('exibe label SETORES', (tester) async {
         _setPhoneSize(tester);
-        addTearDown(tester.view.resetPhysicalSize);
-        addTearDown(tester.view.resetDevicePixelRatio);
+        addTearDown(() => _resetView(tester));
+
+        await tester.pumpWidget(_app());
+
+        expect(find.text('SETORES'), findsOneWidget);
+      });
+
+      testWidgets('exibe label NOME', (tester) async {
+        _setPhoneSize(tester);
+        addTearDown(() => _resetView(tester));
+
+        await tester.pumpWidget(_app());
+
+        expect(find.text('NOME'), findsOneWidget);
+      });
+
+      testWidgets('exibe label SALVAR', (tester) async {
+        _setPhoneSize(tester);
+        addTearDown(() => _resetView(tester));
+
+        await tester.pumpWidget(_app());
+
+        expect(find.text('SALVAR'), findsOneWidget);
+      });
+
+      testWidgets('não exibe label TRAÇADO (step removido)', (tester) async {
+        _setPhoneSize(tester);
+        addTearDown(() => _resetView(tester));
+
+        await tester.pumpWidget(_app());
+
+        expect(find.text('TRAÇADO'), findsNothing);
+      });
+
+      testWidgets('passo 0 exibe nó S/C ativo', (tester) async {
+        _setPhoneSize(tester);
+        addTearDown(() => _resetView(tester));
 
         await tester.pumpWidget(_app());
 
         expect(find.text('S/C'), findsOneWidget);
       });
-
-      testWidgets('exibe aba S1', (tester) async {
-        _setPhoneSize(tester);
-        addTearDown(tester.view.resetPhysicalSize);
-        addTearDown(tester.view.resetDevicePixelRatio);
-
-        await tester.pumpWidget(_app());
-
-        expect(find.text('S1'), findsOneWidget);
-      });
-
-      testWidgets('exibe aba S2', (tester) async {
-        _setPhoneSize(tester);
-        addTearDown(tester.view.resetPhysicalSize);
-        addTearDown(tester.view.resetDevicePixelRatio);
-
-        await tester.pumpWidget(_app());
-
-        expect(find.text('S2'), findsOneWidget);
-      });
-
-      testWidgets('exibe aba S3', (tester) async {
-        _setPhoneSize(tester);
-        addTearDown(tester.view.resetPhysicalSize);
-        addTearDown(tester.view.resetDevicePixelRatio);
-
-        await tester.pumpWidget(_app());
-
-        expect(find.text('S3'), findsOneWidget);
-      });
-
-      testWidgets('modo TRILHA está ativo por padrão (hint de traçar pista visível)',
-          (tester) async {
-        _setPhoneSize(tester);
-        addTearDown(tester.view.resetPhysicalSize);
-        addTearDown(tester.view.resetDevicePixelRatio);
-
-        await tester.pumpWidget(_app());
-
-        // O hint do modo TRILHA indica que este modo está ativo
-        expect(find.text('Toque no mapa para traçar a pista'), findsOneWidget);
-      });
     });
 
-    group('hint de modo', () {
-      testWidgets('exibe instrução para traçar a pista no modo TRILHA sem pontos',
-          (tester) async {
+    // ── PAINEL 0 — LARGADA ────────────────────────────────────────────────────
+
+    group('painel LARGADA (passo 0)', () {
+      testWidgets('exibe título "Largada / Chegada"', (tester) async {
         _setPhoneSize(tester);
-        addTearDown(tester.view.resetPhysicalSize);
-        addTearDown(tester.view.resetDevicePixelRatio);
+        addTearDown(() => _resetView(tester));
 
         await tester.pumpWidget(_app());
 
-        expect(find.text('Toque no mapa para traçar a pista'), findsOneWidget);
+        expect(find.text('Largada / Chegada'), findsOneWidget);
       });
-    });
 
-    group('botão FECHAR PISTA', () {
-      testWidgets('não é exibido quando há menos de 3 pontos', (tester) async {
+      testWidgets('não exibe hint no mapa antes de entrar em modo traçar',
+          (tester) async {
         _setPhoneSize(tester);
-        addTearDown(tester.view.resetPhysicalSize);
-        addTearDown(tester.view.resetDevicePixelRatio);
+        addTearDown(() => _resetView(tester));
+
+        await tester.pumpWidget(_app());
+
+        expect(find.text('Arraste para marcar a largada'), findsNothing);
+      });
+
+      testWidgets('exibe hint no mapa após ativar modo traçar', (tester) async {
+        _setPhoneSize(tester);
+        addTearDown(() => _resetView(tester));
+
+        await tester.pumpWidget(_app());
+        await tester.tap(find.text('TRAÇAR'));
+        await tester.pump();
+
+        expect(find.text('Arraste para marcar a largada'), findsOneWidget);
+      });
+
+      testWidgets('exibe botão TRAÇAR para entrar em modo de desenho',
+          (tester) async {
+        _setPhoneSize(tester);
+        addTearDown(() => _resetView(tester));
+
+        await tester.pumpWidget(_app());
+
+        expect(find.text('TRAÇAR'), findsOneWidget);
+      });
+
+      testWidgets('exibe botão de busca no mapa', (tester) async {
+        _setPhoneSize(tester);
+        addTearDown(() => _resetView(tester));
+
+        await tester.pumpWidget(_app());
+
+        expect(find.byKey(const Key('search_button')), findsOneWidget);
+      });
+
+      testWidgets('toque no botão de busca abre campo de texto', (tester) async {
+        _setPhoneSize(tester);
+        addTearDown(() => _resetView(tester));
+
+        await tester.pumpWidget(_app());
+        await tester.tap(find.byKey(const Key('search_button')));
+        await tester.pump();
+
+        expect(find.byKey(const Key('search_field')), findsOneWidget);
+      });
+
+      testWidgets('exibe toggle de imagem de satélite', (tester) async {
+        _setPhoneSize(tester);
+        addTearDown(() => _resetView(tester));
+
+        await tester.pumpWidget(_app());
+
+        expect(find.byKey(const Key('map_type_toggle')), findsOneWidget);
+      });
+
+      testWidgets('não exibe controle de largura sem linha de largada definida',
+          (tester) async {
+        _setPhoneSize(tester);
+        addTearDown(() => _resetView(tester));
+
+        await tester.pumpWidget(_app());
+
+        expect(find.text('Largura da linha'), findsNothing);
+      });
+
+      testWidgets('botão Confirmar está desabilitado sem S/C definida',
+          (tester) async {
+        _setPhoneSize(tester);
+        addTearDown(() => _resetView(tester));
+
+        await tester.pumpWidget(_app());
+
+        expect(find.text('Confirmar →'), findsOneWidget);
+      });
+
+      testWidgets('não exibe botão FECHAR PISTA (step removido)', (tester) async {
+        _setPhoneSize(tester);
+        addTearDown(() => _resetView(tester));
 
         await tester.pumpWidget(_app());
 
@@ -148,43 +209,108 @@ void main() {
       });
     });
 
-    group('botão SALVAR', () {
-      testWidgets('está desabilitado quando o nome está vazio', (tester) async {
+    // ── PAINEL 1 — SETORES ────────────────────────────────────────────────────
+
+    group('painel SETORES (passo 1)', () {
+      testWidgets('exibe título "Setores"', (tester) async {
         _setPhoneSize(tester);
-        addTearDown(tester.view.resetPhysicalSize);
-        addTearDown(tester.view.resetDevicePixelRatio);
+        addTearDown(() => _resetView(tester));
 
-        await tester.pumpWidget(_app());
+        await tester.pumpWidget(_app(initialStep: 1));
 
-        // O texto SALVAR existe mas deve estar na cor desabilitada (branco com alpha 77)
-        final saveWidget = tester.widget<Text>(find.byKey(const Key('save_button')));
-        final style = saveWidget.style!;
-        expect(style.color, isNot(equals(const Color(0xFF00E676))));
+        expect(find.text('Setores'), findsOneWidget);
+      });
+
+      testWidgets('exibe indicação de opcional', (tester) async {
+        _setPhoneSize(tester);
+        addTearDown(() => _resetView(tester));
+
+        await tester.pumpWidget(_app(initialStep: 1));
+
+        expect(find.text('(opcional)'), findsOneWidget);
+      });
+
+      testWidgets('exibe estado vazio "Nenhum setor ainda."', (tester) async {
+        _setPhoneSize(tester);
+        addTearDown(() => _resetView(tester));
+
+        await tester.pumpWidget(_app(initialStep: 1));
+
+        expect(find.text('Nenhum setor ainda.'), findsOneWidget);
+      });
+
+      testWidgets('botão Continuar está sempre habilitado', (tester) async {
+        _setPhoneSize(tester);
+        addTearDown(() => _resetView(tester));
+
+        await tester.pumpWidget(_app(initialStep: 1));
+
+        expect(find.text('Continuar →'), findsOneWidget);
+      });
+    });
+
+    // ── PAINEL 2 — NOME ───────────────────────────────────────────────────────
+
+    group('painel NOME (passo 2)', () {
+      testWidgets('exibe campo de nome da pista', (tester) async {
+        _setPhoneSize(tester);
+        addTearDown(() => _resetView(tester));
+
+        await tester.pumpWidget(_app(initialStep: 2));
+
+        expect(find.byKey(const Key('track_name_field')), findsOneWidget);
+      });
+
+      testWidgets('exibe placeholder "Nome da pista" no campo vazio',
+          (tester) async {
+        _setPhoneSize(tester);
+        addTearDown(() => _resetView(tester));
+
+        await tester.pumpWidget(_app(initialStep: 2));
+
+        expect(find.text('Nome da pista'), findsAtLeastNWidgets(1));
+      });
+
+      testWidgets('exibe botão SALVAR', (tester) async {
+        _setPhoneSize(tester);
+        addTearDown(() => _resetView(tester));
+
+        await tester.pumpWidget(_app(initialStep: 2));
+
+        expect(find.byKey(const Key('save_button')), findsOneWidget);
+      });
+
+      testWidgets('botão SALVAR está desabilitado quando o nome está vazio',
+          (tester) async {
+        _setPhoneSize(tester);
+        addTearDown(() => _resetView(tester));
+
+        await tester.pumpWidget(_app(initialStep: 2));
+
+        final saveText =
+            tester.widget<Text>(find.byKey(const Key('save_button')));
+        expect(saveText.style!.color, isNot(equals(Colors.black)));
       });
 
       testWidgets('aceita digitação no campo de nome', (tester) async {
         _setPhoneSize(tester);
-        addTearDown(tester.view.resetPhysicalSize);
-        addTearDown(tester.view.resetDevicePixelRatio);
+        addTearDown(() => _resetView(tester));
 
-        await tester.pumpWidget(_app());
+        await tester.pumpWidget(_app(initialStep: 2));
         await tester.enterText(
             find.byKey(const Key('track_name_field')), 'Kartódromo SP');
         await tester.pump();
 
         expect(find.text('Kartódromo SP'), findsOneWidget);
       });
-    });
 
-    group('botão voltar', () {
-      testWidgets('exibe ícone de voltar no top bar', (tester) async {
+      testWidgets('exibe botão voltar', (tester) async {
         _setPhoneSize(tester);
-        addTearDown(tester.view.resetPhysicalSize);
-        addTearDown(tester.view.resetDevicePixelRatio);
+        addTearDown(() => _resetView(tester));
 
-        await tester.pumpWidget(_app());
+        await tester.pumpWidget(_app(initialStep: 2));
 
-        expect(find.byIcon(Icons.arrow_back), findsOneWidget);
+        expect(find.text('← Voltar'), findsOneWidget);
       });
     });
   });

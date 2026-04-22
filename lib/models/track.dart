@@ -15,43 +15,58 @@ class GeoPoint {
   int get hashCode => Object.hash(lat, lng);
 }
 
-/// Setor da pista — intervalo contínuo do centerline em metros.
-/// Nunca armazena polylines ou coordenadas brutas.
-class Sector {
-  final String id;
-  final double dStart; // metros acumulados no centerline
-  final double dEnd; // metros acumulados no centerline
-  final int colorValue; // Color.value serializado
+/// Linha transversal na pista — largada/chegada ou fronteira de setor.
+///
+/// Pode ser uma linha reta (apenas [a] e [b]) ou uma linha curva
+/// (com [middlePoints] contendo os pontos intermediários do gesto).
+///
+/// [widthMeters] é a largura de detecção GPS em metros (3–30 m, padrão 6 m).
+class TrackLine {
+  final GeoPoint a;
+  final GeoPoint b;
 
-  const Sector({
-    required this.id,
-    required this.dStart,
-    required this.dEnd,
-    required this.colorValue,
+  /// Pontos intermediários do traçado — vazio para linhas retas.
+  final List<GeoPoint> middlePoints;
+
+  /// Largura da zona de detecção GPS em metros.
+  final double widthMeters;
+
+  const TrackLine({
+    required this.a,
+    required this.b,
+    this.middlePoints = const [],
+    this.widthMeters = 6.0,
   });
-}
 
-/// Linha de largada/chegada — ponto único no centerline.
-class StartFinishLine {
-  final double d; // metros acumulados
+  /// Todos os pontos da linha em ordem: [a] + middlePoints + [b].
+  List<GeoPoint> get allPoints => [a, ...middlePoints, b];
 
-  const StartFinishLine({required this.d});
+  /// Centroide geográfico da linha (média de todos os pontos).
+  GeoPoint get midpoint {
+    final pts = allPoints;
+    final lat = pts.map((p) => p.lat).reduce((x, y) => x + y) / pts.length;
+    final lng = pts.map((p) => p.lng).reduce((x, y) => x + y) / pts.length;
+    return GeoPoint(lat, lng);
+  }
 }
 
 class Track {
   final String id;
   final String name;
   final DateTime? lastSession;
-  final List<GeoPoint> centerline;
-  final StartFinishLine? startFinishLine;
-  final List<Sector> sectors;
+
+  /// Linha de largada/chegada — define o início/fim de cada volta.
+  final TrackLine? startFinishLine;
+
+  /// Fronteiras de setor em ordem de adição pelo usuário.
+  /// N boundaries → N setores (S1 vai de S/C até boundary[0], etc.).
+  final List<TrackLine> sectorBoundaries;
 
   const Track({
     required this.id,
     required this.name,
     this.lastSession,
-    this.centerline = const [],
     this.startFinishLine,
-    this.sectors = const [],
+    this.sectorBoundaries = const [],
   });
 }
