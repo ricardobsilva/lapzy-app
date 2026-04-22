@@ -2,6 +2,8 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/track.dart';
+import '../repositories/track_repository.dart';
+import '../screens/track_creation_screen.dart';
 
 void showTrackSelectionSheet(BuildContext context) {
   showModalBottomSheet(
@@ -24,13 +26,15 @@ class _TrackSelectionSheet extends StatefulWidget {
 
 class _TrackSelectionSheetState extends State<_TrackSelectionSheet> {
   final _searchController = TextEditingController();
-  final List<Track> _tracks = const [];
+  List<Track> _tracks = const [];
   String? _selectedId;
   List<Track> _filtered = const [];
 
   @override
   void initState() {
     super.initState();
+    _tracks = TrackRepository().tracks.toList();
+    _filtered = List.from(_tracks);
     _searchController.addListener(_onSearch);
   }
 
@@ -98,7 +102,17 @@ class _TrackSelectionSheetState extends State<_TrackSelectionSheet> {
             const Expanded(child: _EmptyContent()),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: _NewTrackButton(hasTracks: _hasTracks),
+            child: GestureDetector(
+              onTap: () {
+                Navigator.of(context).pop();
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const TrackCreationScreen(),
+                  ),
+                );
+              },
+              child: _NewTrackButton(hasTracks: _hasTracks),
+            ),
           ),
           SizedBox(height: bottomPad + 16),
         ],

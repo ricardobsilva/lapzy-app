@@ -1,0 +1,1461 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lapzy — Protótipo</title>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;700&family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+
+:root {
+  --bg:#0A0A0A;--surface:#141414;--surface2:#1C1C1C;
+  --border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.12);
+  --txt:#FFFFFF;--txt2:rgba(255,255,255,0.45);--txt3:rgba(255,255,255,0.25);--txt4:rgba(255,255,255,0.12);
+  --green:#00E676;--purple:#BF5AF2;--red:#FF3B30;--brand:#FF6D00;
+  --s1:#00B0FF;--s2:#FFD600;--s3:#FF6D00;
+  --raj:'Rajdhani',monospace;--inter:'Inter',sans-serif;
+}
+
+html,body{background:#111;min-height:100vh;font-family:var(--inter);}
+
+/* ── WRAPPER ── */
+.app-wrapper{
+  display:flex;flex-direction:column;align-items:center;
+  padding:32px 16px 60px;gap:16px;
+}
+
+.app-title{
+  font-family:var(--raj);font-size:13px;font-weight:700;
+  letter-spacing:0.18em;text-transform:uppercase;
+  color:rgba(255,255,255,0.25);text-align:center;
+}
+
+/* ── DEVICE ── */
+.device{
+  width:390px;
+  background:var(--bg);
+  border-radius:44px;
+  border:1.5px solid rgba(255,255,255,0.1);
+  overflow:hidden;
+  position:relative;
+  box-shadow:0 40px 80px rgba(0,0,0,0.6);
+  min-height:780px;
+}
+
+.device.landscape{
+  width:780px;height:390px;
+  border-radius:28px;
+  min-height:unset;
+}
+
+/* ── STATUS BAR ── */
+.sbar{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:12px 22px 4px;
+  font-family:var(--raj);font-size:13px;color:var(--txt2);
+}
+
+/* ── TOPBAR ── */
+.topbar{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:6px 20px 10px;
+}
+.logo{font-family:var(--raj);font-size:22px;font-weight:700;letter-spacing:0.04em;}
+.logo .lap{color:#fff;}.logo .zy{color:var(--brand);}
+
+.ico-btn{
+  width:34px;height:34px;border-radius:50%;
+  border:1.2px solid var(--border2);
+  display:flex;align-items:center;justify-content:center;
+  background:transparent;cursor:pointer;flex-shrink:0;
+}
+
+/* ── SCREENS ── */
+.screen{display:none;flex-direction:column;flex:1;}
+.screen.active{display:flex;}
+
+/* ══════════════════════════════════════
+   HOME
+══════════════════════════════════════ */
+.home-body{
+  flex:1;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  position:relative;gap:0;padding:0 0 60px;
+}
+.home-glow{
+  position:absolute;
+  width:340px;height:240px;
+  background:radial-gradient(ellipse,rgba(0,230,118,0.09) 0%,transparent 70%);
+  pointer-events:none;
+}
+.home-tagline{
+  font-family:monospace;font-size:9px;letter-spacing:3.5px;
+  color:rgba(255,255,255,0.3);text-transform:uppercase;margin-bottom:18px;
+  position:relative;z-index:1;
+}
+.btn-start{
+  background:var(--green);color:#000;
+  font-family:var(--raj);font-size:18px;font-weight:700;letter-spacing:5px;
+  text-transform:uppercase;border:none;border-radius:14px;
+  padding:18px 72px;cursor:pointer;position:relative;z-index:1;
+  transition:transform 0.1s,opacity 0.1s;
+}
+.btn-start:active{transform:scale(0.97);}
+.home-hint{
+  font-family:monospace;font-size:9px;color:var(--txt3);
+  letter-spacing:1px;margin-top:14px;position:relative;z-index:1;
+}
+.home-indicator{
+  position:absolute;bottom:16px;left:50%;transform:translateX(-50%);
+  width:90px;height:4px;background:rgba(255,255,255,0.12);border-radius:2px;
+}
+
+/* ══════════════════════════════════════
+   BOTTOM SHEET BASE
+══════════════════════════════════════ */
+.overlay{
+  position:absolute;inset:0;background:rgba(0,0,0,0.6);
+  z-index:20;display:flex;flex-direction:column;justify-content:flex-end;
+  border-radius:44px;overflow:hidden;
+  opacity:0;pointer-events:none;transition:opacity 0.25s;
+}
+.overlay.open{opacity:1;pointer-events:all;}
+.sheet{
+  background:var(--surface);border-radius:22px 22px 0 0;
+  transform:translateY(100%);transition:transform 0.3s cubic-bezier(0.32,0,0.67,0);
+}
+.overlay.open .sheet{transform:translateY(0);transition:transform 0.3s cubic-bezier(0.33,1,0.68,1);}
+.sheet-handle{
+  width:44px;height:4px;background:rgba(255,255,255,0.14);
+  border-radius:2px;margin:12px auto 0;
+}
+.sheet-hdr{
+  padding:14px 20px 8px;
+  font-family:monospace;font-size:9px;letter-spacing:2px;
+  color:var(--txt3);text-transform:uppercase;
+}
+.sheet-search{
+  margin:0 16px 10px;
+  background:var(--surface2);border:1px solid var(--border);
+  border-radius:8px;padding:10px 14px;
+  color:var(--txt3);font-family:monospace;font-size:11px;
+}
+
+/* ── PISTA ITEM ── */
+.track-item{
+  margin:0 16px 6px;
+  background:var(--surface2);border:1px solid var(--border);
+  border-radius:10px;padding:12px 14px 12px 12px;
+  display:flex;align-items:center;gap:10px;cursor:pointer;
+  transition:background 0.15s,border-color 0.15s;
+}
+.track-item:hover{background:rgba(255,255,255,0.04);}
+.track-item.sel{
+  background:rgba(0,230,118,0.06);border-color:rgba(0,230,118,0.25);
+}
+.track-bar{width:3px;height:36px;border-radius:2px;background:rgba(255,255,255,0.1);flex-shrink:0;}
+.track-bar.sel{background:var(--green);}
+.track-info{flex:1;}
+.track-name{font-family:monospace;font-size:13px;font-weight:700;color:var(--txt);}
+.track-date{font-family:monospace;font-size:9px;color:var(--txt3);margin-top:3px;}
+.track-chevron{color:var(--txt4);font-size:16px;}
+
+.btn-nova-pista{
+  margin:8px 16px 16px;
+  background:transparent;border:1px dashed rgba(255,255,255,0.1);
+  border-radius:10px;padding:13px;
+  text-align:center;color:rgba(255,255,255,0.35);
+  font-family:monospace;font-size:11px;font-weight:700;letter-spacing:1px;
+  cursor:pointer;transition:border-color 0.15s,color 0.15s;
+}
+.btn-nova-pista:hover{border-color:rgba(255,255,255,0.2);color:rgba(255,255,255,0.55);}
+
+/* ══════════════════════════════════════
+   RACE SCREEN (LANDSCAPE)
+══════════════════════════════════════ */
+.race-wrap{
+  width:780px;height:390px;background:var(--bg);
+  border-radius:28px;border:1.5px solid rgba(255,255,255,0.1);
+  overflow:hidden;position:relative;
+  box-shadow:0 40px 80px rgba(0,0,0,0.6);
+}
+.race-event-border{
+  position:absolute;inset:0;border-radius:26px;
+  pointer-events:none;z-index:2;transition:box-shadow 0.4s,border-color 0.4s;
+}
+.race-inner{
+  position:relative;z-index:1;
+  width:100%;height:100%;
+  display:flex;align-items:stretch;
+  padding:18px 20px 16px;gap:0;
+}
+
+/* Colunas */
+.race-left{
+  width:130px;display:flex;flex-direction:column;
+  justify-content:space-between;padding-right:12px;
+}
+.race-center{
+  flex:1;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:8px;
+}
+.race-right{
+  width:130px;display:flex;flex-direction:column;
+  justify-content:space-between;align-items:flex-end;padding-left:12px;
+}
+
+.race-lbl{
+  font-family:var(--raj);font-size:10px;font-weight:700;
+  letter-spacing:2px;color:rgba(255,255,255,0.28);text-transform:uppercase;
+}
+.lap-number{
+  font-family:var(--raj);font-size:60px;font-weight:700;
+  color:#fff;line-height:1;
+}
+.current-time{
+  font-family:var(--raj);font-size:80px;font-weight:700;
+  color:#fff;line-height:1;letter-spacing:-1px;
+}
+.delta-pill{
+  display:inline-flex;align-items:center;gap:4px;
+  font-family:var(--raj);font-size:20px;font-weight:700;
+  padding:5px 16px;border-radius:4px;
+}
+.dp-pos{color:var(--green);background:rgba(0,230,118,0.1);}
+.dp-neg{color:var(--red);background:rgba(255,59,48,0.1);}
+.dp-pur{color:var(--purple);background:rgba(191,90,242,0.1);}
+
+.best-lbl{font-family:var(--raj);font-size:10px;font-weight:700;letter-spacing:2px;color:rgba(255,255,255,0.28);text-transform:uppercase;text-align:right;}
+.best-time{font-family:var(--raj);font-size:26px;font-weight:700;color:var(--purple);text-align:right;}
+
+.sectors-row{display:flex;gap:6px;flex-wrap:wrap;}
+.sec-badge{
+  display:flex;flex-direction:column;align-items:center;
+  padding:6px 10px;border-radius:8px;border:1.5px solid;min-width:56px;
+}
+.sec-badge .sl{font-family:var(--raj);font-size:9px;font-weight:700;letter-spacing:1px;opacity:0.75;}
+.sec-badge .st{font-family:var(--raj);font-size:14px;font-weight:700;margin-top:2px;}
+.sb-s1{background:rgba(0,176,255,0.12);border-color:rgba(0,176,255,0.4);color:var(--s1);}
+.sb-s2{background:rgba(255,214,0,0.12);border-color:rgba(255,214,0,0.4);color:var(--s2);}
+.sb-s3{background:rgba(255,109,0,0.12);border-color:rgba(255,109,0,0.4);color:var(--s3);}
+.sb-pur{background:rgba(191,90,242,0.12);border-color:rgba(191,90,242,0.4);color:var(--purple);}
+
+.pr-banner{
+  background:rgba(0,230,118,0.08);border:1px solid rgba(0,230,118,0.3);
+  border-radius:5px;padding:3px 12px;
+  font-family:var(--raj);font-size:10px;font-weight:700;letter-spacing:2px;color:var(--green);
+}
+.btn-end{
+  background:var(--red);color:#fff;
+  font-family:var(--raj);font-size:10px;font-weight:700;letter-spacing:1.5px;
+  text-transform:uppercase;border:none;border-radius:8px;
+  padding:8px 16px;cursor:pointer;
+  transition:opacity 0.15s,transform 0.1s;
+}
+.btn-end:active{transform:scale(0.97);}
+
+/* state selector UI */
+.state-strip{
+  display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;justify-content:center;
+}
+.state-btn{
+  background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);
+  border-radius:6px;padding:5px 12px;
+  font-family:monospace;font-size:9px;letter-spacing:1px;
+  color:rgba(255,255,255,0.4);cursor:pointer;transition:all 0.15s;
+}
+.state-btn.on{background:rgba(0,230,118,0.1);border-color:rgba(0,230,118,0.3);color:var(--green);}
+
+/* ══════════════════════════════════════
+   RESUMO PÓS-CORRIDA
+══════════════════════════════════════ */
+.resumo-body{
+  flex:1;overflow-y:auto;padding:0 18px 20px;
+  scrollbar-width:none;
+}
+.resumo-body::-webkit-scrollbar{display:none;}
+
+.hero-card{
+  background:rgba(191,90,242,0.08);border:1px solid rgba(191,90,242,0.2);
+  border-radius:14px;padding:20px;margin-bottom:14px;text-align:center;
+}
+.hero-time{
+  font-family:var(--raj);font-size:56px;font-weight:700;
+  color:var(--purple);line-height:1;
+}
+.hero-meta{font-family:monospace;font-size:9px;color:rgba(255,255,255,0.35);letter-spacing:2px;margin-top:6px;}
+.badge-pr{
+  display:inline-block;margin-top:8px;
+  background:rgba(191,90,242,0.15);color:var(--purple);
+  font-family:monospace;font-size:9px;font-weight:700;letter-spacing:1.5px;
+  padding:4px 12px;border-radius:4px;
+}
+.section-hdr{
+  font-family:monospace;font-size:9px;letter-spacing:2px;
+  color:var(--txt3);text-transform:uppercase;padding:14px 0 8px;
+}
+.sectors-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px;}
+.sec-card{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:10px;padding:10px;text-align:center;
+}
+.sec-card.best{border-color:rgba(0,230,118,0.3);}
+.sec-card.worst{border-color:rgba(255,59,48,0.25);}
+.sc-lbl{font-family:var(--raj);font-size:12px;font-weight:700;letter-spacing:1px;}
+.sc-time{font-family:var(--raj);font-size:20px;font-weight:700;color:var(--txt);margin-top:3px;}
+.sc-tag{font-family:monospace;font-size:8px;letter-spacing:1px;margin-top:3px;text-transform:uppercase;}
+
+.insight-box{
+  background:rgba(255,214,0,0.05);border:1px solid rgba(255,214,0,0.14);
+  border-radius:10px;padding:10px 14px;
+  font-family:monospace;font-size:10px;color:rgba(255,255,255,0.48);
+  line-height:1.65;margin-bottom:14px;
+}
+.insight-box em{color:var(--s2);font-style:normal;}
+
+.lap-row{
+  display:flex;align-items:center;gap:10px;
+  padding:10px 6px;border-bottom:1px solid rgba(255,255,255,0.05);
+  cursor:pointer;transition:background 0.12s;border-radius:6px;
+}
+.lap-row:hover{background:rgba(255,255,255,0.03);}
+.lr-num{font-family:monospace;font-size:10px;color:var(--txt3);min-width:20px;}
+.lr-time{font-family:var(--raj);font-size:24px;font-weight:700;flex:1;}
+.lr-time.best{color:var(--purple);}
+.lr-delta{font-family:var(--raj);font-size:14px;font-weight:700;}
+.lr-pr{
+  font-family:monospace;font-size:8px;font-weight:700;letter-spacing:1px;
+  background:rgba(191,90,242,0.15);color:var(--purple);
+  padding:2px 7px;border-radius:3px;
+}
+
+/* bottom sheet resumo — volta detalhe */
+.bs-volta .lap-detail-grid{display:grid;grid-template-columns:1fr auto auto;gap:0;}
+.bs-volta .dg-hdr{
+  font-family:monospace;font-size:8px;letter-spacing:1.5px;
+  color:var(--txt3);text-transform:uppercase;padding:10px 0 6px;
+  border-bottom:1px solid var(--border);
+}
+.bs-volta .dg-row{
+  display:contents;
+}
+.bs-volta .dg-cell{
+  font-family:var(--raj);font-size:16px;font-weight:700;
+  padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.04);
+  display:flex;align-items:center;
+}
+.bs-volta .dg-cell.right{justify-content:flex-end;}
+.bs-volta .dg-cell.delta-g{color:var(--green);}
+.bs-volta .dg-cell.delta-r{color:var(--red);}
+
+.btn-share{
+  width:100%;margin-top:14px;
+  background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);
+  border-radius:10px;padding:15px;
+  color:var(--txt);font-family:monospace;font-size:10px;font-weight:700;
+  letter-spacing:2px;text-transform:uppercase;cursor:pointer;
+  transition:background 0.15s;
+}
+.btn-share:hover{background:rgba(255,255,255,0.09);}
+
+/* ══════════════════════════════════════
+   HISTÓRICO
+══════════════════════════════════════ */
+.hist-body{flex:1;overflow-y:auto;padding:0 18px;scrollbar-width:none;}
+.hist-body::-webkit-scrollbar{display:none;}
+.hist-item{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:10px;padding:14px 16px;margin-bottom:8px;
+  display:flex;align-items:center;gap:10px;cursor:pointer;
+  transition:background 0.12s;
+}
+.hist-item:hover{background:rgba(255,255,255,0.04);}
+.hi-info{flex:1;}
+.hi-name{font-family:monospace;font-size:13px;font-weight:700;color:var(--txt);}
+.hi-date{font-family:monospace;font-size:9px;color:var(--txt3);margin-top:4px;}
+.hi-arrow{color:var(--txt4);font-size:18px;}
+.hist-fade{
+  position:sticky;bottom:0;height:60px;
+  background:linear-gradient(transparent,var(--bg));pointer-events:none;
+}
+
+/* ══════════════════════════════════════
+   CRIAÇÃO DE PISTA
+══════════════════════════════════════ */
+.criacao-body{flex:1;display:flex;flex-direction:column;overflow:hidden;}
+
+.map-container{
+  height:240px;background:#0d1117;position:relative;flex-shrink:0;overflow:hidden;
+}
+
+/* Google Maps dark style simulation */
+.map-bg{
+  position:absolute;inset:0;
+  background:#0d1117;
+}
+.map-grid-lines{
+  position:absolute;inset:0;
+  background-image:
+    linear-gradient(rgba(255,255,255,0.025) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(255,255,255,0.025) 1px,transparent 1px);
+  background-size:32px 32px;
+}
+.map-canvas{position:absolute;inset:0;width:100%;height:100%;}
+
+.map-controls{
+  position:absolute;top:10px;right:10px;
+  display:flex;gap:6px;
+}
+.map-ctrl-btn{
+  background:rgba(14,14,14,0.92);border:1px solid rgba(255,255,255,0.14);
+  border-radius:6px;padding:5px 11px;
+  font-family:var(--raj);font-size:11px;font-weight:700;letter-spacing:1px;
+  color:rgba(255,255,255,0.5);cursor:pointer;transition:all 0.15s;
+}
+.map-ctrl-btn.on{color:var(--green);border-color:rgba(0,230,118,0.35);}
+
+.map-toast{
+  position:absolute;top:10px;left:50%;transform:translateX(-50%);
+  background:rgba(14,14,14,0.9);border:1px solid rgba(255,255,255,0.12);
+  border-radius:20px;padding:6px 14px;
+  font-family:monospace;font-size:10px;color:rgba(255,255,255,0.7);
+  white-space:nowrap;display:flex;align-items:center;gap:7px;
+  opacity:0;transition:opacity 0.3s;pointer-events:none;
+}
+.map-toast.show{opacity:1;}
+.toast-dot{width:7px;height:7px;border-radius:50%;}
+
+.criacao-form{
+  flex:1;overflow-y:auto;padding:14px 18px 20px;scrollbar-width:none;
+}
+.criacao-form::-webkit-scrollbar{display:none;}
+
+.field-lbl{
+  font-family:monospace;font-size:9px;letter-spacing:2px;
+  color:var(--txt3);text-transform:uppercase;margin-bottom:7px;
+}
+.field-input{
+  width:100%;background:var(--surface2);
+  border:1px solid rgba(255,255,255,0.08);border-radius:8px;
+  padding:11px 14px;color:var(--txt);
+  font-family:monospace;font-size:13px;margin-bottom:16px;
+  outline:none;transition:border-color 0.15s;
+}
+.field-input:focus{border-color:rgba(255,255,255,0.2);}
+
+.sector-mode-row{display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;}
+.sec-mode-btn{
+  display:flex;align-items:center;gap:7px;
+  background:var(--surface2);border:1px solid var(--border);
+  border-radius:8px;padding:8px 14px;
+  font-family:monospace;font-size:11px;font-weight:700;
+  color:rgba(255,255,255,0.5);cursor:pointer;transition:all 0.15s;
+}
+.sec-mode-btn.on-s1{border-color:rgba(0,176,255,0.4);color:var(--s1);background:rgba(0,176,255,0.08);}
+.sec-mode-btn.on-s2{border-color:rgba(255,214,0,0.4);color:var(--s2);background:rgba(255,214,0,0.08);}
+.sec-mode-btn.on-s3{border-color:rgba(255,109,0,0.4);color:var(--s3);background:rgba(255,109,0,0.08);}
+.sec-dot{width:8px;height:8px;border-radius:50%;}
+
+.sector-hint{
+  font-family:monospace;font-size:9px;color:rgba(255,255,255,0.28);
+  line-height:1.7;margin-bottom:16px;letter-spacing:0.3px;
+}
+
+.info-panel{
+  background:var(--surface2);border:1px solid var(--border);
+  border-radius:10px;padding:12px 14px;margin-bottom:16px;
+  display:none;
+}
+.info-panel.show{display:block;}
+.ip-row{
+  display:flex;justify-content:space-between;
+  font-family:monospace;font-size:10px;margin-bottom:4px;
+  color:rgba(255,255,255,0.45);
+}
+.ip-row:last-child{margin-bottom:0;}
+.ip-row span:last-child{color:rgba(255,255,255,0.8);}
+.ip-row.ok span:last-child{color:var(--green);}
+
+.btn-salvar{
+  width:100%;background:var(--green);color:#000;
+  border:none;border-radius:10px;padding:15px;
+  font-family:var(--raj);font-size:14px;font-weight:700;
+  letter-spacing:3px;text-transform:uppercase;cursor:pointer;
+  transition:opacity 0.15s,transform 0.1s;
+}
+.btn-salvar:hover{opacity:0.9;}
+.btn-salvar:active{transform:scale(0.98);}
+
+/* ── BACK BTN ── */
+.back-btn{
+  font-family:var(--raj);font-size:20px;color:var(--txt2);
+  cursor:pointer;width:28px;padding:0;background:none;border:none;
+}
+
+/* ── DIVIDER ── */
+.divider{height:1px;background:rgba(255,255,255,0.05);margin:0 18px 12px;}
+
+/* ── SCROLL INDICATOR ── */
+.scroll-ind{
+  position:absolute;bottom:16px;left:50%;transform:translateX(-50%);
+  width:90px;height:4px;background:rgba(255,255,255,0.12);border-radius:2px;
+}
+
+/* ── BOTTOM SHEET DETALHE VOLTA ── */
+.bs-volta-wrap{
+  max-height:70%;
+}
+.bs-volta-inner{padding:0 18px 20px;}
+.bs-title{
+  font-family:var(--raj);font-size:22px;font-weight:700;color:var(--txt);
+  padding:14px 18px 4px;
+}
+.bs-subtitle{
+  font-family:monospace;font-size:9px;letter-spacing:2px;
+  color:var(--txt3);text-transform:uppercase;padding:0 18px 12px;
+}
+
+.compare-table{width:100%;border-collapse:collapse;}
+.compare-table th{
+  font-family:monospace;font-size:8px;letter-spacing:1.5px;
+  color:var(--txt3);text-transform:uppercase;
+  padding:8px 6px;text-align:left;border-bottom:1px solid var(--border);
+}
+.compare-table td{
+  font-family:var(--raj);font-size:16px;font-weight:700;
+  padding:9px 6px;border-bottom:1px solid rgba(255,255,255,0.04);
+  color:var(--txt);vertical-align:middle;
+}
+.compare-table td.clr-g{color:var(--green);}
+.compare-table td.clr-r{color:var(--red);}
+.compare-table td.sec{font-size:12px;}
+</style>
+</head>
+<body>
+
+<div class="app-wrapper" id="app">
+
+  <div class="app-title" id="app-title">Lapzy — Protótipo Interativo</div>
+
+  <!-- ══ HOME ══ -->
+  <div class="device" id="dev-home">
+    <div class="screen active" id="scr-home">
+      <div class="sbar"><span>9:41</span><span>●●●</span></div>
+      <div class="topbar">
+        <div class="ico-btn" onclick="gotoHistorico()">
+          <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+            <circle cx="7.5" cy="7.5" r="5.5" stroke="rgba(255,255,255,0.5)" stroke-width="1.2"/>
+            <line x1="7.5" y1="4" x2="7.5" y2="7.5" stroke="rgba(255,255,255,0.5)" stroke-width="1.2" stroke-linecap="round"/>
+            <line x1="7.5" y1="7.5" x2="9.8" y2="9" stroke="rgba(255,255,255,0.5)" stroke-width="1.2" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <div class="logo"><span class="lap">LAP</span><span class="zy">ZY</span></div>
+        <div class="ico-btn">
+          <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+            <circle cx="7.5" cy="7.5" r="5.5" stroke="rgba(255,255,255,0.5)" stroke-width="1.2"/>
+            <circle cx="7.5" cy="6" r="2" fill="rgba(255,255,255,0.5)"/>
+            <path d="M2.5 12.5Q3 10 7.5 10Q12 10 12.5 12.5" stroke="rgba(255,255,255,0.5)" stroke-width="1.2" fill="none"/>
+          </svg>
+        </div>
+      </div>
+      <div class="home-body">
+        <div class="home-glow"></div>
+        <div class="home-tagline">Cronometragem de Kart</div>
+        <button class="btn-start" onclick="openSheet('sheet-pista')">INICIAR</button>
+        <div class="home-hint">selecione a pista após iniciar</div>
+      </div>
+      <div class="home-indicator"></div>
+    </div>
+
+    <!-- BOTTOM SHEET — seleção de pista -->
+    <div class="overlay" id="sheet-pista">
+      <div class="sheet">
+        <div class="sheet-handle"></div>
+        <div class="sheet-hdr">Selecionar Pista</div>
+        <div class="sheet-search">Buscar pista...</div>
+        <div class="track-item sel" onclick="startRace()">
+          <div class="track-bar sel"></div>
+          <div class="track-info">
+            <div class="track-name">Kartódromo Granja Viana</div>
+            <div class="track-date">Última sessão: 12 abr 2026</div>
+          </div>
+          <span class="track-chevron">›</span>
+        </div>
+        <div class="track-item" onclick="startRace()">
+          <div class="track-bar"></div>
+          <div class="track-info">
+            <div class="track-name" style="color:rgba(255,255,255,0.75)">Pista do Sul Racing</div>
+            <div class="track-date">Última sessão: 03 abr 2026</div>
+          </div>
+          <span class="track-chevron">›</span>
+        </div>
+        <div class="track-item" onclick="startRace()">
+          <div class="track-bar"></div>
+          <div class="track-info">
+            <div class="track-name" style="color:rgba(255,255,255,0.7)">Speed Park Interlagos</div>
+            <div class="track-date">Última sessão: 28 mar 2026</div>
+          </div>
+          <span class="track-chevron">›</span>
+        </div>
+        <div class="btn-nova-pista" onclick="gotoCriacao()">+ NOVA PISTA</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ CORRIDA (LANDSCAPE) ══ -->
+  <div class="race-wrap" id="dev-race" style="display:none;">
+    <div class="race-event-border" id="race-border"></div>
+    <div class="race-inner">
+      <div class="race-left">
+        <div>
+          <div class="race-lbl">VOLTA</div>
+          <div class="lap-number" id="r-lap">1</div>
+        </div>
+        <div>
+          <div class="race-lbl" style="margin-bottom:6px">SETORES</div>
+          <div class="sectors-row" id="r-sectors">
+            <div class="sec-badge sb-s1"><span class="sl">S1</span><span class="st">—</span></div>
+            <div class="sec-badge sb-s2"><span class="sl">S2</span><span class="st">—</span></div>
+            <div class="sec-badge sb-s3"><span class="sl">S3</span><span class="st">—</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="race-center">
+        <div id="r-pr-banner" style="display:none"><div class="pr-banner">PERSONAL RECORD</div></div>
+        <div class="race-lbl" style="letter-spacing:1.5px">TEMPO DA VOLTA</div>
+        <div class="current-time" id="r-time">0:00.000</div>
+        <div class="delta-pill dp-pos" id="r-delta" style="visibility:hidden">▲ —</div>
+      </div>
+      <div class="race-right">
+        <div>
+          <div class="best-lbl">MELHOR VOLTA</div>
+          <div class="best-time" id="r-best">—</div>
+        </div>
+        <button class="btn-end" id="r-end-btn" onclick="endRace()">FINALIZAR</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ RESUMO ══ -->
+  <div class="device" id="dev-resumo" style="display:none;">
+    <div class="screen active">
+      <div class="sbar"><span>9:41</span><span>●●●</span></div>
+      <div class="topbar">
+        <button class="back-btn" onclick="backToHome()">‹</button>
+        <span style="flex:1;text-align:center;font-family:monospace;font-size:11px;font-weight:700;letter-spacing:3px;color:rgba(255,255,255,0.85)">RESUMO</span>
+        <div style="width:28px"></div>
+      </div>
+      <div class="divider"></div>
+      <div class="resumo-body">
+        <div class="hero-card">
+          <div class="hero-meta" id="res-meta">MELHOR VOLTA · VOLTA 1</div>
+          <div class="hero-time" id="res-best">—</div>
+          <div class="hero-meta" id="res-track">Kartódromo Granja Viana</div>
+          <div class="badge-pr" id="res-pr" style="display:none">PR</div>
+        </div>
+        <div class="section-hdr">Por Setor</div>
+        <div class="sectors-grid" id="res-sectors-grid"></div>
+        <div class="insight-box" id="res-insight"></div>
+        <div class="section-hdr">Voltas</div>
+        <div id="res-laps"></div>
+        <button class="btn-share">COMPARTILHAR</button>
+      </div>
+    </div>
+    <!-- BOTTOM SHEET detalhe volta -->
+    <div class="overlay" id="sheet-volta">
+      <div class="sheet bs-volta-wrap">
+        <div class="sheet-handle"></div>
+        <div class="bs-title" id="bsv-title">Volta 1</div>
+        <div class="bs-subtitle">SETOR CORRESPONDENTE NA MELHOR VOLTA</div>
+        <div class="bs-volta-inner">
+          <table class="compare-table" id="bsv-table">
+            <thead>
+              <tr>
+                <th>SETOR</th>
+                <th>ESTA VOLTA</th>
+                <th>MELHOR VOLTA</th>
+                <th>DELTA</th>
+              </tr>
+            </thead>
+            <tbody id="bsv-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ HISTÓRICO ══ -->
+  <div class="device" id="dev-hist" style="display:none;">
+    <div class="screen active">
+      <div class="sbar"><span>9:41</span><span>●●●</span></div>
+      <div class="topbar">
+        <button class="back-btn" onclick="backToHome()">‹</button>
+        <span style="flex:1;text-align:center;font-family:monospace;font-size:11px;font-weight:700;letter-spacing:3px;color:rgba(255,255,255,0.85)">CORRIDAS</span>
+        <div style="width:28px"></div>
+      </div>
+      <div class="divider"></div>
+      <div class="hist-body">
+        <div class="hist-item"><div class="hi-info"><div class="hi-name">Kartódromo Granja Viana</div><div class="hi-date">12 abr 2026 · 14:32</div></div><div class="hi-arrow">›</div></div>
+        <div class="hist-item"><div class="hi-info"><div class="hi-name">Pista do Sul Racing</div><div class="hi-date">03 abr 2026 · 09:15</div></div><div class="hi-arrow">›</div></div>
+        <div class="hist-item"><div class="hi-info"><div class="hi-name">Speed Park Interlagos</div><div class="hi-date">28 mar 2026 · 16:48</div></div><div class="hi-arrow">›</div></div>
+        <div class="hist-item" style="opacity:0.6"><div class="hi-info"><div class="hi-name">Kartódromo Ayrton Senna</div><div class="hi-date">15 mar 2026 · 11:05</div></div><div class="hi-arrow">›</div></div>
+        <div class="hist-item" style="opacity:0.35"><div class="hi-info"><div class="hi-name">Pista do Sul Racing</div><div class="hi-date">18 fev 2026 · 15:00</div></div><div class="hi-arrow">›</div></div>
+        <div class="hist-fade"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ CRIAÇÃO DE PISTA ══ -->
+  <div class="device" id="dev-criacao" style="display:none;">
+    <div class="screen active">
+      <div class="sbar"><span>9:41</span><span>●●●</span></div>
+      <div class="topbar">
+        <button class="back-btn" onclick="backToSheet()">‹</button>
+        <span style="flex:1;text-align:center;font-family:monospace;font-size:11px;font-weight:700;letter-spacing:3px;color:rgba(255,255,255,0.85)">NOVA PISTA</span>
+        <div style="width:28px"></div>
+      </div>
+
+      <div class="criacao-body">
+        <!-- MAP -->
+        <div class="map-container">
+          <div class="map-bg"></div>
+          <div class="map-grid-lines" id="map-grid"></div>
+          <canvas class="map-canvas" id="map-canvas"></canvas>
+          <!-- toast -->
+          <div class="map-toast" id="map-toast">
+            <div class="toast-dot" id="toast-dot"></div>
+            <span id="toast-txt">Toque na pista para definir S/C</span>
+          </div>
+          <!-- controls -->
+          <div class="map-controls">
+            <div class="map-ctrl-btn on" id="btn-vet" onclick="setMapMode('vet')">VET</div>
+            <div class="map-ctrl-btn" id="btn-sat" onclick="setMapMode('sat')">SAT</div>
+          </div>
+        </div>
+
+        <div class="criacao-form">
+          <div class="field-lbl">Nome da Pista</div>
+          <input class="field-input" type="text" value="Kartódromo Granja Viana" id="track-name-input">
+
+          <div class="field-lbl">Setores (opcional — arraste ao longo da pista)</div>
+          <div class="sector-mode-row">
+            <div class="sec-mode-btn on-s1" id="btn-sc" onclick="setMode('sc')">
+              <div class="sec-dot" style="background:#fff"></div>S/C
+            </div>
+            <div class="sec-mode-btn on-s1" id="btn-s1" onclick="setMode('s1')">
+              <div class="sec-dot" style="background:var(--s1)"></div>S1
+            </div>
+            <div class="sec-mode-btn on-s2" id="btn-s2" onclick="setMode('s2')">
+              <div class="sec-dot" style="background:var(--s2)"></div>S2
+            </div>
+            <div class="sec-mode-btn on-s3" id="btn-s3" onclick="setMode('s3')">
+              <div class="sec-dot" style="background:var(--s3)"></div>S3
+            </div>
+          </div>
+
+          <div class="sector-hint" id="mode-hint">
+            Modo atual: <strong style="color:rgba(255,255,255,0.6)">S/C</strong> — toque no traçado para posicionar a linha de largada. A perpendicular é gerada automaticamente.
+          </div>
+
+          <div class="info-panel" id="info-panel">
+            <div class="ip-row"><span>Modo</span><span id="ip-mode">—</span></div>
+            <div class="ip-row ok"><span>Intervalo detectado</span><span id="ip-interval">—</span></div>
+            <div class="ip-row"><span>Comprimento</span><span id="ip-len">—</span></div>
+          </div>
+
+          <button class="btn-salvar" onclick="salvarPista()">SALVAR PISTA</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /app-wrapper -->
+
+<script>
+// ═══════════════════════════════════════════════════════════
+// NAVIGATION
+// ═══════════════════════════════════════════════════════════
+const devs = ['dev-home','dev-race','dev-resumo','dev-hist','dev-criacao'];
+
+function showOnly(id) {
+  devs.forEach(d => {
+    const el = document.getElementById(d);
+    if (el) el.style.display = (d === id) ? '' : 'none';
+  });
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+function openSheet(id) {
+  document.getElementById(id).classList.add('open');
+}
+function closeSheet(id) {
+  document.getElementById(id).classList.remove('open');
+}
+
+function gotoHistorico() {
+  showOnly('dev-hist');
+}
+function backToHome() {
+  stopRaceTimer();
+  showOnly('dev-home');
+}
+function gotoCriacao() {
+  closeSheet('sheet-pista');
+  showOnly('dev-criacao');
+  setTimeout(initMap, 80);
+}
+function backToSheet() {
+  showOnly('dev-home');
+  setTimeout(() => openSheet('sheet-pista'), 50);
+}
+function salvarPista() {
+  showOnly('dev-home');
+  setTimeout(() => openSheet('sheet-pista'), 50);
+}
+
+// ═══════════════════════════════════════════════════════════
+// RACE ENGINE
+// ═══════════════════════════════════════════════════════════
+let raceTimer = null;
+let lapTimer = null;
+let raceMs = 0;         // total session ms
+let lapMs = 0;          // current lap ms
+let lapNum = 1;
+let laps = [];          // [{ms, s1, s2, s3}]
+let bestLapMs = null;
+let bestLapIdx = -1;
+let PR_THRESHOLD = 83654; // 1:23.654 ms — simulated personal best
+
+// Sector simulation
+let curSector = 0;
+let sectorMs = 0;
+let sectorDurations = [[28441,31203,24243],[27900,31000,23800],[28800,32100,24900],[28100,30800,24200]];
+let sectorCompletedThisLap = [];
+let lapSectorData = [];
+
+function startRace() {
+  closeSheet('sheet-pista');
+  lapNum = 1; laps = []; bestLapMs = null; bestLapIdx = -1;
+  raceMs = 0; lapMs = 0; curSector = 0; sectorMs = 0;
+  lapSectorData = []; sectorCompletedThisLap = [];
+  showOnly('dev-race');
+  document.getElementById('r-lap').textContent = '1';
+  document.getElementById('r-best').textContent = '—';
+  document.getElementById('r-delta').style.visibility = 'hidden';
+  document.getElementById('r-pr-banner').style.display = 'none';
+  setRaceBorder('neutral');
+  updateSectorBadges([]);
+
+  const LAP_DURATION = [83887,85441,84120,84889,83654,85230,84320]; // ms per lap
+  let lapIdx = 0;
+
+  lapTimer = setInterval(() => {
+    lapMs += 50; raceMs += 50; sectorMs += 50;
+    const curLapTarget = LAP_DURATION[lapIdx % LAP_DURATION.length];
+    const secData = sectorDurations[lapIdx % sectorDurations.length];
+    const s1end = secData[0], s2end = s1end+secData[1], s3end = s2end+secData[2];
+
+    // sector transitions
+    if (curSector === 0 && sectorMs >= s1end) {
+      sectorCompletedThisLap[0] = sectorMs;
+      curSector = 1; sectorMs = sectorMs - s1end;
+      updateSectorBadges(sectorCompletedThisLap);
+    } else if (curSector === 1 && sectorMs >= secData[1]) {
+      sectorCompletedThisLap[1] = sectorMs;
+      curSector = 2; sectorMs = sectorMs - secData[1];
+      updateSectorBadges(sectorCompletedThisLap);
+    }
+
+    document.getElementById('r-time').textContent = fmtMs(lapMs);
+
+    // lap complete
+    if (lapMs >= curLapTarget) {
+      const thisSectors = [...secData];
+      laps.push({ms:curLapTarget, s1:thisSectors[0], s2:thisSectors[1], s3:thisSectors[2]});
+      sectorCompletedThisLap = [];
+      lapSectorData.push(thisSectors);
+
+      let isNewBest = false;
+      if (bestLapMs === null || curLapTarget < bestLapMs) {
+        bestLapMs = curLapTarget; bestLapIdx = lapNum - 1;
+        isNewBest = true;
+        document.getElementById('r-best').textContent = fmtMs(bestLapMs);
+      }
+
+      const isPR = isNewBest && bestLapMs < PR_THRESHOLD;
+      if (isPR) {
+        document.getElementById('r-pr-banner').style.display = 'block';
+        setRaceBorder('pr');
+      } else if (isNewBest) {
+        document.getElementById('r-pr-banner').style.display = 'none';
+        setRaceBorder('purple');
+      } else {
+        document.getElementById('r-pr-banner').style.display = 'none';
+        const delta = curLapTarget - bestLapMs;
+        if (delta < 0) setRaceBorder('green');
+        else setRaceBorder('red');
+      }
+
+      // delta
+      if (bestLapMs !== null) {
+        const delta = curLapTarget - bestLapMs;
+        const dp = document.getElementById('r-delta');
+        dp.style.visibility = 'visible';
+        if (isNewBest) {
+          dp.textContent = 'MELHOR';
+          dp.className = 'delta-pill dp-pur';
+        } else if (delta <= 0) {
+          dp.textContent = '▲ +' + fmtDelta(-delta);
+          dp.className = 'delta-pill dp-pos';
+        } else {
+          dp.textContent = '▼ −' + fmtDelta(delta);
+          dp.className = 'delta-pill dp-neg';
+        }
+      }
+
+      lapNum++; lapMs = 0; lapIdx++;
+      curSector = 0; sectorMs = 0; sectorCompletedThisLap = [];
+      document.getElementById('r-lap').textContent = lapNum;
+      updateSectorBadges([]);
+    }
+  }, 50);
+}
+
+function updateSectorBadges(completed) {
+  const sec = document.getElementById('r-sectors');
+  const labels = ['S1','S2','S3'];
+  const classes = ['sb-s1','sb-s2','sb-s3'];
+  sec.innerHTML = labels.map((l,i) => {
+    const t = completed[i] ? fmtSec(completed[i]) : '—';
+    return `<div class="sec-badge ${classes[i]}"><span class="sl">${l}</span><span class="st">${t}</span></div>`;
+  }).join('');
+}
+
+function setRaceBorder(state) {
+  const b = document.getElementById('race-border');
+  const map = {
+    neutral: 'none',
+    green:   'inset 0 0 0 7px #00E676',
+    red:     'inset 0 0 0 7px #FF3B30',
+    purple:  'inset 0 0 0 7px #BF5AF2',
+    pr:      'inset 0 0 0 7px #00E676',
+  };
+  b.style.boxShadow = map[state] || 'none';
+}
+
+function endRace() {
+  stopRaceTimer();
+  buildResumo();
+  showOnly('dev-resumo');
+}
+function stopRaceTimer() {
+  if (lapTimer) { clearInterval(lapTimer); lapTimer = null; }
+}
+
+// ═══════════════════════════════════════════════════════════
+// RESUMO
+// ═══════════════════════════════════════════════════════════
+function buildResumo() {
+  if (laps.length === 0) {
+    // demo data if no laps
+    laps = [
+      {ms:85120,s1:28441,s2:31203,s3:25476},
+      {ms:84889,s1:28300,s2:31100,s3:25489},
+      {ms:83887,s1:28100,s2:30800,s3:24987},
+      {ms:85441,s1:28900,s2:32100,s3:24441},
+      {ms:83654,s1:27900,s2:31000,s3:24754},
+      {ms:84320,s1:28200,s2:31400,s3:24720},
+    ];
+    bestLapMs = 83654; bestLapIdx = 4;
+    PR_THRESHOLD = 84000;
+  }
+
+  const bestLap = laps[bestLapIdx] || laps[0];
+  const isPR = bestLapMs < PR_THRESHOLD;
+
+  document.getElementById('res-meta').textContent = `MELHOR VOLTA · VOLTA ${bestLapIdx+1}`;
+  document.getElementById('res-best').textContent = fmtMs(bestLapMs);
+  document.getElementById('res-track').textContent = `${laps.length} voltas · Kartódromo Granja Viana`;
+  document.getElementById('res-pr').style.display = isPR ? 'inline-block' : 'none';
+
+  // sectors grid
+  const s1avg = avg(laps.map(l=>l.s1)), s2avg = avg(laps.map(l=>l.s2)), s3avg = avg(laps.map(l=>l.s3));
+  const sectors = [{lbl:'S1',clr:'var(--s1)',avg:s1avg},{lbl:'S2',clr:'var(--s2)',avg:s2avg},{lbl:'S3',clr:'var(--s3)',avg:s3avg}];
+  const bestIdx = sectors.reduce((bi,s,i)=>s.avg<sectors[bi].avg?i:bi,0);
+  const worstIdx = sectors.reduce((bi,s,i)=>s.avg>sectors[bi].avg?i:bi,0);
+  document.getElementById('res-sectors-grid').innerHTML = sectors.map((s,i)=>`
+    <div class="sec-card${i===bestIdx?' best':i===worstIdx?' worst':''}">
+      <div class="sc-lbl" style="color:${s.clr}">${s.lbl}</div>
+      <div class="sc-time">${fmtSec(s.avg)}</div>
+      <div class="sc-tag" style="color:${i===bestIdx?'var(--green)':i===worstIdx?'var(--red)':'var(--txt3)'}">${i===bestIdx?'MELHOR':i===worstIdx?'PIOR':'MÉDIA'}</div>
+    </div>
+  `).join('');
+
+  // insight
+  const worstSec = sectors[worstIdx];
+  const bestValOfWorst = Math.min(...laps.map(l=>worstIdx===0?l.s1:worstIdx===1?l.s2:l.s3));
+  const gain = ((worstSec.avg - bestValOfWorst)/1000).toFixed(2);
+  document.getElementById('res-insight').innerHTML = `Maior oportunidade em <em>${worstSec.lbl}</em> — potencial de <em>+${gain}s</em> por volta com melhoria na consistência desse trecho.`;
+
+  // laps list
+  const container = document.getElementById('res-laps');
+  container.innerHTML = '';
+  laps.forEach((lap,i) => {
+    const isBest = i === bestLapIdx;
+    let deltaHtml = '<span class="lr-delta" style="color:var(--txt3)">—</span>';
+    if (i > 0) {
+      const prev = laps[i-1].ms;
+      const delta = lap.ms - prev;
+      if (delta <= 0) deltaHtml = `<span class="lr-delta" style="color:var(--green)">▲ +${fmtDelta(-delta)}</span>`;
+      else deltaHtml = `<span class="lr-delta" style="color:var(--red)">▼ −${fmtDelta(delta)}</span>`;
+    }
+    const prTag = isBest && isPR ? '<span class="lr-pr">PR</span>' : '';
+    const row = document.createElement('div');
+    row.className = 'lap-row';
+    if (isBest) row.style.background = 'rgba(191,90,242,0.05)';
+    row.innerHTML = `
+      <div class="lr-num">${i+1}</div>
+      <div class="lr-time${isBest?' best':''}">${fmtMs(lap.ms)}</div>
+      ${deltaHtml}${prTag}
+    `;
+    row.onclick = () => openVoltaDetail(i);
+    container.appendChild(row);
+  });
+}
+
+function openVoltaDetail(idx) {
+  const lap = laps[idx];
+  const best = laps[bestLapIdx] || laps[0];
+  document.getElementById('bsv-title').textContent = `Volta ${idx+1}`;
+  const secs = [
+    {lbl:'S1',val:lap.s1,ref:best.s1},
+    {lbl:'S2',val:lap.s2,ref:best.s2},
+    {lbl:'S3',val:lap.s3,ref:best.s3},
+  ];
+  const tbody = document.getElementById('bsv-tbody');
+  tbody.innerHTML = secs.map(s => {
+    const delta = s.val - s.ref;
+    const deltaFmt = delta === 0 ? '▲ 0.000' : delta < 0 ? `▲ +${fmtDelta(-delta)}` : `▼ −${fmtDelta(delta)}`;
+    const cls = delta <= 0 ? 'clr-g' : 'clr-r';
+    return `<tr>
+      <td class="sec">${s.lbl}</td>
+      <td>${fmtSec(s.val)}</td>
+      <td>${fmtSec(s.ref)}</td>
+      <td class="${cls}">${deltaFmt}</td>
+    </tr>`;
+  }).join('');
+  openSheet('sheet-volta');
+}
+
+// click outside sheet to close
+document.getElementById('sheet-volta').addEventListener('click', function(e) {
+  if (e.target === this) closeSheet('sheet-volta');
+});
+document.getElementById('sheet-pista').addEventListener('click', function(e) {
+  if (e.target === this) closeSheet('sheet-pista');
+});
+
+// ═══════════════════════════════════════════════════════════
+// MAP — CRIAÇÃO DE PISTA
+// ═══════════════════════════════════════════════════════════
+let canvas, ctx;
+let mapMode = 'vet'; // 'vet' | 'sat'
+let currentMode = 'sc'; // 'sc'|'s1'|'s2'|'s3'
+let path = []; // centerline pixels
+let totalLen = 0;
+let cumDist = [];
+let scPoint = null;   // {d, pt}
+let sectors = {};     // {s1:{dStart,dEnd}, s2:..., s3:...}
+let isDragging = false;
+let dragDists = [];
+let TRACK_HALFWIDTH = 22;
+
+const COLORS = {s1:'#00B0FF',s2:'#FFD600',s3:'#FF6D00'};
+
+function initMap() {
+  canvas = document.getElementById('map-canvas');
+  if (!canvas) return;
+  const rect = canvas.parentElement.getBoundingClientRect();
+  canvas.width = Math.round(rect.width) || 354;
+  canvas.height = 240;
+  ctx = canvas.getContext('2d');
+  buildPath();
+  drawMap();
+  canvas.addEventListener('mousedown', onMapDown);
+  canvas.addEventListener('mousemove', onMapMove);
+  canvas.addEventListener('mouseup', onMapUp);
+  canvas.addEventListener('touchstart', onMapTouchStart, {passive:false});
+  canvas.addEventListener('touchmove', onMapTouchMove, {passive:false});
+  canvas.addEventListener('touchend', onMapTouchEnd);
+  showToast('Toque na pista para definir a linha S/C', '#fff');
+}
+
+function buildPath() {
+  const W = canvas.width, H = canvas.height;
+  const cx = W/2, cy = H/2;
+  // Pista oval com chicane no fundo — similar ao print de referência
+  const pts = [];
+  const steps = 120;
+  for (let i = 0; i <= steps; i++) {
+    const t = (i / steps) * Math.PI * 2;
+    let x, y;
+    // forma base oval
+    const rx = W * 0.36, ry = H * 0.32;
+    x = cx + Math.cos(t) * rx;
+    y = cy + Math.sin(t) * ry;
+    // chicane no topo (t ~= PI/4 a PI/2)
+    if (t > Math.PI * 0.1 && t < Math.PI * 0.5) {
+      const frac = (t - Math.PI * 0.1) / (Math.PI * 0.4);
+      const bump = Math.sin(frac * Math.PI) * H * 0.08;
+      x -= bump * 0.6;
+      y -= bump * 0.4;
+    }
+    pts.push([x, y]);
+  }
+  // close
+  path = pts;
+  // compute cumDist
+  cumDist = [0];
+  for (let i = 1; i < path.length; i++) {
+    const dx = path[i][0]-path[i-1][0], dy = path[i][1]-path[i-1][1];
+    cumDist.push(cumDist[i-1] + Math.sqrt(dx*dx+dy*dy));
+  }
+  totalLen = cumDist[cumDist.length-1];
+}
+
+function snapToDist(px, py) {
+  let best = Infinity, bestD = 0;
+  for (let i = 0; i < path.length-1; i++) {
+    const ax=path[i][0],ay=path[i][1],bx=path[i+1][0],by=path[i+1][1];
+    const abx=bx-ax,aby=by-ay, apx=px-ax,apy=py-ay;
+    const ab2=abx*abx+aby*aby;
+    const t = ab2<1e-9?0:Math.max(0,Math.min(1,(apx*abx+apy*aby)/ab2));
+    const projx=ax+abx*t,projy=ay+aby*t;
+    const dist=Math.sqrt((px-projx)**2+(py-projy)**2);
+    if (dist<best){best=dist;bestD=cumDist[i]+t*(cumDist[i+1]-cumDist[i]);}
+  }
+  return {d:bestD,screenDist:best};
+}
+
+function pointAtDist(d) {
+  d=((d%totalLen)+totalLen)%totalLen;
+  for(let i=1;i<cumDist.length;i++){
+    if(cumDist[i]>=d){
+      const t=(d-cumDist[i-1])/(cumDist[i]-cumDist[i-1]);
+      return [path[i-1][0]+t*(path[i][0]-path[i-1][0]),path[i-1][1]+t*(path[i][1]-path[i-1][1])];
+    }
+  }
+  return path[path.length-1];
+}
+
+function tangentAtDist(d) {
+  const DELTA=3;
+  const pA=pointAtDist(d-DELTA),pB=pointAtDist(d+DELTA);
+  const dx=pB[0]-pA[0],dy=pB[1]-pA[1];
+  const len=Math.sqrt(dx*dx+dy*dy)||1;
+  return [dx/len,dy/len];
+}
+
+function cutLine(d, hw) {
+  const pt=pointAtDist(d), tang=tangentAtDist(d);
+  const nx=-tang[1],ny=tang[0];
+  return {
+    pA:[pt[0]+nx*(hw+2),pt[1]+ny*(hw+2)],
+    pB:[pt[0]-nx*(hw+2),pt[1]-ny*(hw+2)],
+    center:pt
+  };
+}
+
+function subpathPoints(dStart,dEnd) {
+  const pts=[];
+  const STEP=2;
+  let d=dStart;
+  while(true){
+    pts.push(pointAtDist(d));
+    const remaining=((dEnd-d)+totalLen)%totalLen;
+    if(remaining<STEP){pts.push(pointAtDist(dEnd));break;}
+    d=(d+STEP)%totalLen;
+    if(pts.length>4000)break;
+  }
+  return pts;
+}
+
+// ── DRAW ──
+function drawMap() {
+  if(!ctx)return;
+  const W=canvas.width,H=canvas.height;
+  ctx.clearRect(0,0,W,H);
+
+  // bg
+  ctx.fillStyle = mapMode==='sat'?'#1a2010':'#0d1117';
+  ctx.fillRect(0,0,W,H);
+
+  if(mapMode==='sat'){
+    // satellite texture hints
+    ctx.fillStyle='rgba(30,50,20,0.5)';
+    ctx.fillRect(0,0,W,H);
+  }
+
+  // track glow
+  ctx.save();
+  ctx.lineWidth=TRACK_HALFWIDTH*2+8;
+  ctx.strokeStyle='rgba(255,255,255,0.03)';
+  ctx.lineCap='round';ctx.lineJoin='round';
+  drawPathCtx();
+  ctx.restore();
+
+  // track surface
+  ctx.save();
+  ctx.lineWidth=TRACK_HALFWIDTH*2;
+  ctx.strokeStyle = mapMode==='sat'?'rgba(80,80,80,0.7)':'rgba(40,40,40,0.9)';
+  ctx.lineCap='round';ctx.lineJoin='round';
+  drawPathCtx();
+  ctx.restore();
+
+  // centerline dashed
+  ctx.save();
+  ctx.lineWidth=1.5;
+  ctx.strokeStyle='rgba(255,255,255,0.18)';
+  ctx.setLineDash([6,5]);ctx.lineCap='round';
+  drawPathCtx();
+  ctx.restore();
+
+  // ── SECTORS ──
+  ['s1','s2','s3'].forEach(key=>{
+    const sec=sectors[key];
+    if(!sec)return;
+    const col=COLORS[key];
+    const pts=subpathPoints(sec.dStart,sec.dEnd);
+    if(pts.length<2)return;
+    // glow
+    ctx.save();ctx.lineWidth=TRACK_HALFWIDTH*2+4;
+    ctx.strokeStyle=col+'18';
+    ctx.lineCap='round';ctx.lineJoin='round';
+    ctx.beginPath();pts.forEach((p,i)=>i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1]));
+    ctx.stroke();ctx.restore();
+    // solid
+    ctx.save();ctx.lineWidth=TRACK_HALFWIDTH*1.8;
+    ctx.strokeStyle=col+'cc';
+    ctx.lineCap='round';ctx.lineJoin='round';
+    ctx.beginPath();pts.forEach((p,i)=>i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1]));
+    ctx.stroke();ctx.restore();
+    // cut lines
+    [sec.dStart,sec.dEnd].forEach(d=>{
+      const cl=cutLine(d,TRACK_HALFWIDTH);
+      // glow
+      ctx.save();ctx.lineWidth=6;ctx.strokeStyle=col+'30';ctx.lineCap='round';
+      ctx.beginPath();ctx.moveTo(cl.pA[0],cl.pA[1]);ctx.lineTo(cl.pB[0],cl.pB[1]);ctx.stroke();ctx.restore();
+      // dashed
+      ctx.save();ctx.lineWidth=1.8;ctx.strokeStyle=col+'88';ctx.setLineDash([4,4]);ctx.lineCap='round';
+      ctx.beginPath();ctx.moveTo(cl.pA[0],cl.pA[1]);ctx.lineTo(cl.pB[0],cl.pB[1]);ctx.stroke();ctx.restore();
+      // solid
+      ctx.save();ctx.lineWidth=2.5;ctx.strokeStyle=col;ctx.lineCap='round';
+      ctx.beginPath();ctx.moveTo(cl.pA[0],cl.pA[1]);ctx.lineTo(cl.pB[0],cl.pB[1]);ctx.stroke();ctx.restore();
+      // caps
+      [cl.pA,cl.pB].forEach(p=>{
+        ctx.save();ctx.beginPath();ctx.arc(p[0],p[1],4,0,Math.PI*2);
+        ctx.fillStyle=col;ctx.fill();
+        ctx.lineWidth=1.5;ctx.strokeStyle='#000';ctx.stroke();ctx.restore();
+      });
+      // badge
+      drawBadge(cl.center[0],cl.center[1]-18,key.toUpperCase(),col);
+    });
+
+    // distance label (dStart → dEnd)
+    const mid=subpathPoints(sec.dStart,(sec.dStart+((sec.dEnd-sec.dStart+totalLen)%totalLen)/2)%totalLen);
+    const mp=mid[Math.floor(mid.length/2)]||cl.center;
+    const secLen=Math.round(((sec.dEnd-sec.dStart+totalLen)%totalLen));
+    drawDistLabel(mp[0],mp[1]-TRACK_HALFWIDTH-10,secLen+'m',col);
+  });
+
+  // S/C LINE
+  if(scPoint){
+    const cl=cutLine(scPoint.d,TRACK_HALFWIDTH+2);
+    ctx.save();ctx.lineWidth=3;ctx.strokeStyle='#fff';ctx.lineCap='round';
+    ctx.beginPath();ctx.moveTo(cl.pA[0],cl.pA[1]);ctx.lineTo(cl.pB[0],cl.pB[1]);ctx.stroke();ctx.restore();
+    // tick marks
+    [cl.pA,cl.pB].forEach(p=>{
+      ctx.save();ctx.beginPath();ctx.arc(p[0],p[1],3.5,0,Math.PI*2);
+      ctx.fillStyle='rgba(255,255,255,0.8)';ctx.fill();ctx.restore();
+    });
+    // badge offset
+    const tang=tangentAtDist(scPoint.d);
+    const nx=-tang[1],ny=tang[0];
+    drawBadge(cl.center[0]+nx*28,cl.center[1]+ny*28,'S/C','#fff',true);
+  }
+
+  // drag preview
+  if(isDragging && dragDists.length>1){
+    const key='s'+currentMode.slice(1);
+    const col=COLORS[key]||'#fff';
+    const dStart=dragDists[0],dEnd=dragDists[dragDists.length-1];
+    const pts2=subpathPoints(dStart,dEnd);
+    ctx.save();ctx.lineWidth=TRACK_HALFWIDTH*1.5;ctx.strokeStyle=col+'55';
+    ctx.lineCap='round';ctx.lineJoin='round';
+    ctx.beginPath();pts2.forEach((p,i)=>i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1]));
+    ctx.stroke();ctx.restore();
+  }
+}
+
+function drawPathCtx(){
+  ctx.beginPath();
+  path.forEach((p,i)=>i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1]));
+  ctx.closePath();ctx.stroke();
+}
+
+function drawBadge(x,y,txt,col,dark=false){
+  ctx.save();
+  const pad=6,h=16,w=ctx.measureText(txt).width+pad*2+6;
+  ctx.fillStyle=dark?'rgba(10,10,10,0.9)':col;
+  roundRect(ctx,x-w/2,y-h/2,w,h,3);ctx.fill();
+  ctx.strokeStyle=dark?'rgba(255,255,255,0.35)':'rgba(0,0,0,0.3)';
+  ctx.lineWidth=dark?1:0;
+  if(dark)ctx.stroke();
+  ctx.fillStyle=dark?'#fff':'#000';
+  ctx.font='bold 9px monospace';ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillText(txt,x,y);
+  ctx.restore();
+}
+
+function drawDistLabel(x,y,txt,col){
+  ctx.save();
+  const pad=4,h=13,w=ctx.measureText(txt).width+pad*2+4;
+  ctx.fillStyle='rgba(10,10,10,0.8)';
+  roundRect(ctx,x-w/2,y-h/2,w,h,3);ctx.fill();
+  ctx.fillStyle=col;
+  ctx.font='bold 8px monospace';ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillText(txt,x,y);
+  ctx.restore();
+}
+
+function roundRect(ctx,x,y,w,h,r){
+  ctx.beginPath();
+  ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.arcTo(x+w,y,x+w,y+r,r);
+  ctx.lineTo(x+w,y+h-r);ctx.arcTo(x+w,y+h,x+w-r,y+h,r);
+  ctx.lineTo(x+r,y+h);ctx.arcTo(x,y+h,x,y+h-r,r);
+  ctx.lineTo(x,y+r);ctx.arcTo(x,y,x+r,y,r);ctx.closePath();
+}
+
+// ── MAP EVENTS ──
+function getCanvasXY(e){
+  const rect=canvas.getBoundingClientRect();
+  const scaleX=canvas.width/rect.width,scaleY=canvas.height/rect.height;
+  return [(e.clientX-rect.left)*scaleX,(e.clientY-rect.top)*scaleY];
+}
+function getTouchXY(e){
+  const t=e.touches[0];
+  return getCanvasXY({clientX:t.clientX,clientY:t.clientY});
+}
+
+function onMapDown(e){handleMapStart(...getCanvasXY(e));}
+function onMapMove(e){if(isDragging)handleMapDrag(...getCanvasXY(e));}
+function onMapUp(e){handleMapEnd(...getCanvasXY(e));}
+function onMapTouchStart(e){e.preventDefault();handleMapStart(...getTouchXY(e));}
+function onMapTouchMove(e){e.preventDefault();if(isDragging)handleMapDrag(...getTouchXY(e));}
+function onMapTouchEnd(e){e.preventDefault();const t=e.changedTouches[0];handleMapEnd(...getCanvasXY({clientX:t.clientX,clientY:t.clientY}));}
+
+function handleMapStart(px,py){
+  const {d,screenDist}=snapToDist(px,py);
+  if(screenDist>TRACK_HALFWIDTH*1.8)return;
+  if(currentMode==='sc'){
+    scPoint={d,pt:pointAtDist(d)};
+    drawMap();
+    showToast('Linha S/C posicionada','#fff');
+    return;
+  }
+  isDragging=true;dragDists=[d];
+}
+
+function handleMapDrag(px,py){
+  if(!isDragging)return;
+  const {d,screenDist}=snapToDist(px,py);
+  if(screenDist>TRACK_HALFWIDTH*1.8)return;
+  dragDists.push(d);
+  // smooth
+  if(dragDists.length>200)dragDists=dragDists.slice(-200);
+  drawMap();
+  // live info
+  const key=currentMode;
+  const dStart=dragDists[0],dEnd=dragDists[dragDists.length-1];
+  const len=Math.round(((dEnd-dStart+totalLen)%totalLen));
+  updateInfoPanel(key,dStart,dEnd,len);
+}
+
+function handleMapEnd(px,py){
+  if(!isDragging){isDragging=false;return;}
+  isDragging=false;
+  if(dragDists.length<2)return;
+  const dStart=dragDists[0],dEnd=dragDists[dragDists.length-1];
+  const len=Math.round(((dEnd-dStart+totalLen)%totalLen));
+  if(len<20){
+    showToast('Setor muito curto (<20m) — tente novamente','#FF3B30');
+    dragDists=[];drawMap();return;
+  }
+  sectors[currentMode]={dStart,dEnd};
+  dragDists=[];
+  drawMap();
+  showToast(`${currentMode.toUpperCase()} definido — confirme ou ajuste`,COLORS[currentMode]);
+  updateInfoPanel(currentMode,dStart,dEnd,len);
+}
+
+function updateInfoPanel(mode,dStart,dEnd,len){
+  const panel=document.getElementById('info-panel');
+  panel.classList.add('show');
+  document.getElementById('ip-mode').textContent=mode.toUpperCase();
+  document.getElementById('ip-interval').textContent=`${Math.round(dStart)}m → ${Math.round(dEnd)}m`;
+  document.getElementById('ip-len').textContent=`${len}m`;
+}
+
+function setMode(m){
+  currentMode=m;
+  document.querySelectorAll('.sec-mode-btn').forEach(b=>b.classList.remove('active'));
+  const modeHints={
+    sc:'Modo atual: <strong style="color:rgba(255,255,255,0.6)">S/C</strong> — toque no traçado para posicionar a linha de largada.',
+    s1:'Modo atual: <strong style="color:var(--s1)">S1</strong> — arraste ao longo do traçado para definir o setor.',
+    s2:'Modo atual: <strong style="color:var(--s2)">S2</strong> — arraste ao longo do traçado para definir o setor.',
+    s3:'Modo atual: <strong style="color:var(--s3)">S3</strong> — arraste ao longo do traçado para definir o setor.',
+  };
+  document.getElementById('mode-hint').innerHTML = modeHints[m];
+  const colMap={sc:'Branca',s1:'S1 azul',s2:'S2 amarelo',s3:'S3 laranja'};
+  showToast(m==='sc'?'Toque na pista para definir S/C':`Arraste ao longo da pista para definir ${m.toUpperCase()}`, m==='sc'?'#fff':COLORS[m]);
+}
+
+let toastTimeout;
+function showToast(txt,col){
+  const t=document.getElementById('map-toast');
+  const d=document.getElementById('toast-dot');
+  const s=document.getElementById('toast-txt');
+  d.style.background=col;s.textContent=txt;
+  t.classList.add('show');
+  clearTimeout(toastTimeout);
+  toastTimeout=setTimeout(()=>t.classList.remove('show'),3000);
+}
+
+function setMapMode(m){
+  mapMode=m;
+  document.getElementById('btn-vet').classList.toggle('on',m==='vet');
+  document.getElementById('btn-sat').classList.toggle('on',m==='sat');
+  document.getElementById('map-grid').style.opacity = m==='sat'?'0':'1';
+  drawMap();
+}
+
+// ═══════════════════════════════════════════════════════════
+// UTILS
+// ═══════════════════════════════════════════════════════════
+function fmtMs(ms){
+  const m=Math.floor(ms/60000);
+  const s=Math.floor((ms%60000)/1000);
+  const h=Math.floor(ms%1000);
+  return `${m}:${String(s).padStart(2,'0')}.${String(h).padStart(3,'0')}`;
+}
+function fmtSec(ms){
+  return (ms/1000).toFixed(3);
+}
+function fmtDelta(ms){
+  return (ms/1000).toFixed(3);
+}
+function avg(arr){return Math.round(arr.reduce((a,b)=>a+b,0)/arr.length);}
+</script>
+</body>
+</html>
