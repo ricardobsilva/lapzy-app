@@ -94,16 +94,18 @@ class _CircleIconButton extends StatelessWidget {
 class _Body extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _Tagline(),
-          const SizedBox(height: 20),
-          _ButtonWithGlow(),
-          const SizedBox(height: 18),
-          _Hint(),
-        ],
+    return SingleChildScrollView(
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _Tagline(),
+            const SizedBox(height: 20),
+            _ButtonWithGlow(),
+            const SizedBox(height: 18),
+            _Hint(),
+          ],
+        ),
       ),
     );
   }
