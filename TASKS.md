@@ -4,13 +4,13 @@
 
 ## Backlog
 
-- [ ] TASK-003 · Tela de Corrida
-  refs: docs/tela_corrida_svg.md, docs/lapzy_design_system.html, docs/principios.md, docs/telas.md
-
 - [ ] TASK-005 · Resumo Pós-Corrida
   refs: docs/telas.md, docs/lapzy_design_system.html, docs/principios.md
 
 ## Done
+
+- [x] TASK-003 · Tela de Corrida
+  refs: docs/tela_corrida_svg.md, docs/lapzy_design_system.html, docs/principios.md, docs/telas.md
 
 - [x] TASK-006 · Configurar Google Maps API Key para produção
   Substituir o placeholder `YOUR_MAPS_API_KEY` no AndroidManifest.xml pela chave real.

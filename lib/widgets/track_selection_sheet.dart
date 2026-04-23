@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/track.dart';
 import '../repositories/track_repository.dart';
+import '../screens/race_screen.dart';
 import '../screens/track_creation_screen.dart';
 
 void showTrackSelectionSheet(BuildContext context) {
@@ -96,6 +97,14 @@ class _TrackSelectionSheetState extends State<_TrackSelectionSheet> {
                 tracks: _filtered,
                 selectedId: _selectedId,
                 onSelect: (id) => setState(() => _selectedId = id),
+                onStart: (track) {
+                  Navigator.of(context).pop();
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => RaceScreen(track: track),
+                    ),
+                  );
+                },
               ),
             )
           else
@@ -184,11 +193,13 @@ class _TrackList extends StatelessWidget {
   final List<Track> tracks;
   final String? selectedId;
   final ValueChanged<String> onSelect;
+  final ValueChanged<Track> onStart;
 
   const _TrackList({
     required this.tracks,
     required this.selectedId,
     required this.onSelect,
+    required this.onStart,
   });
 
   @override
@@ -202,7 +213,7 @@ class _TrackList extends StatelessWidget {
           itemBuilder: (_, i) => _TrackItem(
             track: tracks[i],
             selected: tracks[i].id == selectedId,
-            onTap: () => onSelect(tracks[i].id),
+            onTap: () => onStart(tracks[i]),
           ),
         ),
         // Gradiente de fade no bottom da lista
