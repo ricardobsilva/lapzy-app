@@ -382,12 +382,13 @@ class _TrackCreationScreenState extends State<TrackCreationScreen> {
 
   void _saveTrack() {
     if (!_canSave) return;
-    TrackRepository().add(Track(
+    final track = Track(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       name: _nameController.text.trim(),
       startFinishLine: _startFinishLine,
       sectorBoundaries: List.from(_sectorBoundaries),
-    ));
+    );
+    TrackRepository().add(track);
     _goStep(3);
   }
 
@@ -818,9 +819,9 @@ class _TrackCreationScreenState extends State<TrackCreationScreen> {
         SizedBox(
           width: double.infinity,
           child: _ActionButton(
-            label: 'INICIAR CORRIDA →',
+            label: 'CONCLUIR →',
             enabled: true,
-            onTap: () => Navigator.of(context).pop(),
+            onTap: () => Navigator.of(context).popUntil((r) => r.isFirst),
           ),
         ),
       ],
