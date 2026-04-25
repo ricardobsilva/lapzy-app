@@ -21,8 +21,19 @@ const _kS3 = Color(0xFFFF6D00);
 
 const _kBorderWidth = 7.0;
 
-// Número máximo de setores suportados na tela (S1/S2/S3 fixos + extras).
-const _kMaxSectors = 3;
+// Cores fixas para S1, S2, S3.
+const _kFixedSectorColors = [_kS1, _kS2, _kS3];
+
+// Cores para S4 em diante (geradas dinamicamente na ausência de persistência).
+const _kExtraSectorColors = [
+  Color(0xFF1DE9B6), // teal
+  Color(0xFFE040FB), // magenta
+  Color(0xFFFF4081), // pink
+  Color(0xFF40C4FF), // light blue
+  Color(0xFFCCFF90), // lime
+  Color(0xFFFFD180), // amber
+  Color(0xFF82B1FF), // indigo
+];
 
 // ── TELA PRINCIPAL ────────────────────────────────────────────────────────────
 
@@ -52,11 +63,13 @@ class _RaceScreenState extends State<RaceScreen> {
   int _lapMs = 0;
 
   // ── SESSÃO ─────────────────────────────────────────────────────────────────
+  /// true após o piloto cruzar a linha de largada pela 1ª vez.
+  bool _hasStarted = false;
   int _lapNumber = 1;
   int? _bestLapMs;
   int? _deltaMs;
   RaceEventState _eventState = RaceEventState.neutral;
-  final List<int?> _currentSectors = List.filled(_kMaxSectors, null);
+  late List<int?> _currentSectors;
   final List<LapResult> _completedLaps = [];
 
   // ── GPS ────────────────────────────────────────────────────────────────────
@@ -69,6 +82,7 @@ class _RaceScreenState extends State<RaceScreen> {
   @override
   void initState() {
     super.initState();
+    _currentSectors = List.filled(widget.track.sectorBoundaries.length, null);
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.landscapeLeft,
       DeviceOrientation.landscapeRight,
@@ -95,7 +109,7 @@ class _RaceScreenState extends State<RaceScreen> {
 
   void _startLapTimer() {
     _lapTimer = Timer.periodic(const Duration(milliseconds: 50), (_) {
-      if (mounted) setState(() => _lapMs += 50);
+      if (mounted && _hasStarted) setState(() => _lapMs += 50);
     });
   }
 
@@ -108,7 +122,12 @@ class _RaceScreenState extends State<RaceScreen> {
 
   void _onLapEvent(LapEvent event) {
     if (event is LapCrossedEvent) {
-      _onLapCompleted();
+      if (!_hasStarted) {
+        // 1º cruzamento: inicia o cronômetro, volta 1 em andamento.
+        setState(() => _hasStarted = true);
+      } else {
+        _onLapCompleted();
+      }
     } else if (event is SectorCrossedEvent) {
       _onSectorCompleted(event.sectorIndex);
     }
@@ -135,15 +154,16 @@ class _RaceScreenState extends State<RaceScreen> {
       _lapMs = 0;
       _lapNumber++;
       _nextSectorIndex = 0;
-      for (int i = 0; i < _kMaxSectors; i++) {
+      for (int i = 0; i < _currentSectors.length; i++) {
         _currentSectors[i] = null;
       }
     });
   }
 
   void _onSectorCompleted(int sectorIndex) {
+    if (!_hasStarted) return;
     if (sectorIndex != _nextSectorIndex) return;
-    if (sectorIndex >= _kMaxSectors) return;
+    if (sectorIndex >= _currentSectors.length) return;
     setState(() {
       _currentSectors[sectorIndex] = _lapMs;
       _nextSectorIndex++;
@@ -184,17 +204,15 @@ class _RaceScreenState extends State<RaceScreen> {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _LeftColumn(
-                  lapNumber: _lapNumber,
-                  sectors: List.unmodifiable(_currentSectors),
-                  eventState: _eventState,
-                ),
+                _LeftColumn(lapNumber: _lapNumber),
                 const SizedBox(width: 12),
                 Expanded(
                   child: _CenterColumn(
                     lapMs: _lapMs,
                     eventState: _eventState,
                     deltaMs: _deltaMs,
+                    sectors: List.unmodifiable(_currentSectors),
+                    hasSectors: widget.track.sectorBoundaries.isNotEmpty,
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -249,14 +267,8 @@ class _EventBorder extends StatelessWidget {
 
 class _LeftColumn extends StatelessWidget {
   final int lapNumber;
-  final List<int?> sectors;
-  final RaceEventState eventState;
 
-  const _LeftColumn({
-    required this.lapNumber,
-    required this.sectors,
-    required this.eventState,
-  });
+  const _LeftColumn({required this.lapNumber});
 
   @override
   Widget build(BuildContext context) {
@@ -264,10 +276,8 @@ class _LeftColumn extends StatelessWidget {
       width: 130,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           _LapCounter(lapNumber: lapNumber),
-          _SectorBadges(sectors: sectors, eventState: eventState),
         ],
       ),
     );
@@ -307,97 +317,86 @@ class _LapCounter extends StatelessWidget {
   }
 }
 
-class _SectorBadges extends StatelessWidget {
+class _SectorGrid extends StatelessWidget {
   final List<int?> sectors;
   final RaceEventState eventState;
 
-  const _SectorBadges({required this.sectors, required this.eventState});
+  const _SectorGrid({required this.sectors, required this.eventState});
 
   bool get _isMelhorVolta => eventState == RaceEventState.melhorVolta;
 
-  static const _sectorColors = [_kS1, _kS2, _kS3];
-  static const _sectorLabels = ['S1', 'S2', 'S3'];
+  static Color _colorForIndex(int i) {
+    if (i < _kFixedSectorColors.length) return _kFixedSectorColors[i];
+    return _kExtraSectorColors[
+        (i - _kFixedSectorColors.length) % _kExtraSectorColors.length];
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'SETORES',
-          style: GoogleFonts.rajdhani(
-            fontSize: 10,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 2,
-            color: Colors.white.withAlpha(71),
-          ),
+    return Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      alignment: WrapAlignment.center,
+      children: List.generate(
+        sectors.length,
+        (i) => _SectorCell(
+          label: 'S${i + 1}',
+          timeMs: sectors[i],
+          color: _isMelhorVolta ? _kPurple : _colorForIndex(i),
         ),
-        const SizedBox(height: 6),
-        Wrap(
-          spacing: 6,
-          runSpacing: 6,
-          children: List.generate(
-            _sectorLabels.length,
-            (i) => _SectorBadge(
-              label: _sectorLabels[i],
-              timeMs: sectors.isNotEmpty && i < sectors.length ? sectors[i] : null,
-              color: _isMelhorVolta ? _kPurple : _sectorColors[i],
-            ),
-          ),
-        ),
-      ],
+      ),
     );
   }
 }
 
-class _SectorBadge extends StatelessWidget {
+class _SectorCell extends StatelessWidget {
   final String label;
   final int? timeMs;
   final Color color;
 
-  const _SectorBadge({
+  const _SectorCell({
     required this.label,
     required this.timeMs,
     required this.color,
   });
 
-  String get _timeText {
-    if (timeMs == null) return '—';
-    final s = (timeMs! / 1000).toStringAsFixed(3);
-    return s;
-  }
-
   @override
   Widget build(BuildContext context) {
+    final filled = timeMs != null;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      width: 76,
+      height: 72,
       decoration: BoxDecoration(
-        color: color.withAlpha(31),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withAlpha(115), width: 1.5),
+        color: filled ? color.withAlpha(51) : color.withAlpha(13),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: filled ? color.withAlpha(180) : color.withAlpha(60),
+          width: filled ? 2.0 : 1.5,
+        ),
       ),
-      constraints: const BoxConstraints(minWidth: 56),
       child: Column(
-        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Text(
             label,
             style: GoogleFonts.rajdhani(
-              fontSize: 9,
+              fontSize: 10,
               fontWeight: FontWeight.w700,
               letterSpacing: 1,
-              color: color.withAlpha(191),
+              color: filled ? color : color.withAlpha(120),
             ),
           ),
-          const SizedBox(height: 2),
-          Text(
-            _timeText,
-            style: GoogleFonts.rajdhani(
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-              color: color,
+          if (filled) ...[
+            const SizedBox(height: 2),
+            Text(
+              (timeMs! / 1000).toStringAsFixed(3),
+              style: GoogleFonts.rajdhani(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: color,
+              ),
             ),
-          ),
+          ],
         ],
       ),
     );
@@ -410,11 +409,15 @@ class _CenterColumn extends StatelessWidget {
   final int lapMs;
   final RaceEventState eventState;
   final int? deltaMs;
+  final List<int?> sectors;
+  final bool hasSectors;
 
   const _CenterColumn({
     required this.lapMs,
     required this.eventState,
     required this.deltaMs,
+    required this.sectors,
+    required this.hasSectors,
   });
 
   @override
@@ -448,6 +451,10 @@ class _CenterColumn extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         _DeltaPill(eventState: eventState, deltaMs: deltaMs),
+        if (hasSectors) ...[
+          const SizedBox(height: 16),
+          _SectorGrid(sectors: sectors, eventState: eventState),
+        ],
       ],
     );
   }
