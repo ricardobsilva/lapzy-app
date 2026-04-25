@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:lapzy/main.dart' as app;
@@ -86,8 +87,103 @@ void main() {
       });
     });
 
+    group('CA-RACE-002: cronômetro e delta (estado inicial)', () {
+      testWidgets(
+          'CA-RACE-002-01: timer exibe 0:00.000 ao abrir tela (antes do 1º cruzamento)',
+          (tester) async {
+        TrackRepository().clearForTesting();
+        TrackRepository().add(const Track(id: '1', name: 'Pista Timer'));
+
+        app.main();
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('INICIAR'));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Pista Timer'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('0:00.000'), findsOneWidget);
+
+        TrackRepository().clearForTesting();
+      });
+
+      testWidgets(
+          'CA-RACE-002-03: LapNumber exibe 1 ao abrir tela',
+          (tester) async {
+        TrackRepository().clearForTesting();
+        TrackRepository().add(const Track(id: '1', name: 'Pista Lap'));
+
+        app.main();
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('INICIAR'));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Pista Lap'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('1'), findsOneWidget);
+
+        TrackRepository().clearForTesting();
+      });
+
+      testWidgets(
+          'CA-RACE-002-03: sem delta exibido ao abrir tela',
+          (tester) async {
+        TrackRepository().clearForTesting();
+        TrackRepository().add(const Track(id: '1', name: 'Pista Delta'));
+
+        app.main();
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('INICIAR'));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Pista Delta'));
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byWidgetPredicate(
+            (w) =>
+                w is Text &&
+                w.data != null &&
+                (w.data!.startsWith('▲') ||
+                    w.data!.startsWith('▼') ||
+                    w.data == 'MELHOR'),
+          ),
+          findsNothing,
+        );
+
+        TrackRepository().clearForTesting();
+      });
+
+      testWidgets(
+          'CA-RACE-002-01: timer permanece em 0:00.000 enquanto aguarda 1º cruzamento',
+          (tester) async {
+        TrackRepository().clearForTesting();
+        TrackRepository().add(const Track(id: '1', name: 'Pista Freeze'));
+
+        app.main();
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('INICIAR'));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Pista Freeze'));
+        await tester.pumpAndSettle();
+
+        // Aguarda sem cruzar linha — timer deve permanecer congelado
+        await tester.pump(const Duration(milliseconds: 500));
+
+        expect(find.text('0:00.000'), findsOneWidget);
+
+        TrackRepository().clearForTesting();
+      });
+    });
+
     group('layout landscape', () {
-      testWidgets('exibe labels VOLTA, SETORES, MELHOR VOLTA', (tester) async {
+      testWidgets('exibe labels VOLTA e MELHOR VOLTA', (tester) async {
         TrackRepository().clearForTesting();
         TrackRepository().add(const Track(id: '1', name: 'Track X'));
 
@@ -101,13 +197,13 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(find.text('VOLTA'), findsOneWidget);
-        expect(find.text('SETORES'), findsOneWidget);
         expect(find.text('MELHOR VOLTA'), findsOneWidget);
 
         TrackRepository().clearForTesting();
       });
 
-      testWidgets('exibe badges de setor S1, S2, S3', (tester) async {
+      testWidgets('não exibe células de setor para pista sem setores definidos',
+          (tester) async {
         TrackRepository().clearForTesting();
         TrackRepository().add(const Track(id: '1', name: 'Track Y'));
 
@@ -118,6 +214,44 @@ void main() {
         await tester.pumpAndSettle();
 
         await tester.tap(find.text('Track Y'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('S1'), findsNothing);
+        expect(find.text('S2'), findsNothing);
+        expect(find.text('S3'), findsNothing);
+
+        TrackRepository().clearForTesting();
+      });
+
+      testWidgets('exibe células S1, S2, S3 para pista com 3 setores',
+          (tester) async {
+        TrackRepository().clearForTesting();
+        TrackRepository().add(const Track(
+          id: '2',
+          name: 'Track Z Setores',
+          sectorBoundaries: [
+            TrackLine(
+              a: GeoPoint(-23.50, -46.63),
+              b: GeoPoint(-23.50, -46.62),
+            ),
+            TrackLine(
+              a: GeoPoint(-23.49, -46.63),
+              b: GeoPoint(-23.49, -46.62),
+            ),
+            TrackLine(
+              a: GeoPoint(-23.48, -46.63),
+              b: GeoPoint(-23.48, -46.62),
+            ),
+          ],
+        ));
+
+        app.main();
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('INICIAR'));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Track Z Setores'));
         await tester.pumpAndSettle();
 
         expect(find.text('S1'), findsOneWidget);
