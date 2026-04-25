@@ -9,8 +9,6 @@ import '../models/track.dart';
 import '../services/delta_calculator.dart';
 import '../services/lap_detector.dart';
 
-// ── CORES ─────────────────────────────────────────────────────────────────────
-
 const _kBg = Color(0xFF0A0A0A);
 const _kGreen = Color(0xFF00E676);
 const _kPurple = Color(0xFFBF5AF2);
@@ -20,11 +18,7 @@ const _kS2 = Color(0xFFFFD600);
 const _kS3 = Color(0xFFFF6D00);
 
 const _kBorderWidth = 10.0;
-
-// Cores fixas para S1, S2, S3.
 const _kFixedSectorColors = [_kS1, _kS2, _kS3];
-
-// Cores para S4 em diante (geradas dinamicamente na ausência de persistência).
 const _kExtraSectorColors = [
   Color(0xFF1DE9B6), // teal
   Color(0xFFE040FB), // magenta
@@ -34,8 +28,6 @@ const _kExtraSectorColors = [
   Color(0xFFFFD180), // amber
   Color(0xFF82B1FF), // indigo
 ];
-
-// ── TELA PRINCIPAL ────────────────────────────────────────────────────────────
 
 class RaceScreen extends StatefulWidget {
   final Track track;
@@ -58,12 +50,8 @@ class RaceScreen extends StatefulWidget {
 }
 
 class _RaceScreenState extends State<RaceScreen> {
-  // ── TIMER ──────────────────────────────────────────────────────────────────
   Timer? _lapTimer;
   int _lapMs = 0;
-
-  // ── SESSÃO ─────────────────────────────────────────────────────────────────
-  /// true após o piloto cruzar a linha de largada pela 1ª vez.
   bool _hasStarted = false;
   int _lapNumber = 1;
   int? _bestLapMs;
@@ -72,20 +60,21 @@ class _RaceScreenState extends State<RaceScreen> {
   late List<int?> _currentSectors;
   final List<LapResult> _completedLaps = [];
 
-  // ── GPS ────────────────────────────────────────────────────────────────────
   late final LapDetector _detector;
   StreamSubscription<LapEvent>? _detectorSub;
 
-  // ── RESET BORDA (CA-RACE-004-04) ──────────────────────────────────────────
   Timer? _resetBorderTimer;
-
-  // ── SETOR AGUARDADO (próximo setor a ser completado) ───────────────────────
   int _nextSectorIndex = 0;
+  List<Color?> _sectorFeedbackColors = [];
+  List<Timer?> _sectorFeedbackTimers = [];
 
   @override
   void initState() {
     super.initState();
-    _currentSectors = List.filled(widget.track.sectorBoundaries.length, null);
+    final sectorCount = widget.track.sectorBoundaries.length;
+    _currentSectors = List.filled(sectorCount, null);
+    _sectorFeedbackColors = List.filled(sectorCount, null);
+    _sectorFeedbackTimers = List.filled(sectorCount, null);
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.landscapeLeft,
       DeviceOrientation.landscapeRight,
@@ -102,6 +91,9 @@ class _RaceScreenState extends State<RaceScreen> {
   void dispose() {
     _lapTimer?.cancel();
     _resetBorderTimer?.cancel();
+    for (final t in _sectorFeedbackTimers) {
+      t?.cancel();
+    }
     _detectorSub?.cancel();
     _detector.dispose();
     WakelockPlus.disable();
@@ -109,15 +101,11 @@ class _RaceScreenState extends State<RaceScreen> {
     super.dispose();
   }
 
-  // ── TIMER ──────────────────────────────────────────────────────────────────
-
   void _startLapTimer() {
     _lapTimer = Timer.periodic(const Duration(milliseconds: 50), (_) {
       if (mounted && _hasStarted) setState(() => _lapMs += 50);
     });
   }
-
-  // ── DETECTOR ──────────────────────────────────────────────────────────────
 
   void _startDetector() {
     _detectorSub = _detector.events.listen(_onLapEvent);
@@ -127,7 +115,6 @@ class _RaceScreenState extends State<RaceScreen> {
   void _onLapEvent(LapEvent event) {
     if (event is LapCrossedEvent) {
       if (!_hasStarted) {
-        // 1º cruzamento: inicia o cronômetro, volta 1 em andamento.
         setState(() => _hasStarted = true);
       } else {
         _onLapCompleted();
@@ -160,10 +147,12 @@ class _RaceScreenState extends State<RaceScreen> {
       _nextSectorIndex = 0;
       for (int i = 0; i < _currentSectors.length; i++) {
         _currentSectors[i] = null;
+        _sectorFeedbackColors[i] = null;
       }
     });
 
-    // CA-RACE-004-04: 3s sem novo evento → borda retorna ao neutro.
+    _cancelSectorFeedbackTimers();
+
     _resetBorderTimer?.cancel();
     _resetBorderTimer = Timer(const Duration(seconds: 3), () {
       if (mounted) setState(() => _eventState = RaceEventState.neutral);
@@ -174,13 +163,56 @@ class _RaceScreenState extends State<RaceScreen> {
     if (!_hasStarted) return;
     if (sectorIndex != _nextSectorIndex) return;
     if (sectorIndex >= _currentSectors.length) return;
+
+    final sectorTime = _lapMs;
+    final feedbackColor = _computeSectorFeedback(sectorIndex, sectorTime);
+
     setState(() {
-      _currentSectors[sectorIndex] = _lapMs;
+      _currentSectors[sectorIndex] = sectorTime;
       _nextSectorIndex++;
+      _sectorFeedbackColors[sectorIndex] = feedbackColor;
     });
+
+    if (feedbackColor != null) {
+      _scheduleSectorFeedbackReset(sectorIndex);
+    }
   }
 
-  // ── FINALIZAR ──────────────────────────────────────────────────────────────
+  Color? _computeSectorFeedback(int sectorIndex, int currentTime) {
+    if (_completedLaps.isEmpty) return null;
+    final prevTime = _prevLapSectorTime(sectorIndex);
+    if (prevTime == null) return null;
+    if (currentTime < prevTime) return _kGreen;
+    if (currentTime > prevTime) return _kRed;
+    return null;
+  }
+
+  int? _prevLapSectorTime(int sectorIndex) {
+    final lap = _completedLaps.last;
+    return switch (sectorIndex) {
+      0 => lap.s1Ms,
+      1 => lap.s2Ms,
+      2 => lap.s3Ms,
+      _ => null,
+    };
+  }
+
+  void _scheduleSectorFeedbackReset(int sectorIndex) {
+    _sectorFeedbackTimers[sectorIndex]?.cancel();
+    _sectorFeedbackTimers[sectorIndex] = Timer(
+      const Duration(seconds: 5),
+      () {
+        if (mounted) setState(() => _sectorFeedbackColors[sectorIndex] = null);
+      },
+    );
+  }
+
+  void _cancelSectorFeedbackTimers() {
+    for (int i = 0; i < _sectorFeedbackTimers.length; i++) {
+      _sectorFeedbackTimers[i]?.cancel();
+      _sectorFeedbackTimers[i] = null;
+    }
+  }
 
   Future<void> _confirmEnd() async {
     final confirmed = await showDialog<bool>(
@@ -200,8 +232,6 @@ class _RaceScreenState extends State<RaceScreen> {
       'track': widget.track,
     };
   }
-
-  // ── BUILD ──────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -223,6 +253,7 @@ class _RaceScreenState extends State<RaceScreen> {
                     deltaMs: _deltaMs,
                     sectors: List.unmodifiable(_currentSectors),
                     hasSectors: widget.track.sectorBoundaries.isNotEmpty,
+                    sectorFeedbackColors: List.unmodifiable(_sectorFeedbackColors),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -240,8 +271,6 @@ class _RaceScreenState extends State<RaceScreen> {
     );
   }
 }
-
-// ── BORDA DO EVENTO ───────────────────────────────────────────────────────────
 
 class _EventBorder extends StatefulWidget {
   final RaceEventState eventState;
@@ -332,8 +361,6 @@ class _EventBorderState extends State<_EventBorder>
   }
 }
 
-// ── COLUNA ESQUERDA ───────────────────────────────────────────────────────────
-
 class _LeftColumn extends StatelessWidget {
   final int lapNumber;
 
@@ -389,8 +416,13 @@ class _LapCounter extends StatelessWidget {
 class _SectorGrid extends StatelessWidget {
   final List<int?> sectors;
   final RaceEventState eventState;
+  final List<Color?> sectorFeedbackColors;
 
-  const _SectorGrid({required this.sectors, required this.eventState});
+  const _SectorGrid({
+    required this.sectors,
+    required this.eventState,
+    required this.sectorFeedbackColors,
+  });
 
   bool get _isMelhorVolta => eventState == RaceEventState.melhorVolta;
 
@@ -412,6 +444,7 @@ class _SectorGrid extends StatelessWidget {
           label: 'S${i + 1}',
           timeMs: sectors[i],
           color: _isMelhorVolta ? _kPurple : _colorForIndex(i),
+          borderFeedbackColor: sectorFeedbackColors[i],
         ),
       ),
     );
@@ -422,26 +455,28 @@ class _SectorCell extends StatelessWidget {
   final String label;
   final int? timeMs;
   final Color color;
+  final Color? borderFeedbackColor;
 
   const _SectorCell({
     required this.label,
     required this.timeMs,
     required this.color,
+    this.borderFeedbackColor,
   });
 
   @override
   Widget build(BuildContext context) {
     final filled = timeMs != null;
+    final borderColor = borderFeedbackColor ?? (filled ? color.withAlpha(180) : color.withAlpha(60));
+    final borderWidth = borderFeedbackColor != null ? 2.5 : (filled ? 2.0 : 1.5);
     return Container(
+      key: Key('sector_cell_${label.toLowerCase()}'),
       width: 76,
       height: 72,
       decoration: BoxDecoration(
         color: filled ? color.withAlpha(51) : color.withAlpha(13),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: filled ? color.withAlpha(180) : color.withAlpha(60),
-          width: filled ? 2.0 : 1.5,
-        ),
+        border: Border.all(color: borderColor, width: borderWidth),
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -472,14 +507,13 @@ class _SectorCell extends StatelessWidget {
   }
 }
 
-// ── COLUNA CENTRAL ────────────────────────────────────────────────────────────
-
 class _CenterColumn extends StatelessWidget {
   final int lapMs;
   final RaceEventState eventState;
   final int? deltaMs;
   final List<int?> sectors;
   final bool hasSectors;
+  final List<Color?> sectorFeedbackColors;
 
   const _CenterColumn({
     required this.lapMs,
@@ -487,6 +521,7 @@ class _CenterColumn extends StatelessWidget {
     required this.deltaMs,
     required this.sectors,
     required this.hasSectors,
+    required this.sectorFeedbackColors,
   });
 
   @override
@@ -522,7 +557,11 @@ class _CenterColumn extends StatelessWidget {
         _DeltaPill(eventState: eventState, deltaMs: deltaMs),
         if (hasSectors) ...[
           const SizedBox(height: 16),
-          _SectorGrid(sectors: sectors, eventState: eventState),
+          _SectorGrid(
+            sectors: sectors,
+            eventState: eventState,
+            sectorFeedbackColors: sectorFeedbackColors,
+          ),
         ],
       ],
     );
@@ -603,8 +642,6 @@ class _DeltaPill extends StatelessWidget {
     );
   }
 }
-
-// ── COLUNA DIREITA ────────────────────────────────────────────────────────────
 
 class _RightColumn extends StatelessWidget {
   final int? bestLapMs;
@@ -688,8 +725,6 @@ class _EndButton extends StatelessWidget {
     );
   }
 }
-
-// ── DIALOG DE CONFIRMAÇÃO ─────────────────────────────────────────────────────
 
 class _EndRaceDialog extends StatelessWidget {
   final VoidCallback onConfirm;
@@ -784,8 +819,6 @@ class _EndRaceDialog extends StatelessWidget {
     );
   }
 }
-
-// ── UTILS ─────────────────────────────────────────────────────────────────────
 
 String _formatMs(int ms) {
   final m = ms ~/ 60000;

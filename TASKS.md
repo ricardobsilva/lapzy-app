@@ -13,7 +13,12 @@
   - CA-END-001-03: toque no botão FINALIZAR → sessão encerrada imediatamente, app navega para ResumoScreen e dados salvos automaticamente (sem ação do usuário)
   - CA-END-001-04: ao carregar ResumoScreen, dados da sessão (voltas, tempos, setores) estão disponíveis e corretos; NÃO há botão "Descartar" ou opção de cancelar salvamento
 
-- [ ] TASK-008 · Tempos Parciais por Setor em Tempo Real (US RACE-003)
+- [ ] TASK-005 · Resumo Pós-Corrida
+  refs: docs/telas.md, docs/lapzy_design_system.html, docs/principios.md
+
+## Done
+
+- [x] TASK-008 · Tempos Parciais por Setor em Tempo Real (US RACE-003)
   Como piloto, quero ver o tempo parcial de cada setor enquanto ainda estou na volta, para que eu identifique onde perdi ou ganhei tempo sem esperar o fim da volta.
   refs: docs/tela_corrida_svg.md, docs/lapzy_criacao_pista_setores.md, docs/lapzy_design_system.html, docs/principios.md, docs/identidade.md
   critérios de aceite:
@@ -21,11 +26,6 @@
   - CA-RACE-003-02: ao cruzar fim S1/início S2, tempo final do S1 é exibido no badge S1 e badge S2 fica ativo (Color(0xFFFFD600))
   - CA-RACE-003-03: ao cruzar a linha de chegada, todos os badges exibem os tempos finais dos setores da volta
   - CA-RACE-003-04: se a pista NÃO possui setores definidos, badges de setor NÃO são exibidos e o layout central mantém apenas o tempo de volta
-
-- [ ] TASK-005 · Resumo Pós-Corrida
-  refs: docs/telas.md, docs/lapzy_design_system.html, docs/principios.md
-
-## Done
 
 - [x] TASK-009 · Feedback Visual de Borda por Estado de Volta (US RACE-004)
   refs: docs/tela_corrida_svg.md, docs/lapzy_design_system.html, docs/identidade.md, docs/principios.md
