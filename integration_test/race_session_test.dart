@@ -262,6 +262,52 @@ void main() {
       });
     });
 
+    group('CA-RACE-004: feedback visual de borda por estado de volta', () {
+      testWidgets(
+          'CA-RACE-004-01: estado inicial não exibe borda colorida (neutro)',
+          (tester) async {
+        TrackRepository().clearForTesting();
+        TrackRepository().add(const Track(id: '1', name: 'Pista Borda'));
+
+        app.main();
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('INICIAR'));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Pista Borda'));
+        await tester.pumpAndSettle();
+
+        // Estado neutro: sem borda colorida visível
+        expect(find.byKey(const Key('race_event_border')), findsNothing);
+
+        TrackRepository().clearForTesting();
+      });
+
+      testWidgets(
+          'CA-RACE-004-04: após aguardar sem eventos, borda permanece ausente',
+          (tester) async {
+        TrackRepository().clearForTesting();
+        TrackRepository().add(const Track(id: '1', name: 'Pista Neutro'));
+
+        app.main();
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('INICIAR'));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Pista Neutro'));
+        await tester.pumpAndSettle();
+
+        // Aguarda mais de 3s sem nenhum cruzamento
+        await tester.pump(const Duration(seconds: 4));
+
+        expect(find.byKey(const Key('race_event_border')), findsNothing);
+
+        TrackRepository().clearForTesting();
+      });
+    });
+
     group('botão FINALIZAR com confirmação', () {
       testWidgets('toque em FINALIZAR abre dialog de confirmação',
           (tester) async {

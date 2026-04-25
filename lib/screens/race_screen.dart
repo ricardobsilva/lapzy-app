@@ -19,7 +19,7 @@ const _kS1 = Color(0xFF00B0FF);
 const _kS2 = Color(0xFFFFD600);
 const _kS3 = Color(0xFFFF6D00);
 
-const _kBorderWidth = 7.0;
+const _kBorderWidth = 10.0;
 
 // Cores fixas para S1, S2, S3.
 const _kFixedSectorColors = [_kS1, _kS2, _kS3];
@@ -76,6 +76,9 @@ class _RaceScreenState extends State<RaceScreen> {
   late final LapDetector _detector;
   StreamSubscription<LapEvent>? _detectorSub;
 
+  // ── RESET BORDA (CA-RACE-004-04) ──────────────────────────────────────────
+  Timer? _resetBorderTimer;
+
   // ── SETOR AGUARDADO (próximo setor a ser completado) ───────────────────────
   int _nextSectorIndex = 0;
 
@@ -98,6 +101,7 @@ class _RaceScreenState extends State<RaceScreen> {
   @override
   void dispose() {
     _lapTimer?.cancel();
+    _resetBorderTimer?.cancel();
     _detectorSub?.cancel();
     _detector.dispose();
     WakelockPlus.disable();
@@ -157,6 +161,12 @@ class _RaceScreenState extends State<RaceScreen> {
       for (int i = 0; i < _currentSectors.length; i++) {
         _currentSectors[i] = null;
       }
+    });
+
+    // CA-RACE-004-04: 3s sem novo evento → borda retorna ao neutro.
+    _resetBorderTimer?.cancel();
+    _resetBorderTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted) setState(() => _eventState = RaceEventState.neutral);
     });
   }
 
@@ -233,13 +243,58 @@ class _RaceScreenState extends State<RaceScreen> {
 
 // ── BORDA DO EVENTO ───────────────────────────────────────────────────────────
 
-class _EventBorder extends StatelessWidget {
+class _EventBorder extends StatefulWidget {
   final RaceEventState eventState;
 
   const _EventBorder({required this.eventState});
 
+  @override
+  State<_EventBorder> createState() => _EventBorderState();
+}
+
+class _EventBorderState extends State<_EventBorder>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _pulseCtrl;
+  late final Animation<double> _pulseAnim;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulseCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 700),
+    );
+    _pulseAnim = Tween<double>(begin: 0.35, end: 1.0).animate(
+      CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut),
+    );
+    _syncAnimation();
+  }
+
+  @override
+  void didUpdateWidget(_EventBorder oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.eventState != widget.eventState) {
+      _syncAnimation();
+    }
+  }
+
+  void _syncAnimation() {
+    if (widget.eventState == RaceEventState.personalRecord) {
+      _pulseCtrl.repeat(reverse: true);
+    } else {
+      _pulseCtrl.stop();
+      _pulseCtrl.value = 1.0;
+    }
+  }
+
+  @override
+  void dispose() {
+    _pulseCtrl.dispose();
+    super.dispose();
+  }
+
   Color? get _color {
-    return switch (eventState) {
+    return switch (widget.eventState) {
       RaceEventState.neutral => null,
       RaceEventState.melhorVolta => _kPurple,
       RaceEventState.voltaMelhor => _kGreen,
@@ -252,7 +307,8 @@ class _EventBorder extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = _color;
     if (color == null) return const SizedBox.shrink();
-    return IgnorePointer(
+
+    final container = IgnorePointer(
       child: Container(
         key: const Key('race_event_border'),
         decoration: BoxDecoration(
@@ -260,6 +316,19 @@ class _EventBorder extends StatelessWidget {
         ),
       ),
     );
+
+    // CA-RACE-004-03: animação de pulso exclusiva do estado Personal Record.
+    if (widget.eventState == RaceEventState.personalRecord) {
+      return AnimatedBuilder(
+        animation: _pulseAnim,
+        builder: (_, child) => Opacity(
+          opacity: _pulseAnim.value,
+          child: container,
+        ),
+      );
+    }
+
+    return container;
   }
 }
 

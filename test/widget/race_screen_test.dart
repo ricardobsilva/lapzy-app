@@ -465,6 +465,245 @@ void main() {
       });
     });
 
+    group('CA-RACE-004-01: borda vermelha com stroke-width >= 8 quando volta é pior', () {
+      testWidgets('borda tem stroke-width >= 8', (tester) async {
+        final detector = _FakeDetector();
+        await tester.pumpWidget(_buildScreen(detector: detector));
+
+        // Volta 1 rápida → session best
+        detector.fireLap();
+        await tester.pump(const Duration(milliseconds: 1));
+        detector.fireLap();
+        await tester.pump(const Duration(milliseconds: 1));
+
+        // Volta 2 lenta → voltaPior
+        await tester.pump(const Duration(milliseconds: 200));
+        detector.fireLap();
+        await tester.pump(const Duration(milliseconds: 1));
+
+        final container = tester.widget<Container>(
+          find.byKey(const Key('race_event_border')),
+        );
+        final decoration = container.decoration as BoxDecoration;
+        expect(decoration.border!.top.width, greaterThanOrEqualTo(8.0));
+      });
+
+      testWidgets('borda tem cor #FF3B30 quando volta é pior', (tester) async {
+        final detector = _FakeDetector();
+        await tester.pumpWidget(_buildScreen(detector: detector));
+
+        detector.fireLap();
+        await tester.pump(const Duration(milliseconds: 1));
+        detector.fireLap();
+        await tester.pump(const Duration(milliseconds: 1));
+
+        await tester.pump(const Duration(milliseconds: 200));
+        detector.fireLap();
+        await tester.pump(const Duration(milliseconds: 1));
+
+        final container = tester.widget<Container>(
+          find.byKey(const Key('race_event_border')),
+        );
+        final decoration = container.decoration as BoxDecoration;
+        expect(decoration.border!.top.color, const Color(0xFFFF3B30));
+      });
+    });
+
+    group('CA-RACE-004-02: melhor volta da sessão exibe borda roxa e texto MELHOR', () {
+      testWidgets('borda tem cor #BF5AF2 após 1ª volta completada', (tester) async {
+        final detector = _FakeDetector();
+        await tester.pumpWidget(_buildScreen(detector: detector));
+
+        detector.fireLap();
+        await tester.pump(const Duration(milliseconds: 1));
+        detector.fireLap();
+        await tester.pump(const Duration(milliseconds: 1));
+
+        final container = tester.widget<Container>(
+          find.byKey(const Key('race_event_border')),
+        );
+        final decoration = container.decoration as BoxDecoration;
+        expect(decoration.border!.top.color, const Color(0xFFBF5AF2));
+      });
+
+      testWidgets('DeltaDisplay exibe texto MELHOR', (tester) async {
+        final detector = _FakeDetector();
+        await tester.pumpWidget(_buildScreen(detector: detector));
+
+        detector.fireLap();
+        await tester.pump(const Duration(milliseconds: 1));
+        detector.fireLap();
+        await tester.pump(const Duration(milliseconds: 1));
+
+        expect(find.text('MELHOR'), findsOneWidget);
+      });
+    });
+
+    group('CA-RACE-004-03: Personal Record exibe borda verde com pulso e banner PR', () {
+      testWidgets('borda tem cor #00E676 ao bater PR', (tester) async {
+        final detector = _FakeDetector();
+        await tester.pumpWidget(
+          _buildScreen(detector: detector, prThresholdMs: 999999),
+        );
+
+        detector.fireLap();
+        await tester.pump(const Duration(milliseconds: 200));
+        detector.fireLap();
+        await tester.pump(const Duration(milliseconds: 1));
+        detector.fireLap();
+        await tester.pump(const Duration(milliseconds: 1));
+
+        final container = tester.widget<Container>(
+          find.byKey(const Key('race_event_border')),
+        );
+        final decoration = container.decoration as BoxDecoration;
+        expect(decoration.border!.top.color, const Color(0xFF00E676));
+      });
+
+      testWidgets('borda tem animação de pulso (Opacity) ao bater PR', (tester) async {
+        final detector = _FakeDetector();
+        await tester.pumpWidget(
+          _buildScreen(detector: detector, prThresholdMs: 999999),
+        );
+
+        detector.fireLap();
+        await tester.pump(const Duration(milliseconds: 200));
+        detector.fireLap();
+        await tester.pump(const Duration(milliseconds: 1));
+        detector.fireLap();
+        await tester.pump(const Duration(milliseconds: 1));
+
+        // Opacity widget deve envolver a borda no estado PR
+        final opacityFinder = find.ancestor(
+          of: find.byKey(const Key('race_event_border')),
+          matching: find.byType(Opacity),
+        );
+        expect(opacityFinder, findsOneWidget);
+      });
+
+      testWidgets('borda NÃO tem Opacity para estado voltaPior', (tester) async {
+        final detector = _FakeDetector();
+        await tester.pumpWidget(_buildScreen(detector: detector));
+
+        detector.fireLap();
+        await tester.pump(const Duration(milliseconds: 1));
+        detector.fireLap();
+        await tester.pump(const Duration(milliseconds: 1));
+
+        await tester.pump(const Duration(milliseconds: 200));
+        detector.fireLap();
+        await tester.pump(const Duration(milliseconds: 1));
+
+        final opacityFinder = find.ancestor(
+          of: find.byKey(const Key('race_event_border')),
+          matching: find.byType(Opacity),
+        );
+        expect(opacityFinder, findsNothing);
+      });
+
+      testWidgets('banner PERSONAL RECORD visível ao bater PR', (tester) async {
+        final detector = _FakeDetector();
+        await tester.pumpWidget(
+          _buildScreen(detector: detector, prThresholdMs: 999999),
+        );
+
+        detector.fireLap();
+        await tester.pump(const Duration(milliseconds: 200));
+        detector.fireLap();
+        await tester.pump(const Duration(milliseconds: 1));
+        detector.fireLap();
+        await tester.pump(const Duration(milliseconds: 1));
+
+        expect(find.text('PERSONAL RECORD'), findsOneWidget);
+      });
+
+      testWidgets('DeltaDisplay exibe ▲ ao bater PR', (tester) async {
+        final detector = _FakeDetector();
+        await tester.pumpWidget(
+          _buildScreen(detector: detector, prThresholdMs: 999999),
+        );
+
+        detector.fireLap();
+        await tester.pump(const Duration(milliseconds: 200));
+        detector.fireLap();
+        await tester.pump(const Duration(milliseconds: 1));
+        detector.fireLap();
+        await tester.pump(const Duration(milliseconds: 1));
+
+        expect(
+          find.byWidgetPredicate(
+            (w) => w is Text && w.data != null && w.data!.startsWith('▲'),
+          ),
+          findsOneWidget,
+        );
+      });
+    });
+
+    group('CA-RACE-004-04: borda retorna ao estado neutro após 3s', () {
+      testWidgets('borda desaparece após 3s sem novo evento', (tester) async {
+        final detector = _FakeDetector();
+        await tester.pumpWidget(_buildScreen(detector: detector));
+
+        detector.fireLap();
+        await tester.pump(const Duration(milliseconds: 1));
+        detector.fireLap(); // completa volta 1 → melhorVolta
+        await tester.pump(const Duration(milliseconds: 1));
+
+        // Borda visível logo após o evento
+        expect(find.byKey(const Key('race_event_border')), findsOneWidget);
+
+        // Avança 3s → timer dispara → borda some
+        await tester.pump(const Duration(seconds: 3));
+
+        expect(find.byKey(const Key('race_event_border')), findsNothing);
+      });
+
+      testWidgets('borda ainda visível antes de 3s', (tester) async {
+        final detector = _FakeDetector();
+        await tester.pumpWidget(_buildScreen(detector: detector));
+
+        detector.fireLap();
+        await tester.pump(const Duration(milliseconds: 1));
+        detector.fireLap();
+        await tester.pump(const Duration(milliseconds: 1));
+
+        // Avança apenas 2s
+        await tester.pump(const Duration(seconds: 2));
+
+        expect(find.byKey(const Key('race_event_border')), findsOneWidget);
+      });
+
+      testWidgets('nova volta reinicia o timer de 3s', (tester) async {
+        final detector = _FakeDetector();
+        await tester.pumpWidget(_buildScreen(detector: detector));
+
+        // Volta 1 lenta
+        detector.fireLap();
+        await tester.pump(const Duration(milliseconds: 200));
+        detector.fireLap(); // completa volta 1
+        await tester.pump(const Duration(milliseconds: 1));
+
+        // Espera 2s (menos de 3s desde volta 1)
+        await tester.pump(const Duration(seconds: 2));
+
+        // Completa volta 2 — reinicia o timer de 3s
+        detector.fireLap();
+        await tester.pump(const Duration(milliseconds: 1));
+
+        // Avança mais 2s desde volta 2 (4s desde volta 1, mas apenas 2s desde volta 2)
+        await tester.pump(const Duration(seconds: 2));
+
+        // Borda ainda visível pois o timer foi reiniciado
+        expect(find.byKey(const Key('race_event_border')), findsOneWidget);
+
+        // Avança mais 1s (3s desde volta 2)
+        await tester.pump(const Duration(seconds: 1));
+
+        // Agora a borda desapareceu
+        expect(find.byKey(const Key('race_event_border')), findsNothing);
+      });
+    });
+
     group('botão FINALIZAR', () {
       testWidgets('toque em FINALIZAR exibe dialog de confirmação', (tester) async {
         await tester.pumpWidget(_buildScreen());
