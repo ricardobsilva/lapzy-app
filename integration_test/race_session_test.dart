@@ -262,6 +262,60 @@ void main() {
       });
     });
 
+    group('CA-RACE-003: tempos parciais por setor em tempo real', () {
+      testWidgets(
+          'CA-RACE-003-04: pista sem setores não exibe badges S1/S2/S3',
+          (tester) async {
+        TrackRepository().clearForTesting();
+        TrackRepository().add(const Track(id: '1', name: 'Pista Sem Setores'));
+
+        app.main();
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('INICIAR'));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Pista Sem Setores'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('S1'), findsNothing);
+        expect(find.text('S2'), findsNothing);
+        expect(find.text('S3'), findsNothing);
+
+        TrackRepository().clearForTesting();
+      });
+
+      testWidgets(
+          'CA-RACE-003: pista com 3 setores exibe badges S1, S2 e S3',
+          (tester) async {
+        TrackRepository().clearForTesting();
+        TrackRepository().add(const Track(
+          id: '3',
+          name: 'Pista Com Setores',
+          sectorBoundaries: [
+            TrackLine(a: GeoPoint(-23.50, -46.63), b: GeoPoint(-23.50, -46.62)),
+            TrackLine(a: GeoPoint(-23.49, -46.63), b: GeoPoint(-23.49, -46.62)),
+            TrackLine(a: GeoPoint(-23.48, -46.63), b: GeoPoint(-23.48, -46.62)),
+          ],
+        ));
+
+        app.main();
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('INICIAR'));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Pista Com Setores'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('S1'), findsOneWidget);
+        expect(find.text('S2'), findsOneWidget);
+        expect(find.text('S3'), findsOneWidget);
+
+        TrackRepository().clearForTesting();
+      });
+    });
+
     group('CA-RACE-004: feedback visual de borda por estado de volta', () {
       testWidgets(
           'CA-RACE-004-01: estado inicial não exibe borda colorida (neutro)',

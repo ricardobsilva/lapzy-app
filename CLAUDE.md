@@ -49,6 +49,12 @@ Seguir rigorosamente `docs/testing.md`. Resumo das regras inegociáveis:
 - Testes de integração são obrigatórios — não são opcionais
 - Cada critério de aceite da US vira um cenário de teste
 
+## Regras de código
+
+- Nunca usar comentários como separadores de seção (`// ── TIMER ──────`). Se o código precisa de um banner para ser entendido, extraia em um método ou classe com nome descritivo.
+- O nome do método é o comentário. Prefira `void _initSectorFeedback()` a `// inicializa feedback de setor` + bloco solto.
+- Widgets grandes devem ser extraídos em classes privadas (`_SectorCell`, `_EventBorder`). Estado grande deve ser dividido em métodos coesos e bem nomeados.
+
 ## Regras de design
 
 - Nunca usar cores fora da paleta definida em `docs/identidade.md`

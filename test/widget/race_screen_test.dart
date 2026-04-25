@@ -465,6 +465,136 @@ void main() {
       });
     });
 
+    group('CA-RACE-003: feedback de borda de setor vs volta anterior', () {
+      testWidgets('borda de S1 fica verde quando setor atual é mais rápido que o anterior', (tester) async {
+        final detector = _FakeDetector();
+        await tester.pumpWidget(_buildScreen(detector: detector, track: _trackWithSectors));
+
+        // Volta 1: S1 cruzado com _lapMs ~300ms
+        detector.fireLap();
+        await tester.pump(const Duration(milliseconds: 1));
+        await tester.pump(const Duration(milliseconds: 300));
+        detector.fireSector(0);
+        await tester.pump(const Duration(milliseconds: 1));
+        detector.fireLap(); // completa volta 1
+        await tester.pump(const Duration(milliseconds: 1));
+
+        // Volta 2: S1 cruzado com _lapMs ~100ms (mais rápido)
+        await tester.pump(const Duration(milliseconds: 100));
+        detector.fireSector(0);
+        await tester.pump(const Duration(milliseconds: 1));
+
+        final cell = tester.widget<Container>(find.byKey(const Key('sector_cell_s1')));
+        final deco = cell.decoration as BoxDecoration;
+        expect(deco.border!.top.color, const Color(0xFF00E676));
+      });
+
+      testWidgets('borda de S1 fica vermelha quando setor atual é mais lento que o anterior', (tester) async {
+        final detector = _FakeDetector();
+        await tester.pumpWidget(_buildScreen(detector: detector, track: _trackWithSectors));
+
+        // Volta 1: S1 em ~100ms
+        detector.fireLap();
+        await tester.pump(const Duration(milliseconds: 1));
+        await tester.pump(const Duration(milliseconds: 100));
+        detector.fireSector(0);
+        await tester.pump(const Duration(milliseconds: 1));
+        detector.fireLap();
+        await tester.pump(const Duration(milliseconds: 1));
+
+        // Volta 2: S1 em ~300ms (mais lento)
+        await tester.pump(const Duration(milliseconds: 300));
+        detector.fireSector(0);
+        await tester.pump(const Duration(milliseconds: 1));
+
+        final cell = tester.widget<Container>(find.byKey(const Key('sector_cell_s1')));
+        final deco = cell.decoration as BoxDecoration;
+        expect(deco.border!.top.color, const Color(0xFFFF3B30));
+      });
+
+      testWidgets('borda de feedback desaparece após 5s', (tester) async {
+        final detector = _FakeDetector();
+        await tester.pumpWidget(_buildScreen(detector: detector, track: _trackWithSectors));
+
+        detector.fireLap();
+        await tester.pump(const Duration(milliseconds: 1));
+        await tester.pump(const Duration(milliseconds: 300));
+        detector.fireSector(0);
+        await tester.pump(const Duration(milliseconds: 1));
+        detector.fireLap();
+        await tester.pump(const Duration(milliseconds: 1));
+
+        await tester.pump(const Duration(milliseconds: 100));
+        detector.fireSector(0);
+        await tester.pump(const Duration(milliseconds: 1));
+
+        // Borda verde ativa imediatamente
+        final cellBefore = tester.widget<Container>(find.byKey(const Key('sector_cell_s1')));
+        expect((cellBefore.decoration as BoxDecoration).border!.top.color, const Color(0xFF00E676));
+
+        // Após 5s a borda volta ao estado normal do setor
+        await tester.pump(const Duration(seconds: 5));
+
+        final cellAfter = tester.widget<Container>(find.byKey(const Key('sector_cell_s1')));
+        final borderColor = (cellAfter.decoration as BoxDecoration).border!.top.color;
+        expect(borderColor, isNot(const Color(0xFF00E676)));
+        expect(borderColor, isNot(const Color(0xFFFF3B30)));
+      });
+
+      testWidgets('sem volta anterior não exibe borda de feedback', (tester) async {
+        final detector = _FakeDetector();
+        await tester.pumpWidget(_buildScreen(detector: detector, track: _trackWithSectors));
+
+        // Apenas a 1ª volta, sem volta anterior para comparar
+        detector.fireLap();
+        await tester.pump(const Duration(milliseconds: 1));
+        await tester.pump(const Duration(milliseconds: 200));
+        detector.fireSector(0);
+        await tester.pump(const Duration(milliseconds: 1));
+
+        final cell = tester.widget<Container>(find.byKey(const Key('sector_cell_s1')));
+        final borderColor = (cell.decoration as BoxDecoration).border!.top.color;
+        expect(borderColor, isNot(const Color(0xFF00E676)));
+        expect(borderColor, isNot(const Color(0xFFFF3B30)));
+      });
+
+      testWidgets('feedback é limpo ao completar nova volta', (tester) async {
+        final detector = _FakeDetector();
+        await tester.pumpWidget(_buildScreen(detector: detector, track: _trackWithSectors));
+
+        // Volta 1: S1 em ~300ms
+        detector.fireLap();
+        await tester.pump(const Duration(milliseconds: 1));
+        await tester.pump(const Duration(milliseconds: 300));
+        detector.fireSector(0);
+        await tester.pump(const Duration(milliseconds: 1));
+        detector.fireLap();
+        await tester.pump(const Duration(milliseconds: 1));
+
+        // Volta 2: S1 em ~100ms → borda verde ativa
+        await tester.pump(const Duration(milliseconds: 100));
+        detector.fireSector(0);
+        await tester.pump(const Duration(milliseconds: 1));
+
+        // Completa volta 2 → feedback deve ser limpo
+        detector.fireLap();
+        await tester.pump(const Duration(milliseconds: 1));
+
+        final cell = tester.widget<Container>(find.byKey(const Key('sector_cell_s1')));
+        final borderColor = (cell.decoration as BoxDecoration).border!.top.color;
+        expect(borderColor, isNot(const Color(0xFF00E676)));
+        expect(borderColor, isNot(const Color(0xFFFF3B30)));
+      });
+
+      testWidgets('CA-RACE-003-04: pista sem setores não exibe badges de setor', (tester) async {
+        await tester.pumpWidget(_buildScreen(track: _trackNoSectors));
+
+        expect(find.text('S1'), findsNothing);
+        expect(find.text('S2'), findsNothing);
+        expect(find.text('S3'), findsNothing);
+      });
+    });
+
     group('CA-RACE-004-01: borda vermelha com stroke-width >= 8 quando volta é pior', () {
       testWidgets('borda tem stroke-width >= 8', (tester) async {
         final detector = _FakeDetector();
