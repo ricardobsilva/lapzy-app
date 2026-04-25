@@ -44,6 +44,9 @@
 
 ## Done
 
+- [x] TASK-007 · Cronômetro de Volta em Tempo Real (US RACE-002)
+  refs: docs/tela_corrida_svg.md, docs/lapzy_design_system.html, docs/principios.md, docs/telas.md
+
 - [x] TASK-003 · Tela de Corrida
   refs: docs/tela_corrida_svg.md, docs/lapzy_design_system.html, docs/principios.md, docs/telas.md
 
