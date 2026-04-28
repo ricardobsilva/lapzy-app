@@ -10,8 +10,6 @@
   Como piloto, quero acessar o histórico de todas as minhas corridas anteriores e revisar o resumo de cada uma, para que eu possa acompanhar minha evolução ao longo do tempo.
   refs: docs/lapzy_tela_listagem_corridas.md, docs/telas.md, docs/lapzy_design_system.html, docs/principios.md, docs/identidade.md
 
-## Done
-
 - [x] TASK-012 · Persistência Local de Sessões de Corrida (US PERSIST-002)
   Como piloto, quero que os dados de cada corrida sejam salvos automaticamente no dispositivo, para que eu possa consultar meu histórico mesmo sem conexão com a internet.
   refs: docs/telas.md, docs/principios.md
