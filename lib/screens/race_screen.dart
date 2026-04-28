@@ -8,6 +8,7 @@ import '../models/race_session.dart';
 import '../models/track.dart';
 import '../services/delta_calculator.dart';
 import '../services/lap_detector.dart';
+import 'race_summary_screen.dart';
 
 const _kBg = Color(0xFF0A0A0A);
 const _kGreen = Color(0xFF00E676);
@@ -68,6 +69,11 @@ class _RaceScreenState extends State<RaceScreen> {
   List<Color?> _sectorFeedbackColors = [];
   List<Timer?> _sectorFeedbackTimers = [];
 
+  bool _endButtonRevealed = false;
+  Timer? _hideEndButtonTimer;
+  bool _edgeDragActive = false;
+  double _edgeDragStartX = 0;
+
   @override
   void initState() {
     super.initState();
@@ -91,6 +97,7 @@ class _RaceScreenState extends State<RaceScreen> {
   void dispose() {
     _lapTimer?.cancel();
     _resetBorderTimer?.cancel();
+    _hideEndButtonTimer?.cancel();
     for (final t in _sectorFeedbackTimers) {
       t?.cancel();
     }
@@ -214,59 +221,85 @@ class _RaceScreenState extends State<RaceScreen> {
     }
   }
 
-  Future<void> _confirmEnd() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      barrierColor: Colors.black.withAlpha(153),
-      builder: (ctx) => _EndRaceDialog(onConfirm: () => Navigator.of(ctx).pop(true)),
-    );
-    if (confirmed == true && mounted) {
-      Navigator.of(context).pop(_buildSessionResult());
+  void _onEdgeDragStart(DragStartDetails details, double screenWidth) {
+    if (screenWidth - details.globalPosition.dx <= 40) {
+      _edgeDragActive = true;
+      _edgeDragStartX = details.globalPosition.dx;
     }
   }
 
-  Map<String, dynamic> _buildSessionResult() {
-    return {
-      'laps': List<LapResult>.unmodifiable(_completedLaps),
-      'bestLapMs': _bestLapMs,
-      'track': widget.track,
-    };
+  void _onEdgeDragUpdate(DragUpdateDetails details) {
+    if (!_edgeDragActive) return;
+    final delta = _edgeDragStartX - details.globalPosition.dx;
+    if (delta > 30) {
+      _revealEndButton();
+      _edgeDragActive = false;
+    }
+  }
+
+  void _revealEndButton() {
+    if (_endButtonRevealed) return;
+    setState(() => _endButtonRevealed = true);
+    _hideEndButtonTimer?.cancel();
+    _hideEndButtonTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted) setState(() => _endButtonRevealed = false);
+    });
+  }
+
+  void _endRaceImmediately() {
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute<void>(
+        builder: (_) => RaceSummaryScreen(
+          laps: List.unmodifiable(_completedLaps),
+          bestLapMs: _bestLapMs,
+          track: widget.track,
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
     return Scaffold(
       backgroundColor: _kBg,
-      body: Stack(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(18),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _LeftColumn(lapNumber: _lapNumber),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _CenterColumn(
-                    lapMs: _lapMs,
-                    eventState: _eventState,
-                    deltaMs: _deltaMs,
-                    sectors: List.unmodifiable(_currentSectors),
-                    hasSectors: widget.track.sectorBoundaries.isNotEmpty,
-                    sectorFeedbackColors: List.unmodifiable(_sectorFeedbackColors),
+      body: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onHorizontalDragStart: (d) => _onEdgeDragStart(d, screenWidth),
+        onHorizontalDragUpdate: _onEdgeDragUpdate,
+        onHorizontalDragEnd: (_) => _edgeDragActive = false,
+        onHorizontalDragCancel: () => _edgeDragActive = false,
+        child: Stack(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(18),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _LeftColumn(lapNumber: _lapNumber),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _CenterColumn(
+                      lapMs: _lapMs,
+                      eventState: _eventState,
+                      deltaMs: _deltaMs,
+                      sectors: List.unmodifiable(_currentSectors),
+                      hasSectors: widget.track.sectorBoundaries.isNotEmpty,
+                      sectorFeedbackColors: List.unmodifiable(_sectorFeedbackColors),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                _RightColumn(
-                  bestLapMs: _bestLapMs,
-                  onEnd: _confirmEnd,
-                ),
-              ],
+                  const SizedBox(width: 12),
+                  _RightColumn(
+                    bestLapMs: _bestLapMs,
+                    endButtonRevealed: _endButtonRevealed,
+                    onEnd: _endRaceImmediately,
+                  ),
+                ],
+              ),
             ),
-          ),
-          // Borda colorida sobreposta
-          _EventBorder(eventState: _eventState),
-        ],
+            _EventBorder(eventState: _eventState),
+          ],
+        ),
       ),
     );
   }
@@ -645,9 +678,14 @@ class _DeltaPill extends StatelessWidget {
 
 class _RightColumn extends StatelessWidget {
   final int? bestLapMs;
+  final bool endButtonRevealed;
   final VoidCallback onEnd;
 
-  const _RightColumn({required this.bestLapMs, required this.onEnd});
+  const _RightColumn({
+    required this.bestLapMs,
+    required this.endButtonRevealed,
+    required this.onEnd,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -658,7 +696,7 @@ class _RightColumn extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           _BestLap(bestLapMs: bestLapMs),
-          _EndButton(onTap: onEnd),
+          _EndButton(revealed: endButtonRevealed, onTap: onEnd),
         ],
       ),
     );
@@ -698,27 +736,35 @@ class _BestLap extends StatelessWidget {
 }
 
 class _EndButton extends StatelessWidget {
+  final bool revealed;
   final VoidCallback onTap;
 
-  const _EndButton({required this.onTap});
+  const _EndButton({required this.revealed, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      onTap: revealed ? onTap : null,
+      child: AnimatedContainer(
+        key: const Key('end_button'),
+        duration: const Duration(milliseconds: 200),
+        padding: revealed
+            ? const EdgeInsets.symmetric(horizontal: 20, vertical: 12)
+            : const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
         decoration: BoxDecoration(
-          color: _kRed.withAlpha(230),
+          color: revealed ? _kRed : _kRed.withAlpha(51),
           borderRadius: BorderRadius.circular(8),
+          border: revealed
+              ? null
+              : Border.all(color: _kRed.withAlpha(89), width: 1),
         ),
         child: Text(
           'FINALIZAR',
           style: GoogleFonts.rajdhani(
-            fontSize: 10,
+            fontSize: revealed ? 13 : 10,
             fontWeight: FontWeight.w700,
             letterSpacing: 1.5,
-            color: Colors.white,
+            color: revealed ? Colors.white : Colors.white.withAlpha(115),
           ),
         ),
       ),
@@ -726,99 +772,6 @@ class _EndButton extends StatelessWidget {
   }
 }
 
-class _EndRaceDialog extends StatelessWidget {
-  final VoidCallback onConfirm;
-
-  const _EndRaceDialog({required this.onConfirm});
-
-  @override
-  Widget build(BuildContext context) {
-    return Dialog(
-      backgroundColor: const Color(0xFF141414),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'FINALIZAR CORRIDA?',
-              style: GoogleFonts.rajdhani(
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 1.5,
-                color: Colors.white,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'A sessão será encerrada.',
-              style: GoogleFonts.rajdhani(
-                fontSize: 14,
-                color: Colors.white.withAlpha(115),
-              ),
-            ),
-            const SizedBox(height: 24),
-            Row(
-              children: [
-                Expanded(
-                  child: GestureDetector(
-                    onTap: () => Navigator.of(context).pop(false),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withAlpha(15),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: Colors.white.withAlpha(31),
-                        ),
-                      ),
-                      child: Center(
-                        child: Text(
-                          'CONTINUAR',
-                          style: GoogleFonts.rajdhani(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 1.5,
-                            color: Colors.white.withAlpha(179),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: GestureDetector(
-                    onTap: onConfirm,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      decoration: BoxDecoration(
-                        color: _kRed,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Center(
-                        child: Text(
-                          'FINALIZAR',
-                          style: GoogleFonts.rajdhani(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 1.5,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
 
 String _formatMs(int ms) {
   final m = ms ~/ 60000;

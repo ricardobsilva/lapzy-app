@@ -834,49 +834,168 @@ void main() {
       });
     });
 
-    group('botão FINALIZAR', () {
-      testWidgets('toque em FINALIZAR exibe dialog de confirmação', (tester) async {
+    group('CA-END-001-01: swipe da borda direita revela botão FINALIZAR em destaque', () {
+      testWidgets('botão FINALIZAR existe na tela no estado inicial', (tester) async {
         await tester.pumpWidget(_buildScreen());
 
-        await tester.tap(find.text('FINALIZAR'));
-        await tester.pumpAndSettle();
-
-        expect(find.text('FINALIZAR CORRIDA?'), findsOneWidget);
+        expect(find.text('FINALIZAR'), findsOneWidget);
       });
 
-      testWidgets('dialog exibe botões CONTINUAR e FINALIZAR', (tester) async {
+      testWidgets('botão está no estado pequeno/opaco antes do swipe', (tester) async {
         await tester.pumpWidget(_buildScreen());
 
-        await tester.tap(find.text('FINALIZAR'));
-        await tester.pumpAndSettle();
-
-        expect(find.text('CONTINUAR'), findsOneWidget);
-        expect(find.text('FINALIZAR'), findsWidgets);
+        final button = tester.widget<AnimatedContainer>(
+          find.byKey(const Key('end_button')),
+        );
+        final deco = button.decoration as BoxDecoration;
+        expect(deco.color, isNot(const Color(0xFFFF3B30)));
       });
 
-      testWidgets('toque em CONTINUAR fecha o dialog sem sair da tela', (tester) async {
+      testWidgets('swipe > 30px da borda direita revela botão em destaque', (tester) async {
         await tester.pumpWidget(_buildScreen());
 
-        await tester.tap(find.text('FINALIZAR'));
+        final screenWidth = tester.getSize(find.byType(RaceScreen)).width;
+        await tester.dragFrom(
+          Offset(screenWidth - 5, 200),
+          const Offset(-50, 0),
+        );
+        await tester.pump();
+
+        final button = tester.widget<AnimatedContainer>(
+          find.byKey(const Key('end_button')),
+        );
+        final deco = button.decoration as BoxDecoration;
+        expect(deco.color, const Color(0xFFFF3B30));
+      });
+
+      testWidgets('swipe < 30px da borda direita não revela botão', (tester) async {
+        await tester.pumpWidget(_buildScreen());
+
+        final screenWidth = tester.getSize(find.byType(RaceScreen)).width;
+        await tester.dragFrom(
+          Offset(screenWidth - 5, 200),
+          const Offset(-20, 0),
+        );
+        await tester.pump();
+
+        final button = tester.widget<AnimatedContainer>(
+          find.byKey(const Key('end_button')),
+        );
+        final deco = button.decoration as BoxDecoration;
+        expect(deco.color, isNot(const Color(0xFFFF3B30)));
+      });
+
+      testWidgets('swipe que não começa na borda direita (>40px do edge) não revela botão',
+          (tester) async {
+        await tester.pumpWidget(_buildScreen());
+
+        final screenWidth = tester.getSize(find.byType(RaceScreen)).width;
+        await tester.dragFrom(
+          Offset(screenWidth - 80, 200),
+          const Offset(-50, 0),
+        );
+        await tester.pump();
+
+        final button = tester.widget<AnimatedContainer>(
+          find.byKey(const Key('end_button')),
+        );
+        final deco = button.decoration as BoxDecoration;
+        expect(deco.color, isNot(const Color(0xFFFF3B30)));
+      });
+    });
+
+    group('CA-END-001-02: botão visível por 3s sem toque → retorna ao estado original', () {
+      testWidgets('botão retorna ao estado opaco após 3s sem toque', (tester) async {
+        await tester.pumpWidget(_buildScreen());
+
+        final screenWidth = tester.getSize(find.byType(RaceScreen)).width;
+        await tester.dragFrom(
+          Offset(screenWidth - 5, 200),
+          const Offset(-50, 0),
+        );
+        await tester.pump();
+
+        final buttonRevealed = tester.widget<AnimatedContainer>(
+          find.byKey(const Key('end_button')),
+        );
+        expect(
+          (buttonRevealed.decoration as BoxDecoration).color,
+          const Color(0xFFFF3B30),
+        );
+
+        await tester.pump(const Duration(seconds: 3));
+
+        final buttonHidden = tester.widget<AnimatedContainer>(
+          find.byKey(const Key('end_button')),
+        );
+        expect(
+          (buttonHidden.decoration as BoxDecoration).color,
+          isNot(const Color(0xFFFF3B30)),
+        );
+      });
+
+      testWidgets('botão ainda visível em destaque com menos de 3s', (tester) async {
+        await tester.pumpWidget(_buildScreen());
+
+        final screenWidth = tester.getSize(find.byType(RaceScreen)).width;
+        await tester.dragFrom(
+          Offset(screenWidth - 5, 200),
+          const Offset(-50, 0),
+        );
+        await tester.pump();
+
+        await tester.pump(const Duration(seconds: 2));
+
+        final button = tester.widget<AnimatedContainer>(
+          find.byKey(const Key('end_button')),
+        );
+        expect(
+          (button.decoration as BoxDecoration).color,
+          const Color(0xFFFF3B30),
+        );
+      });
+    });
+
+    group('CA-END-001-03: toque no botão revelado encerra a sessão imediatamente', () {
+      testWidgets('toque no botão revelado navega para fora da RaceScreen', (tester) async {
+        await tester.pumpWidget(_buildScreen());
+
+        final screenWidth = tester.getSize(find.byType(RaceScreen)).width;
+        await tester.dragFrom(
+          Offset(screenWidth - 5, 200),
+          const Offset(-50, 0),
+        );
+        await tester.pump();
+
+        await tester.tap(find.byKey(const Key('end_button')));
         await tester.pumpAndSettle();
 
-        await tester.tap(find.text('CONTINUAR'));
+        expect(find.byType(RaceScreen), findsNothing);
+      });
+
+      testWidgets('toque no botão não revelado não encerra a sessão', (tester) async {
+        await tester.pumpWidget(_buildScreen());
+
+        await tester.tap(find.byKey(const Key('end_button')));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(RaceScreen), findsOneWidget);
+      });
+
+      testWidgets('toque no botão revelado não exibe dialog de confirmação', (tester) async {
+        await tester.pumpWidget(_buildScreen());
+
+        final screenWidth = tester.getSize(find.byType(RaceScreen)).width;
+        await tester.dragFrom(
+          Offset(screenWidth - 5, 200),
+          const Offset(-50, 0),
+        );
+        await tester.pump();
+
+        await tester.tap(find.byKey(const Key('end_button')));
         await tester.pumpAndSettle();
 
         expect(find.text('FINALIZAR CORRIDA?'), findsNothing);
-        expect(find.text('TEMPO DA VOLTA'), findsOneWidget);
-      });
-
-      testWidgets('toque em FINALIZAR no dialog sai da tela', (tester) async {
-        await tester.pumpWidget(_buildScreen());
-
-        await tester.tap(find.text('FINALIZAR'));
-        await tester.pumpAndSettle();
-
-        await tester.tap(find.text('FINALIZAR').last);
-        await tester.pumpAndSettle();
-
-        expect(find.text('TEMPO DA VOLTA'), findsNothing);
       });
     });
   });
