@@ -2,10 +2,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:uuid/uuid.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../models/race_session.dart';
+import '../models/race_session_record.dart';
 import '../models/track.dart';
+import '../repositories/race_session_repository.dart';
 import '../services/delta_calculator.dart';
 import '../services/lap_detector.dart';
 import 'race_summary_screen.dart';
@@ -142,9 +145,7 @@ class _RaceScreenState extends State<RaceScreen> {
     setState(() {
       _completedLaps.add(LapResult(
         lapMs: lapMs,
-        s1Ms: _currentSectors.isNotEmpty ? _currentSectors[0] : null,
-        s2Ms: _currentSectors.length > 1 ? _currentSectors[1] : null,
-        s3Ms: _currentSectors.length > 2 ? _currentSectors[2] : null,
+        sectors: List<int?>.from(_currentSectors),
       ));
       _bestLapMs = result.newBestLapMs;
       _deltaMs = result.deltaMs;
@@ -196,12 +197,7 @@ class _RaceScreenState extends State<RaceScreen> {
 
   int? _prevLapSectorTime(int sectorIndex) {
     final lap = _completedLaps.last;
-    return switch (sectorIndex) {
-      0 => lap.s1Ms,
-      1 => lap.s2Ms,
-      2 => lap.s3Ms,
-      _ => null,
-    };
+    return sectorIndex < lap.sectors.length ? lap.sectors[sectorIndex] : null;
   }
 
   void _scheduleSectorFeedbackReset(int sectorIndex) {
@@ -247,6 +243,22 @@ class _RaceScreenState extends State<RaceScreen> {
   }
 
   void _endRaceImmediately() {
+    unawaited(_saveAndNavigate());
+  }
+
+  Future<void> _saveAndNavigate() async {
+    final now = DateTime.now();
+    final record = RaceSessionRecord(
+      id: const Uuid().v4(),
+      trackId: widget.track.id,
+      trackName: widget.track.name,
+      date: now,
+      laps: List.unmodifiable(_completedLaps),
+      bestLapMs: _bestLapMs,
+      createdAt: now,
+    );
+    await RaceSessionRepository().save(record);
+    if (!mounted) return;
     Navigator.of(context).pushReplacement(
       MaterialPageRoute<void>(
         builder: (_) => RaceSummaryScreen(

@@ -1,10 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'debug/seed_data.dart';
+import 'repositories/race_session_repository.dart';
+import 'repositories/track_repository.dart';
 import 'screens/home_screen.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+  await TrackRepository().load();
+  await RaceSessionRepository().load();
+  await seedDebugDataIfNeeded();
   runApp(const LapzyApp());
 }
 
