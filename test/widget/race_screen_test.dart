@@ -2,8 +2,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lapzy/models/track.dart';
+import 'package:lapzy/repositories/race_session_repository.dart';
 import 'package:lapzy/screens/race_screen.dart';
 import 'package:lapzy/services/lap_detector.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────
 
@@ -958,6 +960,9 @@ void main() {
 
     group('CA-END-001-03: toque no botão revelado encerra a sessão imediatamente', () {
       testWidgets('toque no botão revelado navega para fora da RaceScreen', (tester) async {
+        SharedPreferences.setMockInitialValues({});
+        RaceSessionRepository().clearForTesting();
+
         await tester.pumpWidget(_buildScreen());
 
         final screenWidth = tester.getSize(find.byType(RaceScreen)).width;
@@ -971,18 +976,26 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(find.byType(RaceScreen), findsNothing);
+        RaceSessionRepository().clearForTesting();
       });
 
       testWidgets('toque no botão não revelado não encerra a sessão', (tester) async {
+        SharedPreferences.setMockInitialValues({});
+        RaceSessionRepository().clearForTesting();
+
         await tester.pumpWidget(_buildScreen());
 
         await tester.tap(find.byKey(const Key('end_button')));
         await tester.pumpAndSettle();
 
         expect(find.byType(RaceScreen), findsOneWidget);
+        RaceSessionRepository().clearForTesting();
       });
 
       testWidgets('toque no botão revelado não exibe dialog de confirmação', (tester) async {
+        SharedPreferences.setMockInitialValues({});
+        RaceSessionRepository().clearForTesting();
+
         await tester.pumpWidget(_buildScreen());
 
         final screenWidth = tester.getSize(find.byType(RaceScreen)).width;
@@ -996,6 +1009,7 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(find.text('FINALIZAR CORRIDA?'), findsNothing);
+        RaceSessionRepository().clearForTesting();
       });
     });
   });

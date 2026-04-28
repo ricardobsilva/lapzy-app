@@ -175,5 +175,162 @@ void main() {
 
       expect(track.name, equals('Kartódromo São Paulo'));
     });
+
+    test('createdAt é nulo por padrão', () {
+      const track = Track(id: '1', name: 'Pista');
+
+      expect(track.createdAt, isNull);
+    });
+
+    test('updatedAt é nulo por padrão', () {
+      const track = Track(id: '1', name: 'Pista');
+
+      expect(track.updatedAt, isNull);
+    });
+
+    test('armazena createdAt quando fornecido', () {
+      final date = DateTime(2026, 4, 28, 10, 0);
+      final track = Track(id: '1', name: 'Pista', createdAt: date);
+
+      expect(track.createdAt, equals(date));
+    });
+  });
+
+  group('GeoPoint serialização', () {
+    test('toJson serializa lat e lng corretamente', () {
+      const p = GeoPoint(-23.55, -46.63);
+
+      expect(p.toJson(), equals({'lat': -23.55, 'lng': -46.63}));
+    });
+
+    test('fromJson reconstrói o ponto original', () {
+      const original = GeoPoint(-23.55, -46.63);
+      final restored = GeoPoint.fromJson(original.toJson());
+
+      expect(restored, equals(original));
+    });
+
+    test('fromJson com coordenadas positivas', () {
+      const p = GeoPoint(48.858, 2.294);
+      final restored = GeoPoint.fromJson(p.toJson());
+
+      expect(restored.lat, equals(48.858));
+      expect(restored.lng, equals(2.294));
+    });
+  });
+
+  group('TrackLine serialização', () {
+    const a = GeoPoint(-23.55, -46.63);
+    const b = GeoPoint(-23.57, -46.61);
+
+    test('toJson inclui a, b, middlePoints vazio e widthMeters padrão', () {
+      const line = TrackLine(a: a, b: b);
+      final json = line.toJson();
+
+      expect(json['a'], equals({'lat': -23.55, 'lng': -46.63}));
+      expect(json['b'], equals({'lat': -23.57, 'lng': -46.61}));
+      expect(json['middlePoints'], equals([]));
+      expect(json['widthMeters'], equals(6.0));
+    });
+
+    test('fromJson reconstrói linha reta', () {
+      const original = TrackLine(a: a, b: b);
+      final restored = TrackLine.fromJson(original.toJson());
+
+      expect(restored.a, equals(a));
+      expect(restored.b, equals(b));
+      expect(restored.middlePoints, isEmpty);
+      expect(restored.widthMeters, equals(6.0));
+    });
+
+    test('fromJson reconstrói linha curva com middlePoints', () {
+      const m = GeoPoint(-23.56, -46.62);
+      const original = TrackLine(a: a, b: b, middlePoints: [m]);
+      final restored = TrackLine.fromJson(original.toJson());
+
+      expect(restored.middlePoints.length, equals(1));
+      expect(restored.middlePoints.first, equals(m));
+    });
+
+    test('fromJson reconstrói widthMeters personalizado', () {
+      const original = TrackLine(a: a, b: b, widthMeters: 12.0);
+      final restored = TrackLine.fromJson(original.toJson());
+
+      expect(restored.widthMeters, equals(12.0));
+    });
+  });
+
+  group('Track serialização', () {
+    const a = GeoPoint(-23.55, -46.63);
+    const b = GeoPoint(-23.57, -46.61);
+
+    test('toJson/fromJson preserva id e nome', () {
+      const original = Track(id: 'abc-123', name: 'Interlagos');
+      final restored = Track.fromJson(original.toJson());
+
+      expect(restored.id, equals('abc-123'));
+      expect(restored.name, equals('Interlagos'));
+    });
+
+    test('toJson/fromJson preserva startFinishLine', () {
+      const line = TrackLine(a: a, b: b);
+      const original = Track(id: '1', name: 'P', startFinishLine: line);
+      final restored = Track.fromJson(original.toJson());
+
+      expect(restored.startFinishLine, isNotNull);
+      expect(restored.startFinishLine!.a, equals(a));
+      expect(restored.startFinishLine!.b, equals(b));
+    });
+
+    test('toJson/fromJson com startFinishLine nula', () {
+      const original = Track(id: '1', name: 'P');
+      final restored = Track.fromJson(original.toJson());
+
+      expect(restored.startFinishLine, isNull);
+    });
+
+    test('toJson/fromJson preserva sectorBoundaries', () {
+      const boundaries = [
+        TrackLine(a: a, b: b),
+        TrackLine(
+          a: GeoPoint(-23.56, -46.62),
+          b: GeoPoint(-23.58, -46.60),
+        ),
+      ];
+      const original =
+          Track(id: '1', name: 'P', sectorBoundaries: boundaries);
+      final restored = Track.fromJson(original.toJson());
+
+      expect(restored.sectorBoundaries.length, equals(2));
+      expect(restored.sectorBoundaries[0].a, equals(a));
+    });
+
+    test('toJson/fromJson preserva lastSession', () {
+      final date = DateTime.utc(2026, 4, 28);
+      final original = Track(id: '1', name: 'P', lastSession: date);
+      final restored = Track.fromJson(original.toJson());
+
+      expect(restored.lastSession, equals(date));
+    });
+
+    test('toJson/fromJson preserva createdAt e updatedAt', () {
+      final now = DateTime.utc(2026, 4, 28, 10, 30);
+      final original =
+          Track(id: '1', name: 'P', createdAt: now, updatedAt: now);
+      final restored = Track.fromJson(original.toJson());
+
+      expect(restored.createdAt, equals(now));
+      expect(restored.updatedAt, equals(now));
+    });
+
+    test('toJson/fromJson com campos opcionais nulos', () {
+      const original = Track(id: '1', name: 'P');
+      final restored = Track.fromJson(original.toJson());
+
+      expect(restored.lastSession, isNull);
+      expect(restored.createdAt, isNull);
+      expect(restored.updatedAt, isNull);
+      expect(restored.sectorBoundaries, isEmpty);
+    });
   });
 }
