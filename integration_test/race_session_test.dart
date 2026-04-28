@@ -362,11 +362,12 @@ void main() {
       });
     });
 
-    group('botão FINALIZAR com confirmação', () {
-      testWidgets('toque em FINALIZAR abre dialog de confirmação',
+    group('CA-END-001: encerramento anti-acidental', () {
+      testWidgets(
+          'CA-END-001-01: swipe da borda direita revela botão FINALIZAR em destaque',
           (tester) async {
         TrackRepository().clearForTesting();
-        TrackRepository().add(const Track(id: '1', name: 'Track Z'));
+        TrackRepository().add(const Track(id: '1', name: 'Track End'));
 
         app.main();
         await tester.pumpAndSettle();
@@ -374,21 +375,31 @@ void main() {
         await tester.tap(find.text('INICIAR'));
         await tester.pumpAndSettle();
 
-        await tester.tap(find.text('Track Z'));
+        await tester.tap(find.text('Track End'));
         await tester.pumpAndSettle();
 
-        await tester.tap(find.text('FINALIZAR'));
-        await tester.pumpAndSettle();
+        final screenWidth =
+            tester.getSize(find.byType(RaceScreen)).width;
+        await tester.dragFrom(
+          Offset(screenWidth - 5, 200),
+          const Offset(-50, 0),
+        );
+        await tester.pump();
 
-        expect(find.text('FINALIZAR CORRIDA?'), findsOneWidget);
+        final button = tester.widget<AnimatedContainer>(
+          find.byKey(const Key('end_button')),
+        );
+        final deco = button.decoration as BoxDecoration;
+        expect(deco.color, const Color(0xFFFF3B30));
 
         TrackRepository().clearForTesting();
       });
 
-      testWidgets('toque em CONTINUAR mantém tela de corrida ativa',
+      testWidgets(
+          'CA-END-001-01: botão está no estado opaco antes do swipe',
           (tester) async {
         TrackRepository().clearForTesting();
-        TrackRepository().add(const Track(id: '1', name: 'Track W'));
+        TrackRepository().add(const Track(id: '1', name: 'Track Opaque'));
 
         app.main();
         await tester.pumpAndSettle();
@@ -396,25 +407,92 @@ void main() {
         await tester.tap(find.text('INICIAR'));
         await tester.pumpAndSettle();
 
-        await tester.tap(find.text('Track W'));
+        await tester.tap(find.text('Track Opaque'));
         await tester.pumpAndSettle();
 
-        await tester.tap(find.text('FINALIZAR'));
+        final button = tester.widget<AnimatedContainer>(
+          find.byKey(const Key('end_button')),
+        );
+        final deco = button.decoration as BoxDecoration;
+        expect(deco.color, isNot(const Color(0xFFFF3B30)));
+
+        TrackRepository().clearForTesting();
+      });
+
+      testWidgets(
+          'CA-END-001-02: botão em destaque retorna ao estado opaco após 3s',
+          (tester) async {
+        TrackRepository().clearForTesting();
+        TrackRepository().add(const Track(id: '1', name: 'Track Timer'));
+
+        app.main();
         await tester.pumpAndSettle();
 
-        await tester.tap(find.text('CONTINUAR'));
+        await tester.tap(find.text('INICIAR'));
         await tester.pumpAndSettle();
 
-        expect(find.byType(RaceScreen), findsOneWidget);
+        await tester.tap(find.text('Track Timer'));
+        await tester.pumpAndSettle();
+
+        final screenWidth =
+            tester.getSize(find.byType(RaceScreen)).width;
+        await tester.dragFrom(
+          Offset(screenWidth - 5, 200),
+          const Offset(-50, 0),
+        );
+        await tester.pump();
+
+        await tester.pump(const Duration(seconds: 3));
+
+        final button = tester.widget<AnimatedContainer>(
+          find.byKey(const Key('end_button')),
+        );
+        expect(
+          (button.decoration as BoxDecoration).color,
+          isNot(const Color(0xFFFF3B30)),
+        );
+
+        TrackRepository().clearForTesting();
+      });
+
+      testWidgets(
+          'CA-END-001-03: toque no botão revelado encerra a corrida sem dialog',
+          (tester) async {
+        TrackRepository().clearForTesting();
+        TrackRepository().add(const Track(id: '1', name: 'Track Fim'));
+
+        app.main();
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('INICIAR'));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Track Fim'));
+        await tester.pumpAndSettle();
+
+        final screenWidth =
+            tester.getSize(find.byType(RaceScreen)).width;
+        await tester.dragFrom(
+          Offset(screenWidth - 5, 200),
+          const Offset(-50, 0),
+        );
+        await tester.pump();
+
+        await tester.tap(find.byKey(const Key('end_button')));
+        await tester.pumpAndSettle();
+
         expect(find.text('FINALIZAR CORRIDA?'), findsNothing);
+        expect(find.byType(RaceScreen), findsNothing);
 
         TrackRepository().clearForTesting();
       });
 
-      testWidgets('confirmar FINALIZAR retorna para tela anterior',
+      testWidgets(
+          'CA-END-001-04: ResumoScreen exibe dados da sessão após encerramento',
           (tester) async {
         TrackRepository().clearForTesting();
-        TrackRepository().add(const Track(id: '1', name: 'Track V'));
+        TrackRepository()
+            .add(const Track(id: '1', name: 'Pista Resumo'));
 
         app.main();
         await tester.pumpAndSettle();
@@ -422,17 +500,56 @@ void main() {
         await tester.tap(find.text('INICIAR'));
         await tester.pumpAndSettle();
 
-        await tester.tap(find.text('Track V'));
+        await tester.tap(find.text('Pista Resumo'));
         await tester.pumpAndSettle();
 
-        await tester.tap(find.text('FINALIZAR'));
+        final screenWidth =
+            tester.getSize(find.byType(RaceScreen)).width;
+        await tester.dragFrom(
+          Offset(screenWidth - 5, 200),
+          const Offset(-50, 0),
+        );
+        await tester.pump();
+
+        await tester.tap(find.byKey(const Key('end_button')));
         await tester.pumpAndSettle();
 
-        await tester.tap(find.text('FINALIZAR').last);
+        expect(find.byKey(const Key('summary_title')), findsOneWidget);
+        expect(find.byKey(const Key('summary_track_name')), findsOneWidget);
+        expect(find.text('Pista Resumo'), findsOneWidget);
+
+        TrackRepository().clearForTesting();
+      });
+
+      testWidgets(
+          'CA-END-001-04: ResumoScreen NÃO exibe botão Descartar',
+          (tester) async {
+        TrackRepository().clearForTesting();
+        TrackRepository()
+            .add(const Track(id: '1', name: 'Track SemDescartar'));
+
+        app.main();
         await tester.pumpAndSettle();
 
-        expect(find.byType(RaceScreen), findsNothing);
-        expect(find.text('INICIAR'), findsOneWidget);
+        await tester.tap(find.text('INICIAR'));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Track SemDescartar'));
+        await tester.pumpAndSettle();
+
+        final screenWidth =
+            tester.getSize(find.byType(RaceScreen)).width;
+        await tester.dragFrom(
+          Offset(screenWidth - 5, 200),
+          const Offset(-50, 0),
+        );
+        await tester.pump();
+
+        await tester.tap(find.byKey(const Key('end_button')));
+        await tester.pumpAndSettle();
+
+        expect(find.text('DESCARTAR'), findsNothing);
+        expect(find.text('Descartar'), findsNothing);
 
         TrackRepository().clearForTesting();
       });
