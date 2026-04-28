@@ -4,6 +4,14 @@
 
 ## Backlog
 
+## Done (recente)
+
+- [x] TASK-013 · Histórico de Corridas (US HIST-001)
+  Como piloto, quero acessar o histórico de todas as minhas corridas anteriores e revisar o resumo de cada uma, para que eu possa acompanhar minha evolução ao longo do tempo.
+  refs: docs/lapzy_tela_listagem_corridas.md, docs/telas.md, docs/lapzy_design_system.html, docs/principios.md, docs/identidade.md
+
+## Done
+
 - [x] TASK-012 · Persistência Local de Sessões de Corrida (US PERSIST-002)
   Como piloto, quero que os dados de cada corrida sejam salvos automaticamente no dispositivo, para que eu possa consultar meu histórico mesmo sem conexão com a internet.
   refs: docs/telas.md, docs/principios.md
@@ -15,7 +23,7 @@
   - Serialização de enums via string (ex: "melhorVolta"), nunca por índice — índice quebra com reordenação futura
   - createdAt obrigatório em todo record — será usado para resolução de conflitos no sync
   - LapResult precisa de toJson/fromJson (lapMs: int, sectors: List<int?>)
-  critérios de aceite:
+    critérios de aceite:
   - CA-PERSIST-002-01: RaceSessionRecord contém: id (UUID v4), trackId, trackName (desnormalizado), date (ISO 8601), laps (lapMs + sectors por volta), bestLapMs, createdAt
   - CA-PERSIST-002-02: sessão é salva automaticamente no encerramento da corrida, antes de navegar para RaceSummaryScreen (sem ação do usuário)
   - CA-PERSIST-002-03: histórico de sessões persiste após reiniciar o app
@@ -32,14 +40,12 @@
   - TrackRepository deve carregar pistas do storage na inicialização do app (antes de renderizar HomeScreen)
   - lastSession deve ser atualizado ao salvar uma RaceSessionRecord para esta pista
   - createdAt e updatedAt obrigatórios em Track para futura reconciliação de sync
-  critérios de aceite:
+    critérios de aceite:
   - CA-PERSIST-001-01: pista criada (nome, linha de largada/chegada, setores) persiste após reiniciar o app
   - CA-PERSIST-001-02: todos os campos geográficos são restaurados com precisão (lat/lng, widthMeters, middlePoints de linhas curvas)
   - CA-PERSIST-001-03: Track.id é UUID v4 gerado no momento da criação
   - CA-PERSIST-001-04: TrackRepository inicializa carregando dados do storage (loadAll assíncrono, chamado em main antes do runApp ou via FutureBuilder na HomeScreen)
   - CA-PERSIST-001-05: pista deletada é removida do storage imediatamente
-
-## Done
 
 - [x] TASK-005 · Resumo Pós-Corrida
   refs: docs/telas.md, docs/lapzy_design_system.html, docs/principios.md
