@@ -1,9 +1,11 @@
+import 'dart:async' show unawaited;
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:uuid/uuid.dart';
 
 import '../models/track.dart';
 import '../repositories/track_repository.dart';
@@ -382,13 +384,16 @@ class _TrackCreationScreenState extends State<TrackCreationScreen> {
 
   void _saveTrack() {
     if (!_canSave) return;
+    final now = DateTime.now();
     final track = Track(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      id: const Uuid().v4(),
       name: _nameController.text.trim(),
       startFinishLine: _startFinishLine,
       sectorBoundaries: List.from(_sectorBoundaries),
+      createdAt: now,
+      updatedAt: now,
     );
-    TrackRepository().add(track);
+    unawaited(TrackRepository().save(track));
     _goStep(3);
   }
 

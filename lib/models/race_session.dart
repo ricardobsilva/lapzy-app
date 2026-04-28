@@ -20,16 +20,32 @@ enum RaceEventState {
 /// Resultado de uma volta completada.
 class LapResult {
   final int lapMs;
-  final int? s1Ms;
-  final int? s2Ms;
-  final int? s3Ms;
+
+  /// Tempos de todos os setores completados nesta volta, em ordem.
+  /// Vazio quando a pista não possui setores definidos.
+  final List<int?> sectors;
 
   const LapResult({
     required this.lapMs,
-    this.s1Ms,
-    this.s2Ms,
-    this.s3Ms,
+    this.sectors = const [],
   });
+
+  // Getters de conveniência mantidos para compatibilidade.
+  int? get s1Ms => sectors.isNotEmpty ? sectors[0] : null;
+  int? get s2Ms => sectors.length > 1 ? sectors[1] : null;
+  int? get s3Ms => sectors.length > 2 ? sectors[2] : null;
+
+  Map<String, dynamic> toJson() => {
+        'lapMs': lapMs,
+        'sectors': sectors,
+      };
+
+  factory LapResult.fromJson(Map<String, dynamic> json) => LapResult(
+        lapMs: json['lapMs'] as int,
+        sectors: (json['sectors'] as List<dynamic>)
+            .map((s) => s as int?)
+            .toList(),
+      );
 }
 
 /// Snapshot imutável do estado da sessão — usado para reconstruir a UI.
