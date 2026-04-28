@@ -2,6 +2,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../widgets/track_selection_sheet.dart';
+import 'race_history_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -32,7 +33,15 @@ class _TopBar extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          _CircleIconButton(icon: Icons.history_outlined),
+          _CircleIconButton(
+            key: const Key('home_history_button'),
+            icon: Icons.history_outlined,
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const RaceHistoryScreen(),
+              ),
+            ),
+          ),
           _Logo(),
           _CircleIconButton(icon: Icons.person_outline),
         ],
@@ -65,25 +74,29 @@ class _Logo extends StatelessWidget {
 
 class _CircleIconButton extends StatelessWidget {
   final IconData icon;
+  final VoidCallback? onTap;
 
-  const _CircleIconButton({required this.icon});
+  const _CircleIconButton({super.key, required this.icon, this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 28,
-      height: 28,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        border: Border.all(
-          color: Colors.white.withAlpha(51), // rgba(255,255,255,0.20)
-          width: 1.2,
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 28,
+        height: 28,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: Colors.white.withAlpha(51),
+            width: 1.2,
+          ),
         ),
-      ),
-      child: Icon(
-        icon,
-        size: 15,
-        color: Colors.white.withAlpha(128), // rgba(255,255,255,0.50)
+        child: Icon(
+          icon,
+          size: 15,
+          color: Colors.white.withAlpha(128),
+        ),
       ),
     );
   }
