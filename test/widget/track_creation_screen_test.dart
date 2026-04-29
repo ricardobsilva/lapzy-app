@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lapzy/models/track.dart';
+import 'package:lapzy/repositories/track_repository.dart';
 import 'package:lapzy/screens/track_creation_screen.dart';
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────
@@ -311,6 +313,77 @@ void main() {
         await tester.pumpWidget(_app(initialStep: 2));
 
         expect(find.text('← Voltar'), findsOneWidget);
+      });
+    });
+
+    // ── MODO EDIÇÃO ───────────────────────────────────────────────────────────
+
+    group('CA-TRACK-001-06: modo edição com initialTrack', () {
+      setUp(() => TrackRepository().clearForTesting());
+      tearDown(() => TrackRepository().clearForTesting());
+
+      testWidgets('pré-popula campo de nome com o traçado existente', (tester) async {
+        _setPhoneSize(tester);
+        addTearDown(() => _resetView(tester));
+
+        final track = Track(
+          id: 'edit-1',
+          name: 'Pista Existente',
+          createdAt: DateTime(2026, 1, 1),
+          startFinishLine: TrackLine(
+            a: const GeoPoint(-23.5505, -46.6333),
+            b: const GeoPoint(-23.5510, -46.6340),
+          ),
+        );
+
+        await tester.pumpWidget(MaterialApp(
+          home: TrackCreationScreen(
+            mapBuilder: () => const ColoredBox(color: Color(0xFF0A0A0A)),
+            initialTrack: track,
+            initialStep: 2,
+          ),
+        ));
+
+        expect(find.text('Pista Existente'), findsOneWidget);
+      });
+
+      testWidgets('CA-TRACK-001-07: salvar atualiza registro existente sem criar novo', (tester) async {
+        _setPhoneSize(tester);
+        addTearDown(() => _resetView(tester));
+
+        final original = Track(
+          id: 'edit-id-001',
+          name: 'Pista Original',
+          createdAt: DateTime(2026, 1, 1),
+          startFinishLine: TrackLine(
+            a: const GeoPoint(-23.5505, -46.6333),
+            b: const GeoPoint(-23.5510, -46.6340),
+          ),
+        );
+        TrackRepository().add(original);
+
+        await tester.pumpWidget(MaterialApp(
+          home: TrackCreationScreen(
+            mapBuilder: () => const ColoredBox(color: Color(0xFF0A0A0A)),
+            initialTrack: original,
+            initialStep: 2,
+          ),
+        ));
+
+        await tester.enterText(
+          find.byKey(const Key('track_name_field')),
+          'Pista Editada',
+        );
+        await tester.pump();
+
+        await tester.tap(find.byKey(const Key('save_button')));
+        await tester.pumpAndSettle();
+
+        final tracks = TrackRepository().tracks;
+        expect(tracks.length, 1);
+        expect(tracks.first.id, 'edit-id-001');
+        expect(tracks.first.name, 'Pista Editada');
+        expect(tracks.first.createdAt, DateTime(2026, 1, 1));
       });
     });
   });
