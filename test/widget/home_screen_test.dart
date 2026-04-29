@@ -71,4 +71,26 @@ void main() {
 
     expect(find.text('Nenhuma pista salva'), findsOneWidget);
   });
+
+  testWidgets('CA-TRACK-001-01: exibe ícone de traçados na top bar', (tester) async {
+    _setPhoneSize(tester);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(const MaterialApp(home: HomeScreen()));
+
+    expect(find.byKey(const Key('home_tracks_button')), findsOneWidget);
+  });
+
+  testWidgets('CA-TRACK-001-01: toque no ícone de traçados navega para TrackListScreen', (tester) async {
+    _setPhoneSize(tester);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(const MaterialApp(home: HomeScreen()));
+    await tester.tap(find.byKey(const Key('home_tracks_button')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('TRAÇADOS'), findsOneWidget);
+  });
 }

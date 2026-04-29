@@ -781,7 +781,7 @@ class _EndButtonState extends State<_EndButton>
     super.initState();
     _fillCtrl = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 2500),
+      duration: const Duration(milliseconds: 2000),
     );
     _fillCtrl.addStatusListener((status) {
       if (status == AnimationStatus.completed && !_completed) {

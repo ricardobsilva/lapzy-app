@@ -4,6 +4,61 @@
 
 ## Backlog
 
+- [ ] TASK-014 · Gerenciamento de Traçados (US TRACK-001)
+  Como piloto, quero visualizar, editar e excluir os traçados que configurei, para que eu mantenha minha biblioteca de pistas organizada sem perder o histórico de corridas associado a elas.
+  refs: docs/lapzy_tela_inicial.md, docs/lapzy_tela_criacao_pista.md, docs/lapzy_criacao_pista_setores.md, docs/lapzy_tela_listagem_corridas.md, docs/lapzy_design_system.html, docs/principios.md, docs/identidade.md, docs/testing.md
+
+  ### Contexto e decisões de design
+
+  **Acesso pela Home**
+  - Novo ícone na top bar da HomeScreen, seguindo o mesmo padrão do ícone de histórico (relógio)
+  - Posicionamento: avaliar na implementação se o ícone de pistas entra ao lado do histórico (esquerda) ou em outra posição que não polua o layout minimalista existente
+  - Ícone sugerido: mapa/circuito (ex: `Icons.map_outlined` ou SVG equivalente ao estilo dos demais ícones da top bar)
+
+  **TrackListScreen**
+  - Layout idêntico à RaceListScreen: top bar com `‹` + label "TRAÇADOS" centralizado
+  - Cada item: nome do traçado (bold) + data de criação formatada (pt-BR, ex: "29 abr 2026 · 14:32") + seta `›`
+  - Ordenação: mais recente no topo (createdAt decrescente)
+  - Estado vazio: mensagem "Nenhum traçado configurado." + subtítulo "Crie um traçado para começar a cronometrar." + botão ghost verde "CRIAR TRAÇADO"
+  - Swipe para esquerda em qualquer item → exibe ação de exclusão (ver fluxo de exclusão abaixo)
+
+  **TrackDetailScreen (visualização)**
+  - Reutiliza o layout da tela de criação (mapa + painel inferior) em modo somente leitura
+  - Mapa exibe o traçado completo: polyline do centerline, linha de largada/chegada, setores coloridos
+  - Gestos de câmera habilitados (zoom/scroll); gestos de edição desabilitados
+  - Painel inferior mostra: nome da pista, data de criação, número de setores configurados
+  - Botão "EDITAR" (ghost verde) → abre fluxo de edição
+  - Botão `‹` (back) → volta para TrackListScreen
+
+  **Fluxo de edição**
+  - Ao tocar em "EDITAR", abre a tela de criação de pista (TrackCreationScreen) pré-populada com os dados exatos do traçado selecionado: centerline, posição S/C, setores, nome
+  - O wizard inicia no passo 0 (TRAÇADO) mas com todos os dados já preenchidos — usuário pode avançar passo a passo ou tocar em nós já concluídos para editar diretamente
+  - Ao salvar, o registro existente é atualizado (mesmo `id`, `updatedAt` atualizado) — histórico de corridas associado permanece intacto
+  - TrackCreationScreen precisa aceitar um `Track? initialTrack` opcional para distinguir criação de edição
+
+  **Fluxo de exclusão**
+  - Swipe para a esquerda no item da lista revela painel vermelho com ícone de lixeira e label "EXCLUIR"
+  - Ao confirmar o swipe (soltar após > 50% da largura) OU tocar no painel revelado → exibe bottom sheet de confirmação:
+    - Título: "Excluir traçado?"
+    - Corpo: "Nenhum histórico será perdido, mas você não poderá mais iniciar novas corridas com essas configurações."
+    - Botão primário: "EXCLUIR" (vermelho `Color(0xFFFF3B30)`)
+    - Botão secundário: "CANCELAR" (ghost, branco baixa opacidade)
+  - Ao confirmar: remove do TrackRepository + remove da lista com animação de saída
+  - RaceSessionRecord mantém `trackName` desnormalizado (já implementado em TASK-012) — histórico não é afetado
+
+  ### Critérios de aceite
+
+  - CA-TRACK-001-01: ícone de traçados na HomeScreen navega para TrackListScreen
+  - CA-TRACK-001-02: TrackListScreen exibe todos os traçados salvos, ordenados por createdAt decrescente, com nome e data de criação formatada
+  - CA-TRACK-001-03: TrackListScreen em estado vazio exibe mensagem adequada e botão "CRIAR TRAÇADO"
+  - CA-TRACK-001-04: toque em um item da lista navega para TrackDetailScreen com o traçado correto carregado no mapa (centerline, S/C, setores)
+  - CA-TRACK-001-05: TrackDetailScreen exibe nome, data de criação e número de setores no painel inferior; mapa é interativo (zoom/scroll) mas sem gestos de edição
+  - CA-TRACK-001-06: botão "EDITAR" em TrackDetailScreen abre TrackCreationScreen com todos os campos pré-populados com os dados do traçado selecionado
+  - CA-TRACK-001-07: salvar a edição atualiza o registro existente (mesmo id) sem afetar RaceSessionRecords que referenciam esse traçado
+  - CA-TRACK-001-08: swipe para esquerda em item da lista revela ação de exclusão; ao confirmar, exibe bottom sheet com texto exato definido acima
+  - CA-TRACK-001-09: ao confirmar exclusão, traçado é removido do TrackRepository e da lista com animação; histórico de corridas não é alterado
+  - CA-TRACK-001-10: ao cancelar a exclusão, o item retorna à posição original sem nenhuma alteração
+
 ## Done (recente)
 
 - [x] TASK-013 · Histórico de Corridas (US HIST-001)

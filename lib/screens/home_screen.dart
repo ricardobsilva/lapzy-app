@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../widgets/track_selection_sheet.dart';
 import 'race_history_screen.dart';
+import 'track_list_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -33,14 +34,29 @@ class _TopBar extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          _CircleIconButton(
-            key: const Key('home_history_button'),
-            icon: Icons.history_outlined,
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => const RaceHistoryScreen(),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _CircleIconButton(
+                key: const Key('home_history_button'),
+                icon: Icons.history_outlined,
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const RaceHistoryScreen(),
+                  ),
+                ),
               ),
-            ),
+              const SizedBox(width: 10),
+              _CircleIconButton(
+                key: const Key('home_tracks_button'),
+                icon: Icons.route_outlined,
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const TrackListScreen(),
+                  ),
+                ),
+              ),
+            ],
           ),
           _Logo(),
           _CircleIconButton(icon: Icons.person_outline),
