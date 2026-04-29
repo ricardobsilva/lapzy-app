@@ -40,10 +40,20 @@ const _kPointSpacingPx = 10.0;
 // ── TELA PRINCIPAL ────────────────────────────────────────────────────────────
 
 class TrackCreationScreen extends StatefulWidget {
-  const TrackCreationScreen({super.key, this.mapBuilder, this.initialStep = 0});
+  const TrackCreationScreen({
+    super.key,
+    this.mapBuilder,
+    this.initialStep = 0,
+    this.initialTrack,
+  });
 
   final Widget Function()? mapBuilder;
   final int initialStep;
+
+  /// Quando fornecido, a tela opera em modo de edição: todos os campos são
+  /// pré-populados com os dados do traçado existente. Salvar atualiza o
+  /// registro original (mesmo id, createdAt preservado).
+  final Track? initialTrack;
 
   @override
   State<TrackCreationScreen> createState() => _TrackCreationScreenState();
@@ -91,6 +101,18 @@ class _TrackCreationScreenState extends State<TrackCreationScreen> {
     super.initState();
     _step = widget.initialStep.clamp(0, 3);
     _nameController.addListener(() => setState(() {}));
+    _populateFromInitialTrack();
+  }
+
+  void _populateFromInitialTrack() {
+    final t = widget.initialTrack;
+    if (t == null) return;
+    _nameController.text = t.name;
+    _startFinishLine = t.startFinishLine;
+    _sectorBoundaries
+      ..clear()
+      ..addAll(t.sectorBoundaries);
+    _updateOverlays();
   }
 
   @override
@@ -110,7 +132,11 @@ class _TrackCreationScreenState extends State<TrackCreationScreen> {
 
   void _onMapCreated(GoogleMapController c) {
     _mapController = c;
-    _centerToUserLocation();
+    if (widget.initialTrack?.startFinishLine != null) {
+      _flyToTrack();
+    } else {
+      _centerToUserLocation();
+    }
   }
 
   // Salva zoom/lat sem setState — evita rebuild a cada frame do gesto.
@@ -385,12 +411,13 @@ class _TrackCreationScreenState extends State<TrackCreationScreen> {
   void _saveTrack() {
     if (!_canSave) return;
     final now = DateTime.now();
+    final existing = widget.initialTrack;
     final track = Track(
-      id: const Uuid().v4(),
+      id: existing?.id ?? const Uuid().v4(),
       name: _nameController.text.trim(),
       startFinishLine: _startFinishLine,
       sectorBoundaries: List.from(_sectorBoundaries),
-      createdAt: now,
+      createdAt: existing?.createdAt ?? now,
       updatedAt: now,
     );
     unawaited(TrackRepository().save(track));
