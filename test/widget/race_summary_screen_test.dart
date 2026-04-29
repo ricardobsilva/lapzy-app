@@ -168,6 +168,28 @@ void main() {
         expect(find.text('Descartar'), findsNothing);
       });
 
+      testWidgets('exibe tempo total da corrida corretamente', (tester) async {
+        // lapA.lapMs = 83887, lapB.lapMs = 85441 → total = 169328ms = 2:49.328
+        await tester.pumpWidget(_buildScreen(
+          laps: [_lapA, _lapB],
+          bestLapMs: _lapA.lapMs,
+        ));
+
+        final totalTime = tester.widget<Text>(
+          find.byKey(const Key('summary_total_time')),
+        );
+        expect(totalTime.data, '2:49.328');
+      });
+
+      testWidgets('exibe — para tempo total quando sem voltas', (tester) async {
+        await tester.pumpWidget(_buildScreen(laps: []));
+
+        final totalTime = tester.widget<Text>(
+          find.byKey(const Key('summary_total_time')),
+        );
+        expect(totalTime.data, '—');
+      });
+
       testWidgets('NÃO exibe opção de cancelar salvamento', (tester) async {
         await tester.pumpWidget(_buildScreen(
           laps: [_lapA],
@@ -184,6 +206,17 @@ void main() {
           laps: [_lapA, _lapB, _lapC],
           bestLapMs: _lapC.lapMs,
         ));
+
+        // Com o hero mais alto + seção de setores, lap 3 pode estar fora do viewport inicial.
+        // Scrollar para garantir que o SliverList a renderize antes de acessar.
+        final scrollable = find.descendant(
+          of: find.byType(CustomScrollView),
+          matching: find.byType(Scrollable),
+        ).first;
+        await tester.scrollUntilVisible(
+          find.byKey(const Key('summary_lap_time_3')), 100,
+          scrollable: scrollable,
+        );
 
         final lap1 = tester.widget<Text>(find.byKey(const Key('summary_lap_time_1')));
         final lap2 = tester.widget<Text>(find.byKey(const Key('summary_lap_time_2')));
@@ -377,14 +410,32 @@ void main() {
     });
 
     group('TASK-005: bottom sheet detalhe de volta (3 setores)', () {
+      // O hero mais alto (com TEMPO TOTAL) empurra as linhas de volta para baixo
+      // do viewport, exigindo scroll antes de tocar. O tap é feito diretamente no
+      // GestureDetector da linha (summary_lap_row_N) para garantir registro correto.
+      Future<void> openSheet(WidgetTester tester, int lapNumber) async {
+        final scrollable = find.descendant(
+          of: find.byType(CustomScrollView),
+          matching: find.byType(Scrollable),
+        ).first;
+        final rowKey = Key('summary_lap_row_$lapNumber');
+        // Passo 1: força a renderização lazy do SliverList rolando até o widget.
+        await tester.scrollUntilVisible(find.byKey(rowKey), 100, scrollable: scrollable);
+        // Passo 2: garante visibilidade COMPLETA (scrollUntilVisible para com 1px visível;
+        // o centro do GestureDetector pode estar fora do viewport, tornando o tap inválido).
+        await tester.ensureVisible(find.byKey(rowKey));
+        await tester.pump();
+        await tester.tap(find.byKey(rowKey));
+        await tester.pumpAndSettle();
+      }
+
       testWidgets('toque em volta abre bottom sheet com tempo total', (tester) async {
         await tester.pumpWidget(_buildScreen(
           laps: [_lapA],
           bestLapMs: _lapA.lapMs,
         ));
 
-        await tester.tap(find.byKey(const Key('summary_lap_time_1')));
-        await tester.pumpAndSettle();
+        await openSheet(tester, 1);
 
         expect(find.byKey(const Key('summary_lap_detail_sheet')), findsOneWidget);
         expect(find.byKey(const Key('lap_detail_total_time')), findsOneWidget);
@@ -400,8 +451,7 @@ void main() {
           bestLapMs: _lapA.lapMs,
         ));
 
-        await tester.tap(find.byKey(const Key('summary_lap_time_1')));
-        await tester.pumpAndSettle();
+        await openSheet(tester, 1);
 
         expect(find.byKey(const Key('lap_detail_sector_label_0')), findsOneWidget);
         expect(find.byKey(const Key('lap_detail_sector_time_0')), findsOneWidget);
@@ -417,8 +467,7 @@ void main() {
           bestLapMs: _lapA.lapMs,
         ));
 
-        await tester.tap(find.byKey(const Key('summary_lap_time_1')));
-        await tester.pumpAndSettle();
+        await openSheet(tester, 1);
 
         for (int s = 0; s < 3; s++) {
           final delta = tester.widget<Text>(
@@ -435,8 +484,7 @@ void main() {
           bestLapMs: _lapA.lapMs,
         ));
 
-        await tester.tap(find.byKey(const Key('summary_lap_time_2')));
-        await tester.pumpAndSettle();
+        await openSheet(tester, 2);
 
         // S1: lapA.s1Ms (28441) - lapB.s1Ms (29000) = -559 → ▼
         final s1Delta = tester.widget<Text>(
@@ -452,8 +500,7 @@ void main() {
           bestLapMs: _lapA.lapMs,
         ));
 
-        await tester.tap(find.byKey(const Key('summary_lap_time_2')));
-        await tester.pumpAndSettle();
+        await openSheet(tester, 2);
 
         final bestS1 = tester.widget<Text>(
           find.byKey(const Key('lap_detail_best_sector_time_0')),
@@ -464,16 +511,18 @@ void main() {
 
     group('TASK-005: bottom sheet detalhe de volta (7 setores)', () {
       // Helper: rola o CustomScrollView até a linha de volta ficar visível,
-      // então abre o sheet. Necessário porque o grid de 7 setores (3 linhas)
-      // empurra as linhas de volta para fora do viewport do teste.
-      Future<void> openSheet(WidgetTester tester, Key lapKey) async {
+      // então toca no GestureDetector da linha (summary_lap_row_N) para garantir
+      // registro correto do tap — tapping na Text não propaga adequadamente após scroll.
+      Future<void> openSheet(WidgetTester tester, int lapNumber) async {
         final scrollable = find.descendant(
           of: find.byType(CustomScrollView),
           matching: find.byType(Scrollable),
         ).first;
-        final finder = find.byKey(lapKey);
-        await tester.scrollUntilVisible(finder, 150, scrollable: scrollable);
-        await tester.tap(finder);
+        final rowKey = Key('summary_lap_row_$lapNumber');
+        await tester.scrollUntilVisible(find.byKey(rowKey), 100, scrollable: scrollable);
+        await tester.ensureVisible(find.byKey(rowKey));
+        await tester.pump();
+        await tester.tap(find.byKey(rowKey));
         await tester.pumpAndSettle();
       }
 
@@ -484,7 +533,7 @@ void main() {
           track: _trackWith7Sectors,
         ));
 
-        await openSheet(tester, const Key('summary_lap_time_1'));
+        await openSheet(tester, 1);
 
         expect(find.byKey(const Key('summary_lap_detail_sheet')), findsOneWidget);
 
@@ -501,7 +550,7 @@ void main() {
           track: _trackWith7Sectors,
         ));
 
-        await openSheet(tester, const Key('summary_lap_time_1'));
+        await openSheet(tester, 1);
 
         for (int s = 0; s < 7; s++) {
           final delta = tester.widget<Text>(
@@ -520,7 +569,7 @@ void main() {
           track: _trackWith7Sectors,
         ));
 
-        await openSheet(tester, const Key('summary_lap_time_2'));
+        await openSheet(tester, 2);
 
         for (int s = 0; s < 7; s++) {
           final delta = tester.widget<Text>(
@@ -539,7 +588,7 @@ void main() {
           track: _trackWith7Sectors,
         ));
 
-        await openSheet(tester, const Key('summary_lap_time_1'));
+        await openSheet(tester, 1);
 
         // Sheet presente sem overflow — se houvesse overflow o pumpAndSettle
         // lançaria exception de RenderFlex
