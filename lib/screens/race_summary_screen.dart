@@ -58,6 +58,8 @@ class _RaceSummaryScreenState extends State<RaceSummaryScreen> {
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   }
 
+  int get _totalRaceMs => widget.laps.fold(0, (sum, l) => sum + l.lapMs);
+
   int get _bestLapIndex {
     if (widget.bestLapMs == null) return -1;
     return widget.laps.indexWhere((l) => l.lapMs == widget.bestLapMs);
@@ -107,6 +109,7 @@ class _RaceSummaryScreenState extends State<RaceSummaryScreen> {
               bestLapMs: widget.bestLapMs,
               bestLapNumber: bestLapIndex >= 0 ? bestLapIndex + 1 : null,
               lapCount: widget.laps.length,
+              totalRaceMs: _totalRaceMs,
             ),
             const Divider(color: _kDivider, height: 1),
             Expanded(
@@ -191,12 +194,14 @@ class _SummaryHero extends StatelessWidget {
   final int? bestLapMs;
   final int? bestLapNumber;
   final int lapCount;
+  final int totalRaceMs;
 
   const _SummaryHero({
     required this.track,
     required this.bestLapMs,
     required this.bestLapNumber,
     required this.lapCount,
+    required this.totalRaceMs,
   });
 
   @override
@@ -247,6 +252,13 @@ class _SummaryHero extends StatelessWidget {
                 valueKey: const Key('summary_lap_count'),
               ),
             ],
+          ),
+          const SizedBox(height: 12),
+          _HeroStat(
+            label: 'TEMPO TOTAL',
+            value: lapCount > 0 ? _formatMs(totalRaceMs) : '—',
+            color: Colors.white.withAlpha(153),
+            valueKey: const Key('summary_total_time'),
           ),
         ],
       ),
@@ -543,6 +555,7 @@ class _LapRow extends StatelessWidget {
     final delta = _deltaMs;
 
     return GestureDetector(
+      key: Key('summary_lap_row_$lapNumber'),
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
       child: Padding(
