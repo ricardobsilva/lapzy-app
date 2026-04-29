@@ -113,6 +113,61 @@ void main() {
 
         expect(find.text('PERSONAL RECORD'), findsNothing);
       });
+
+      testWidgets('exibe label TOTAL', (tester) async {
+        await tester.pumpWidget(_buildScreen());
+
+        expect(find.text('TOTAL'), findsOneWidget);
+      });
+
+      testWidgets('total exibe — antes de iniciar a corrida', (tester) async {
+        await tester.pumpWidget(_buildScreen());
+
+        final totalTime = tester.widget<Text>(
+          find.byKey(const Key('race_total_time')),
+        );
+        expect(totalTime.data, '—');
+      });
+    });
+
+    group('tempo total de corrida', () {
+      testWidgets('total acumula soma das voltas completadas', (tester) async {
+        final detector = _FakeDetector();
+        await tester.pumpWidget(_buildScreen(detector: detector));
+
+        // Volta 1: 200ms
+        detector.fireLap();
+        await tester.pump(const Duration(milliseconds: 1));
+        await tester.pump(const Duration(milliseconds: 200));
+        detector.fireLap();
+        await tester.pump(const Duration(milliseconds: 1));
+
+        // Volta 2: 100ms
+        await tester.pump(const Duration(milliseconds: 100));
+        detector.fireLap();
+        await tester.pump(const Duration(milliseconds: 1));
+
+        // Total esperado: 200 + 100 + 0 (lapMs reset imediato) = 300ms
+        final totalTime = tester.widget<Text>(
+          find.byKey(const Key('race_total_time')),
+        );
+        expect(totalTime.data, '0:00.300');
+      });
+
+      testWidgets('total exibe tempo corrente após 1º cruzamento', (tester) async {
+        final detector = _FakeDetector();
+        await tester.pumpWidget(_buildScreen(detector: detector));
+
+        detector.fireLap();
+        await tester.pump(const Duration(milliseconds: 1));
+        await tester.pump(const Duration(milliseconds: 100));
+
+        final totalTime = tester.widget<Text>(
+          find.byKey(const Key('race_total_time')),
+        );
+        expect(totalTime.data, isNot('—'));
+        expect(totalTime.data, '0:00.100');
+      });
     });
 
     group('CA-RACE-002-01: cronômetro inicia somente no 1º cruzamento', () {
@@ -147,7 +202,9 @@ void main() {
         await tester.pump(const Duration(milliseconds: 100));
 
         // Timer interno usa tick de 50ms (20Hz), logo 100ms já acumulou 100ms
-        expect(find.text('0:00.100'), findsOneWidget);
+        // Verifica via key do lap timer (não via texto, pois o total também exibe o mesmo valor)
+        final lapTimer = tester.widget<Text>(find.byKey(const Key('race_lap_time')));
+        expect(lapTimer.data, '0:00.100');
       });
     });
 
@@ -836,180 +893,77 @@ void main() {
       });
     });
 
-    group('CA-END-001-01: swipe da borda direita revela botão FINALIZAR em destaque', () {
+    group('CA-END-001-01: pressionar e segurar 3s o botão FINALIZAR encerra a corrida', () {
       testWidgets('botão FINALIZAR existe na tela no estado inicial', (tester) async {
         await tester.pumpWidget(_buildScreen());
 
         expect(find.text('FINALIZAR'), findsOneWidget);
       });
 
-      testWidgets('botão está no estado pequeno/opaco antes do swipe', (tester) async {
+      testWidgets('pressionar inicia o fill do botão', (tester) async {
         await tester.pumpWidget(_buildScreen());
 
-        final button = tester.widget<AnimatedContainer>(
-          find.byKey(const Key('end_button')),
+        final buttonFinder = find.byKey(const Key('end_button'));
+        final gesture = await tester.startGesture(tester.getCenter(buttonFinder));
+        await tester.pump(); // registra o primeiro tick do AnimationController
+        await tester.pump(const Duration(seconds: 1));
+
+        final fractionBox = tester.widget<FractionallySizedBox>(
+          find.descendant(of: buttonFinder, matching: find.byType(FractionallySizedBox)),
         );
-        final deco = button.decoration as BoxDecoration;
-        expect(deco.color, isNot(const Color(0xFFFF3B30)));
+        expect(fractionBox.widthFactor, greaterThan(0.0));
+        expect(fractionBox.widthFactor, lessThan(1.0));
+
+        await gesture.up();
+        await tester.pumpAndSettle();
       });
 
-      testWidgets('swipe > 30px da borda direita revela botão em destaque', (tester) async {
-        await tester.pumpWidget(_buildScreen());
-
-        final screenWidth = tester.getSize(find.byType(RaceScreen)).width;
-        await tester.dragFrom(
-          Offset(screenWidth - 5, 200),
-          const Offset(-50, 0),
-        );
-        await tester.pump();
-
-        final button = tester.widget<AnimatedContainer>(
-          find.byKey(const Key('end_button')),
-        );
-        final deco = button.decoration as BoxDecoration;
-        expect(deco.color, const Color(0xFFFF3B30));
-      });
-
-      testWidgets('swipe < 30px da borda direita não revela botão', (tester) async {
-        await tester.pumpWidget(_buildScreen());
-
-        final screenWidth = tester.getSize(find.byType(RaceScreen)).width;
-        await tester.dragFrom(
-          Offset(screenWidth - 5, 200),
-          const Offset(-20, 0),
-        );
-        await tester.pump();
-
-        final button = tester.widget<AnimatedContainer>(
-          find.byKey(const Key('end_button')),
-        );
-        final deco = button.decoration as BoxDecoration;
-        expect(deco.color, isNot(const Color(0xFFFF3B30)));
-      });
-
-      testWidgets('swipe que não começa na borda direita (>40px do edge) não revela botão',
-          (tester) async {
-        await tester.pumpWidget(_buildScreen());
-
-        final screenWidth = tester.getSize(find.byType(RaceScreen)).width;
-        await tester.dragFrom(
-          Offset(screenWidth - 80, 200),
-          const Offset(-50, 0),
-        );
-        await tester.pump();
-
-        final button = tester.widget<AnimatedContainer>(
-          find.byKey(const Key('end_button')),
-        );
-        final deco = button.decoration as BoxDecoration;
-        expect(deco.color, isNot(const Color(0xFFFF3B30)));
-      });
-    });
-
-    group('CA-END-001-02: botão visível por 3s sem toque → retorna ao estado original', () {
-      testWidgets('botão retorna ao estado opaco após 3s sem toque', (tester) async {
-        await tester.pumpWidget(_buildScreen());
-
-        final screenWidth = tester.getSize(find.byType(RaceScreen)).width;
-        await tester.dragFrom(
-          Offset(screenWidth - 5, 200),
-          const Offset(-50, 0),
-        );
-        await tester.pump();
-
-        final buttonRevealed = tester.widget<AnimatedContainer>(
-          find.byKey(const Key('end_button')),
-        );
-        expect(
-          (buttonRevealed.decoration as BoxDecoration).color,
-          const Color(0xFFFF3B30),
-        );
-
-        await tester.pump(const Duration(seconds: 3));
-
-        final buttonHidden = tester.widget<AnimatedContainer>(
-          find.byKey(const Key('end_button')),
-        );
-        expect(
-          (buttonHidden.decoration as BoxDecoration).color,
-          isNot(const Color(0xFFFF3B30)),
-        );
-      });
-
-      testWidgets('botão ainda visível em destaque com menos de 3s', (tester) async {
-        await tester.pumpWidget(_buildScreen());
-
-        final screenWidth = tester.getSize(find.byType(RaceScreen)).width;
-        await tester.dragFrom(
-          Offset(screenWidth - 5, 200),
-          const Offset(-50, 0),
-        );
-        await tester.pump();
-
-        await tester.pump(const Duration(seconds: 2));
-
-        final button = tester.widget<AnimatedContainer>(
-          find.byKey(const Key('end_button')),
-        );
-        expect(
-          (button.decoration as BoxDecoration).color,
-          const Color(0xFFFF3B30),
-        );
-      });
-    });
-
-    group('CA-END-001-03: toque no botão revelado encerra a sessão imediatamente', () {
-      testWidgets('toque no botão revelado navega para fora da RaceScreen', (tester) async {
+      testWidgets('segurar 3s encerra a corrida sem exibir dialog', (tester) async {
         SharedPreferences.setMockInitialValues({});
         RaceSessionRepository().clearForTesting();
 
         await tester.pumpWidget(_buildScreen());
 
-        final screenWidth = tester.getSize(find.byType(RaceScreen)).width;
-        await tester.dragFrom(
-          Offset(screenWidth - 5, 200),
-          const Offset(-50, 0),
-        );
-        await tester.pump();
-
-        await tester.tap(find.byKey(const Key('end_button')));
+        final buttonFinder = find.byKey(const Key('end_button'));
+        final gesture = await tester.startGesture(tester.getCenter(buttonFinder));
+        await tester.pump(const Duration(seconds: 3));
         await tester.pumpAndSettle();
 
         expect(find.byType(RaceScreen), findsNothing);
+        expect(find.text('FINALIZAR CORRIDA?'), findsNothing);
+        await gesture.up();
         RaceSessionRepository().clearForTesting();
       });
 
-      testWidgets('toque no botão não revelado não encerra a sessão', (tester) async {
+      testWidgets('soltar antes de 3s não encerra a corrida', (tester) async {
         SharedPreferences.setMockInitialValues({});
         RaceSessionRepository().clearForTesting();
 
         await tester.pumpWidget(_buildScreen());
 
-        await tester.tap(find.byKey(const Key('end_button')));
+        final buttonFinder = find.byKey(const Key('end_button'));
+        final gesture = await tester.startGesture(tester.getCenter(buttonFinder));
+        await tester.pump(const Duration(seconds: 1));
+        await gesture.up();
         await tester.pumpAndSettle();
 
         expect(find.byType(RaceScreen), findsOneWidget);
         RaceSessionRepository().clearForTesting();
       });
 
-      testWidgets('toque no botão revelado não exibe dialog de confirmação', (tester) async {
-        SharedPreferences.setMockInitialValues({});
-        RaceSessionRepository().clearForTesting();
-
+      testWidgets('soltar antes de 3s reverte o fill para zero', (tester) async {
         await tester.pumpWidget(_buildScreen());
 
-        final screenWidth = tester.getSize(find.byType(RaceScreen)).width;
-        await tester.dragFrom(
-          Offset(screenWidth - 5, 200),
-          const Offset(-50, 0),
-        );
-        await tester.pump();
-
-        await tester.tap(find.byKey(const Key('end_button')));
+        final buttonFinder = find.byKey(const Key('end_button'));
+        final gesture = await tester.startGesture(tester.getCenter(buttonFinder));
+        await tester.pump(const Duration(seconds: 1));
+        await gesture.up();
         await tester.pumpAndSettle();
 
-        expect(find.text('FINALIZAR CORRIDA?'), findsNothing);
-        RaceSessionRepository().clearForTesting();
+        final fractionBox = tester.widget<FractionallySizedBox>(
+          find.descendant(of: buttonFinder, matching: find.byType(FractionallySizedBox)),
+        );
+        expect(fractionBox.widthFactor, 0.0);
       });
     });
   });
