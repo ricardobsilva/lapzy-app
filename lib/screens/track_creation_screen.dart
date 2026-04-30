@@ -108,7 +108,10 @@ class _TrackCreationScreenState extends State<TrackCreationScreen> {
     final t = widget.initialTrack;
     if (t == null) return;
     _nameController.text = t.name;
-    _startFinishLine = t.startFinishLine;
+    final sf = t.startFinishLine;
+    _startFinishLine = sf == null
+        ? null
+        : TrackLine(a: sf.a, b: sf.b, widthMeters: sf.widthMeters);
     _sectorBoundaries
       ..clear()
       ..addAll(t.sectorBoundaries);
@@ -217,7 +220,6 @@ class _TrackCreationScreenState extends State<TrackCreationScreen> {
         _startFinishLine = TrackLine(
           a: geo.first,
           b: geo.last,
-          middlePoints: geo.length > 2 ? geo.sublist(1, geo.length - 1) : const [],
           widthMeters: _startFinishLine?.widthMeters ?? 6.0,
         );
         _updateOverlays();
@@ -853,7 +855,15 @@ class _TrackCreationScreenState extends State<TrackCreationScreen> {
           child: _ActionButton(
             label: 'CONCLUIR →',
             enabled: true,
-            onTap: () => Navigator.of(context).popUntil((r) => r.isFirst),
+            onTap: () {
+              if (widget.initialTrack != null) {
+                // Modo edição: retorna para TrackDetailScreen com resultado.
+                Navigator.of(context).pop(true);
+              } else {
+                // Modo criação: volta direto para a tela inicial.
+                Navigator.of(context).popUntil((r) => r.isFirst);
+              }
+            },
           ),
         ),
       ],

@@ -7,14 +7,27 @@ import 'package:lapzy/screens/race_screen.dart';
 import 'package:lapzy/services/lap_detector.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-// ── HELPERS ───────────────────────────────────────────────────────────────────
+// ── INFRA DE TESTE ────────────────────────────────────────────────────────────
+
+/// Relógio controlável — avança somente quando o teste chama [advance].
+/// Garante que _lapMs reflita exatamente o tempo simulado pelo tester.pump.
+class _TestClock {
+  DateTime _now;
+  _TestClock([DateTime? initial]) : _now = initial ?? DateTime(2026);
+  DateTime call() => _now;
+  void advance(Duration d) => _now = _now.add(d);
+}
 
 /// LapDetector com stream controlado para injeção de eventos.
+/// Aceita relógio opcional para que os timestamps dos eventos sejam consistentes
+/// com o relógio injetado no RaceScreen.
 class _FakeDetector extends LapDetector {
   final StreamController<LapEvent> _ctrl = StreamController<LapEvent>.broadcast();
+  final DateTime Function() _clock;
 
-  _FakeDetector()
-      : super(
+  _FakeDetector({DateTime Function()? clock})
+      : _clock = clock ?? DateTime.now,
+        super(
           track: const Track(id: 'test', name: 'Test'),
           positionStreamFactory: () => const Stream.empty(),
         );
@@ -34,8 +47,8 @@ class _FakeDetector extends LapDetector {
     super.dispose();
   }
 
-  void fireLap() => _ctrl.add(LapCrossedEvent(DateTime.now()));
-  void fireSector(int idx) => _ctrl.add(SectorCrossedEvent(idx, DateTime.now()));
+  void fireLap() => _ctrl.add(LapCrossedEvent(_clock()));
+  void fireSector(int idx) => _ctrl.add(SectorCrossedEvent(idx, _clock()));
 }
 
 /// Pista sem setores (pista mínima).
@@ -56,13 +69,15 @@ Widget _buildScreen({
   _FakeDetector? detector,
   int? prThresholdMs,
   Track track = _trackNoSectors,
+  DateTime Function()? clock,
 }) {
-  final d = detector ?? _FakeDetector();
+  final d = detector ?? _FakeDetector(clock: clock);
   return MaterialApp(
     home: RaceScreen(
       track: track,
       prThresholdMs: prThresholdMs,
       detectorFactory: (_) => d,
+      clockFactory: clock,
     ),
   );
 }
@@ -132,22 +147,25 @@ void main() {
 
     group('tempo total de corrida', () {
       testWidgets('total acumula soma das voltas completadas', (tester) async {
-        final detector = _FakeDetector();
-        await tester.pumpWidget(_buildScreen(detector: detector));
+        final clock = _TestClock();
+        final detector = _FakeDetector(clock: clock.call);
+        await tester.pumpWidget(_buildScreen(detector: detector, clock: clock.call));
 
         // Volta 1: 200ms
         detector.fireLap();
         await tester.pump(const Duration(milliseconds: 1));
+        clock.advance(const Duration(milliseconds: 200));
         await tester.pump(const Duration(milliseconds: 200));
         detector.fireLap();
         await tester.pump(const Duration(milliseconds: 1));
 
         // Volta 2: 100ms
+        clock.advance(const Duration(milliseconds: 100));
         await tester.pump(const Duration(milliseconds: 100));
         detector.fireLap();
         await tester.pump(const Duration(milliseconds: 1));
 
-        // Total esperado: 200 + 100 + 0 (lapMs reset imediato) = 300ms
+        // Total: 200 + 100 + 0 (nova volta, lapMs reset) = 300ms
         final totalTime = tester.widget<Text>(
           find.byKey(const Key('race_total_time')),
         );
@@ -155,11 +173,13 @@ void main() {
       });
 
       testWidgets('total exibe tempo corrente após 1º cruzamento', (tester) async {
-        final detector = _FakeDetector();
-        await tester.pumpWidget(_buildScreen(detector: detector));
+        final clock = _TestClock();
+        final detector = _FakeDetector(clock: clock.call);
+        await tester.pumpWidget(_buildScreen(detector: detector, clock: clock.call));
 
         detector.fireLap();
         await tester.pump(const Duration(milliseconds: 1));
+        clock.advance(const Duration(milliseconds: 100));
         await tester.pump(const Duration(milliseconds: 100));
 
         final totalTime = tester.widget<Text>(
@@ -180,29 +200,28 @@ void main() {
       });
 
       testWidgets('timer avança após o 1º cruzamento', (tester) async {
-        final detector = _FakeDetector();
-        await tester.pumpWidget(_buildScreen(detector: detector));
+        final clock = _TestClock();
+        final detector = _FakeDetector(clock: clock.call);
+        await tester.pumpWidget(_buildScreen(detector: detector, clock: clock.call));
 
-        detector.fireLap(); // 1º cruzamento → inicia cronômetro
+        detector.fireLap();
         await tester.pump(const Duration(milliseconds: 1));
-
+        clock.advance(const Duration(milliseconds: 200));
         await tester.pump(const Duration(milliseconds: 200));
 
         expect(find.text('0:00.000'), findsNothing);
       });
 
       testWidgets('timer atualiza a >= 10Hz (tick <= 100ms)', (tester) async {
-        final detector = _FakeDetector();
-        await tester.pumpWidget(_buildScreen(detector: detector));
+        final clock = _TestClock();
+        final detector = _FakeDetector(clock: clock.call);
+        await tester.pumpWidget(_buildScreen(detector: detector, clock: clock.call));
 
         detector.fireLap();
         await tester.pump(const Duration(milliseconds: 1));
-
-        // Avança 100ms — deve ter exibido ao menos um valor diferente de 0:00.000
+        clock.advance(const Duration(milliseconds: 100));
         await tester.pump(const Duration(milliseconds: 100));
 
-        // Timer interno usa tick de 50ms (20Hz), logo 100ms já acumulou 100ms
-        // Verifica via key do lap timer (não via texto, pois o total também exibe o mesmo valor)
         final lapTimer = tester.widget<Text>(find.byKey(const Key('race_lap_time')));
         expect(lapTimer.data, '0:00.100');
       });
@@ -231,7 +250,7 @@ void main() {
         final detector = _FakeDetector();
         await tester.pumpWidget(_buildScreen(detector: detector));
 
-        detector.fireLap(); // 1º cruzamento — apenas inicia
+        detector.fireLap();
         await tester.pump(const Duration(milliseconds: 1));
 
         expect(
@@ -256,14 +275,15 @@ void main() {
 
     group('CA-RACE-002-02: delta a partir da 2ª volta', () {
       testWidgets('exibe MELHOR após 2º cruzamento (1ª volta completa)', (tester) async {
-        final detector = _FakeDetector();
-        await tester.pumpWidget(_buildScreen(detector: detector));
+        final clock = _TestClock();
+        final detector = _FakeDetector(clock: clock.call);
+        await tester.pumpWidget(_buildScreen(detector: detector, clock: clock.call));
 
-        detector.fireLap(); // 1º — inicia
+        detector.fireLap();
         await tester.pump(const Duration(milliseconds: 1));
-
+        clock.advance(const Duration(milliseconds: 100));
         await tester.pump(const Duration(milliseconds: 100));
-        detector.fireLap(); // 2º — completa volta 1
+        detector.fireLap();
         await tester.pump(const Duration(milliseconds: 1));
 
         expect(find.text('MELHOR'), findsOneWidget);
@@ -275,7 +295,6 @@ void main() {
 
         detector.fireLap();
         await tester.pump(const Duration(milliseconds: 1));
-
         detector.fireLap();
         await tester.pump(const Duration(milliseconds: 1));
 
@@ -283,17 +302,20 @@ void main() {
       });
 
       testWidgets('exibe ▲ verde após 3º cruzamento quando volta melhora', (tester) async {
-        final detector = _FakeDetector();
-        await tester.pumpWidget(_buildScreen(detector: detector));
+        final clock = _TestClock();
+        final detector = _FakeDetector(clock: clock.call);
+        await tester.pumpWidget(_buildScreen(detector: detector, clock: clock.call));
 
         // Volta 1 lenta: 200ms
-        detector.fireLap(); // inicia
+        detector.fireLap();
+        await tester.pump(const Duration(milliseconds: 1));
+        clock.advance(const Duration(milliseconds: 200));
         await tester.pump(const Duration(milliseconds: 200));
-        detector.fireLap(); // completa volta 1 com 200ms
+        detector.fireLap();
         await tester.pump(const Duration(milliseconds: 1));
 
-        // Volta 2 rápida: quase 0ms
-        detector.fireLap(); // completa volta 2 com ~0ms → session best
+        // Volta 2 rápida: ~0ms → session best
+        detector.fireLap();
         await tester.pump(const Duration(milliseconds: 1));
 
         expect(
@@ -305,16 +327,18 @@ void main() {
       });
 
       testWidgets('exibe ▼ vermelho após 3º cruzamento quando volta piora', (tester) async {
-        final detector = _FakeDetector();
-        await tester.pumpWidget(_buildScreen(detector: detector));
+        final clock = _TestClock();
+        final detector = _FakeDetector(clock: clock.call);
+        await tester.pumpWidget(_buildScreen(detector: detector, clock: clock.call));
 
         // Volta 1 rápida: ~0ms → session best
-        detector.fireLap(); // inicia
+        detector.fireLap();
         await tester.pump(const Duration(milliseconds: 1));
-        detector.fireLap(); // completa volta 1 com ~0ms
+        detector.fireLap();
         await tester.pump(const Duration(milliseconds: 1));
 
         // Volta 2 lenta: 200ms > 0ms → voltaPior
+        clock.advance(const Duration(milliseconds: 200));
         await tester.pump(const Duration(milliseconds: 200));
         detector.fireLap();
         await tester.pump(const Duration(milliseconds: 1));
@@ -330,12 +354,15 @@ void main() {
 
     group('borda colorida', () {
       testWidgets('borda exibe cor roxa (#BF5AF2) após 1ª volta completada', (tester) async {
-        final detector = _FakeDetector();
-        await tester.pumpWidget(_buildScreen(detector: detector));
+        final clock = _TestClock();
+        final detector = _FakeDetector(clock: clock.call);
+        await tester.pumpWidget(_buildScreen(detector: detector, clock: clock.call));
 
-        detector.fireLap(); // inicia
+        detector.fireLap();
         await tester.pump(const Duration(milliseconds: 1));
-        detector.fireLap(); // completa volta 1
+        clock.advance(const Duration(milliseconds: 100));
+        await tester.pump(const Duration(milliseconds: 100));
+        detector.fireLap();
         await tester.pump(const Duration(milliseconds: 1));
 
         final eventBorder = tester.widget<Container>(
@@ -346,16 +373,19 @@ void main() {
       });
 
       testWidgets('borda exibe cor verde (#00E676) após nova session best', (tester) async {
-        final detector = _FakeDetector();
-        await tester.pumpWidget(_buildScreen(detector: detector));
+        final clock = _TestClock();
+        final detector = _FakeDetector(clock: clock.call);
+        await tester.pumpWidget(_buildScreen(detector: detector, clock: clock.call));
 
         // Volta 1 lenta
         detector.fireLap();
+        await tester.pump(const Duration(milliseconds: 1)); // entrega evento: _lapStartTime = T0
+        clock.advance(const Duration(milliseconds: 200));
         await tester.pump(const Duration(milliseconds: 200));
         detector.fireLap();
         await tester.pump(const Duration(milliseconds: 1));
 
-        // Volta 2 rápida → voltaMelhor
+        // Volta 2 rápida (0ms) → voltaMelhor
         detector.fireLap();
         await tester.pump(const Duration(milliseconds: 1));
 
@@ -367,8 +397,9 @@ void main() {
       });
 
       testWidgets('borda exibe cor vermelha (#FF3B30) quando volta é pior', (tester) async {
-        final detector = _FakeDetector();
-        await tester.pumpWidget(_buildScreen(detector: detector));
+        final clock = _TestClock();
+        final detector = _FakeDetector(clock: clock.call);
+        await tester.pumpWidget(_buildScreen(detector: detector, clock: clock.call));
 
         // Volta 1 rápida → session best
         detector.fireLap();
@@ -377,6 +408,7 @@ void main() {
         await tester.pump(const Duration(milliseconds: 1));
 
         // Volta 2 lenta → voltaPior
+        clock.advance(const Duration(milliseconds: 200));
         await tester.pump(const Duration(milliseconds: 200));
         detector.fireLap();
         await tester.pump(const Duration(milliseconds: 1));
@@ -391,13 +423,16 @@ void main() {
 
     group('personal record', () {
       testWidgets('exibe banner PERSONAL RECORD ao bater o PR', (tester) async {
-        final detector = _FakeDetector();
+        final clock = _TestClock();
+        final detector = _FakeDetector(clock: clock.call);
         await tester.pumpWidget(
-          _buildScreen(detector: detector, prThresholdMs: 999999),
+          _buildScreen(detector: detector, clock: clock.call, prThresholdMs: 999999),
         );
 
         // Volta 1 lenta
         detector.fireLap();
+        await tester.pump(const Duration(milliseconds: 1)); // entrega evento: _lapStartTime = T0
+        clock.advance(const Duration(milliseconds: 200));
         await tester.pump(const Duration(milliseconds: 200));
         detector.fireLap();
         await tester.pump(const Duration(milliseconds: 1));
@@ -410,12 +445,15 @@ void main() {
       });
 
       testWidgets('exibe símbolo ▲ na delta pill ao bater PR', (tester) async {
-        final detector = _FakeDetector();
+        final clock = _TestClock();
+        final detector = _FakeDetector(clock: clock.call);
         await tester.pumpWidget(
-          _buildScreen(detector: detector, prThresholdMs: 999999),
+          _buildScreen(detector: detector, clock: clock.call, prThresholdMs: 999999),
         );
 
         detector.fireLap();
+        await tester.pump(const Duration(milliseconds: 1)); // entrega evento: _lapStartTime = T0
+        clock.advance(const Duration(milliseconds: 200));
         await tester.pump(const Duration(milliseconds: 200));
         detector.fireLap();
         await tester.pump(const Duration(milliseconds: 1));
@@ -450,15 +488,17 @@ void main() {
       });
 
       testWidgets('setor S1 exibe tempo após 1º cruzamento e SectorCrossedEvent(0)', (tester) async {
-        final detector = _FakeDetector();
+        final clock = _TestClock();
+        final detector = _FakeDetector(clock: clock.call);
         await tester.pumpWidget(_buildScreen(
           detector: detector,
+          clock: clock.call,
           track: _trackWithSectors,
         ));
 
-        detector.fireLap(); // 1º cruzamento: inicia
+        detector.fireLap();
         await tester.pump(const Duration(milliseconds: 1));
-
+        clock.advance(const Duration(milliseconds: 300));
         await tester.pump(const Duration(milliseconds: 300));
         detector.fireSector(0);
         await tester.pump(const Duration(milliseconds: 1));
@@ -473,20 +513,22 @@ void main() {
       });
 
       testWidgets('setores resetam para — após nova volta', (tester) async {
-        final detector = _FakeDetector();
+        final clock = _TestClock();
+        final detector = _FakeDetector(clock: clock.call);
         await tester.pumpWidget(_buildScreen(
           detector: detector,
+          clock: clock.call,
           track: _trackWithSectors,
         ));
 
-        detector.fireLap(); // inicia
+        detector.fireLap();
         await tester.pump(const Duration(milliseconds: 1));
-
+        clock.advance(const Duration(milliseconds: 100));
         await tester.pump(const Duration(milliseconds: 100));
         detector.fireSector(0);
         await tester.pump(const Duration(milliseconds: 1));
 
-        detector.fireLap(); // completa volta 1
+        detector.fireLap();
         await tester.pump(const Duration(milliseconds: 1));
 
         expect(
@@ -507,11 +549,9 @@ void main() {
           track: _trackWithSectors,
         ));
 
-        // Dispara setor SEM ter cruzado a linha antes
         detector.fireSector(0);
         await tester.pump(const Duration(milliseconds: 1));
 
-        // Nenhum tempo deve aparecer nos badges
         expect(
           find.byWidgetPredicate(
             (w) =>
@@ -526,19 +566,22 @@ void main() {
 
     group('CA-RACE-003: feedback de borda de setor vs volta anterior', () {
       testWidgets('borda de S1 fica verde quando setor atual é mais rápido que o anterior', (tester) async {
-        final detector = _FakeDetector();
-        await tester.pumpWidget(_buildScreen(detector: detector, track: _trackWithSectors));
+        final clock = _TestClock();
+        final detector = _FakeDetector(clock: clock.call);
+        await tester.pumpWidget(_buildScreen(detector: detector, clock: clock.call, track: _trackWithSectors));
 
-        // Volta 1: S1 cruzado com _lapMs ~300ms
+        // Volta 1: S1 em ~300ms
         detector.fireLap();
         await tester.pump(const Duration(milliseconds: 1));
+        clock.advance(const Duration(milliseconds: 300));
         await tester.pump(const Duration(milliseconds: 300));
         detector.fireSector(0);
         await tester.pump(const Duration(milliseconds: 1));
-        detector.fireLap(); // completa volta 1
+        detector.fireLap();
         await tester.pump(const Duration(milliseconds: 1));
 
-        // Volta 2: S1 cruzado com _lapMs ~100ms (mais rápido)
+        // Volta 2: S1 em ~100ms (mais rápido)
+        clock.advance(const Duration(milliseconds: 100));
         await tester.pump(const Duration(milliseconds: 100));
         detector.fireSector(0);
         await tester.pump(const Duration(milliseconds: 1));
@@ -549,12 +592,14 @@ void main() {
       });
 
       testWidgets('borda de S1 fica vermelha quando setor atual é mais lento que o anterior', (tester) async {
-        final detector = _FakeDetector();
-        await tester.pumpWidget(_buildScreen(detector: detector, track: _trackWithSectors));
+        final clock = _TestClock();
+        final detector = _FakeDetector(clock: clock.call);
+        await tester.pumpWidget(_buildScreen(detector: detector, clock: clock.call, track: _trackWithSectors));
 
         // Volta 1: S1 em ~100ms
         detector.fireLap();
         await tester.pump(const Duration(milliseconds: 1));
+        clock.advance(const Duration(milliseconds: 100));
         await tester.pump(const Duration(milliseconds: 100));
         detector.fireSector(0);
         await tester.pump(const Duration(milliseconds: 1));
@@ -562,6 +607,7 @@ void main() {
         await tester.pump(const Duration(milliseconds: 1));
 
         // Volta 2: S1 em ~300ms (mais lento)
+        clock.advance(const Duration(milliseconds: 300));
         await tester.pump(const Duration(milliseconds: 300));
         detector.fireSector(0);
         await tester.pump(const Duration(milliseconds: 1));
@@ -572,17 +618,20 @@ void main() {
       });
 
       testWidgets('borda de feedback desaparece após 5s', (tester) async {
-        final detector = _FakeDetector();
-        await tester.pumpWidget(_buildScreen(detector: detector, track: _trackWithSectors));
+        final clock = _TestClock();
+        final detector = _FakeDetector(clock: clock.call);
+        await tester.pumpWidget(_buildScreen(detector: detector, clock: clock.call, track: _trackWithSectors));
 
         detector.fireLap();
         await tester.pump(const Duration(milliseconds: 1));
+        clock.advance(const Duration(milliseconds: 300));
         await tester.pump(const Duration(milliseconds: 300));
         detector.fireSector(0);
         await tester.pump(const Duration(milliseconds: 1));
         detector.fireLap();
         await tester.pump(const Duration(milliseconds: 1));
 
+        clock.advance(const Duration(milliseconds: 100));
         await tester.pump(const Duration(milliseconds: 100));
         detector.fireSector(0);
         await tester.pump(const Duration(milliseconds: 1));
@@ -601,12 +650,13 @@ void main() {
       });
 
       testWidgets('sem volta anterior não exibe borda de feedback', (tester) async {
-        final detector = _FakeDetector();
-        await tester.pumpWidget(_buildScreen(detector: detector, track: _trackWithSectors));
+        final clock = _TestClock();
+        final detector = _FakeDetector(clock: clock.call);
+        await tester.pumpWidget(_buildScreen(detector: detector, clock: clock.call, track: _trackWithSectors));
 
-        // Apenas a 1ª volta, sem volta anterior para comparar
         detector.fireLap();
         await tester.pump(const Duration(milliseconds: 1));
+        clock.advance(const Duration(milliseconds: 200));
         await tester.pump(const Duration(milliseconds: 200));
         detector.fireSector(0);
         await tester.pump(const Duration(milliseconds: 1));
@@ -618,12 +668,14 @@ void main() {
       });
 
       testWidgets('feedback é limpo ao completar nova volta', (tester) async {
-        final detector = _FakeDetector();
-        await tester.pumpWidget(_buildScreen(detector: detector, track: _trackWithSectors));
+        final clock = _TestClock();
+        final detector = _FakeDetector(clock: clock.call);
+        await tester.pumpWidget(_buildScreen(detector: detector, clock: clock.call, track: _trackWithSectors));
 
         // Volta 1: S1 em ~300ms
         detector.fireLap();
         await tester.pump(const Duration(milliseconds: 1));
+        clock.advance(const Duration(milliseconds: 300));
         await tester.pump(const Duration(milliseconds: 300));
         detector.fireSector(0);
         await tester.pump(const Duration(milliseconds: 1));
@@ -631,6 +683,7 @@ void main() {
         await tester.pump(const Duration(milliseconds: 1));
 
         // Volta 2: S1 em ~100ms → borda verde ativa
+        clock.advance(const Duration(milliseconds: 100));
         await tester.pump(const Duration(milliseconds: 100));
         detector.fireSector(0);
         await tester.pump(const Duration(milliseconds: 1));
@@ -654,10 +707,202 @@ void main() {
       });
     });
 
+    group('splits de setor (tempo do setor, não cumulativo)', () {
+      testWidgets('S1 exibe tempo desde o início da volta', (tester) async {
+        final clock = _TestClock();
+        final detector = _FakeDetector(clock: clock.call);
+        await tester.pumpWidget(_buildScreen(
+          detector: detector,
+          clock: clock.call,
+          track: _trackWithSectors,
+        ));
+
+        detector.fireLap();
+        await tester.pump(const Duration(milliseconds: 1));
+        clock.advance(const Duration(milliseconds: 200));
+        await tester.pump(const Duration(milliseconds: 200));
+        detector.fireSector(0); // S1 split = 200ms
+        await tester.pump(const Duration(milliseconds: 1));
+
+        expect(find.text('0.200'), findsOneWidget);
+      });
+
+      testWidgets('S2 exibe split do setor, não tempo cumulativo', (tester) async {
+        final clock = _TestClock();
+        final detector = _FakeDetector(clock: clock.call);
+        await tester.pumpWidget(_buildScreen(
+          detector: detector,
+          clock: clock.call,
+          track: _trackWithSectors,
+        ));
+
+        detector.fireLap();
+        await tester.pump(const Duration(milliseconds: 1));
+
+        // S1: lapMs = 100ms → split S1 = 100ms
+        clock.advance(const Duration(milliseconds: 100));
+        await tester.pump(const Duration(milliseconds: 100));
+        detector.fireSector(0);
+        await tester.pump(const Duration(milliseconds: 1));
+
+        // S2: lapMs = 300ms → split S2 = 300 - 100 = 200ms (não 300ms)
+        clock.advance(const Duration(milliseconds: 200));
+        await tester.pump(const Duration(milliseconds: 200));
+        detector.fireSector(1);
+        await tester.pump(const Duration(milliseconds: 1));
+
+        expect(find.text('0.200'), findsOneWidget); // split correto
+        expect(find.text('0.300'), findsNothing);   // valor cumulativo NÃO exibido
+      });
+
+      testWidgets('S3 exibe split do setor desde S2', (tester) async {
+        final clock = _TestClock();
+        final detector = _FakeDetector(clock: clock.call);
+        await tester.pumpWidget(_buildScreen(
+          detector: detector,
+          clock: clock.call,
+          track: _trackWithSectors,
+        ));
+
+        detector.fireLap();
+        await tester.pump(const Duration(milliseconds: 1));
+
+        clock.advance(const Duration(milliseconds: 100));
+        await tester.pump(const Duration(milliseconds: 100));
+        detector.fireSector(0); // S1 = 100ms
+        await tester.pump(const Duration(milliseconds: 1));
+
+        clock.advance(const Duration(milliseconds: 200));
+        await tester.pump(const Duration(milliseconds: 200));
+        detector.fireSector(1); // S2 split = 200ms
+        await tester.pump(const Duration(milliseconds: 1));
+
+        clock.advance(const Duration(milliseconds: 150));
+        await tester.pump(const Duration(milliseconds: 150));
+        detector.fireSector(2); // S3 split = 150ms
+        await tester.pump(const Duration(milliseconds: 1));
+
+        expect(find.text('0.150'), findsOneWidget);
+      });
+
+      testWidgets('splits resetam para zero no início de nova volta', (tester) async {
+        final clock = _TestClock();
+        final detector = _FakeDetector(clock: clock.call);
+        await tester.pumpWidget(_buildScreen(
+          detector: detector,
+          clock: clock.call,
+          track: _trackWithSectors,
+        ));
+
+        detector.fireLap();
+        await tester.pump(const Duration(milliseconds: 1));
+
+        clock.advance(const Duration(milliseconds: 100));
+        await tester.pump(const Duration(milliseconds: 100));
+        detector.fireSector(0);
+        await tester.pump(const Duration(milliseconds: 1));
+
+        clock.advance(const Duration(milliseconds: 200));
+        await tester.pump(const Duration(milliseconds: 200));
+        detector.fireSector(1);
+        await tester.pump(const Duration(milliseconds: 1));
+
+        // Completa a volta — acumulador de setor reseta
+        detector.fireLap();
+        await tester.pump(const Duration(milliseconds: 1));
+
+        // Nova volta: S1 deve contar a partir de zero
+        clock.advance(const Duration(milliseconds: 150));
+        await tester.pump(const Duration(milliseconds: 150));
+        detector.fireSector(0);
+        await tester.pump(const Duration(milliseconds: 1));
+
+        expect(find.text('0.150'), findsOneWidget);
+        expect(find.text('0.200'), findsNothing); // split S2 da volta anterior não aparece
+      });
+    });
+
+    group('feedback de setor compara splits (não cumulativos)', () {
+      testWidgets('S2 fica verde quando split atual é mais rápido que split anterior', (tester) async {
+        final clock = _TestClock();
+        final detector = _FakeDetector(clock: clock.call);
+        await tester.pumpWidget(_buildScreen(
+          detector: detector,
+          clock: clock.call,
+          track: _trackWithSectors,
+        ));
+
+        // Volta 1: S1=100ms, S2 split=300ms
+        detector.fireLap();
+        await tester.pump(const Duration(milliseconds: 1));
+        clock.advance(const Duration(milliseconds: 100));
+        await tester.pump(const Duration(milliseconds: 100));
+        detector.fireSector(0);
+        await tester.pump(const Duration(milliseconds: 1));
+        clock.advance(const Duration(milliseconds: 300));
+        await tester.pump(const Duration(milliseconds: 300));
+        detector.fireSector(1);
+        await tester.pump(const Duration(milliseconds: 1));
+        detector.fireLap();
+        await tester.pump(const Duration(milliseconds: 1));
+
+        // Volta 2: S1=100ms, S2 split=200ms (melhora de 100ms)
+        clock.advance(const Duration(milliseconds: 100));
+        await tester.pump(const Duration(milliseconds: 100));
+        detector.fireSector(0);
+        await tester.pump(const Duration(milliseconds: 1));
+        clock.advance(const Duration(milliseconds: 200));
+        await tester.pump(const Duration(milliseconds: 200));
+        detector.fireSector(1); // 200 < 300 → verde
+        await tester.pump(const Duration(milliseconds: 1));
+
+        final cell = tester.widget<Container>(find.byKey(const Key('sector_cell_s2')));
+        expect((cell.decoration as BoxDecoration).border!.top.color, const Color(0xFF00E676));
+      });
+
+      testWidgets('S2 fica vermelho quando split atual é mais lento que split anterior', (tester) async {
+        final clock = _TestClock();
+        final detector = _FakeDetector(clock: clock.call);
+        await tester.pumpWidget(_buildScreen(
+          detector: detector,
+          clock: clock.call,
+          track: _trackWithSectors,
+        ));
+
+        // Volta 1: S1=100ms, S2 split=200ms
+        detector.fireLap();
+        await tester.pump(const Duration(milliseconds: 1));
+        clock.advance(const Duration(milliseconds: 100));
+        await tester.pump(const Duration(milliseconds: 100));
+        detector.fireSector(0);
+        await tester.pump(const Duration(milliseconds: 1));
+        clock.advance(const Duration(milliseconds: 200));
+        await tester.pump(const Duration(milliseconds: 200));
+        detector.fireSector(1);
+        await tester.pump(const Duration(milliseconds: 1));
+        detector.fireLap();
+        await tester.pump(const Duration(milliseconds: 1));
+
+        // Volta 2: S1=100ms, S2 split=300ms (piora de 100ms)
+        clock.advance(const Duration(milliseconds: 100));
+        await tester.pump(const Duration(milliseconds: 100));
+        detector.fireSector(0);
+        await tester.pump(const Duration(milliseconds: 1));
+        clock.advance(const Duration(milliseconds: 300));
+        await tester.pump(const Duration(milliseconds: 300));
+        detector.fireSector(1); // 300 > 200 → vermelho
+        await tester.pump(const Duration(milliseconds: 1));
+
+        final cell = tester.widget<Container>(find.byKey(const Key('sector_cell_s2')));
+        expect((cell.decoration as BoxDecoration).border!.top.color, const Color(0xFFFF3B30));
+      });
+    });
+
     group('CA-RACE-004-01: borda vermelha com stroke-width >= 8 quando volta é pior', () {
       testWidgets('borda tem stroke-width >= 8', (tester) async {
-        final detector = _FakeDetector();
-        await tester.pumpWidget(_buildScreen(detector: detector));
+        final clock = _TestClock();
+        final detector = _FakeDetector(clock: clock.call);
+        await tester.pumpWidget(_buildScreen(detector: detector, clock: clock.call));
 
         // Volta 1 rápida → session best
         detector.fireLap();
@@ -666,6 +911,7 @@ void main() {
         await tester.pump(const Duration(milliseconds: 1));
 
         // Volta 2 lenta → voltaPior
+        clock.advance(const Duration(milliseconds: 200));
         await tester.pump(const Duration(milliseconds: 200));
         detector.fireLap();
         await tester.pump(const Duration(milliseconds: 1));
@@ -678,14 +924,16 @@ void main() {
       });
 
       testWidgets('borda tem cor #FF3B30 quando volta é pior', (tester) async {
-        final detector = _FakeDetector();
-        await tester.pumpWidget(_buildScreen(detector: detector));
+        final clock = _TestClock();
+        final detector = _FakeDetector(clock: clock.call);
+        await tester.pumpWidget(_buildScreen(detector: detector, clock: clock.call));
 
         detector.fireLap();
         await tester.pump(const Duration(milliseconds: 1));
         detector.fireLap();
         await tester.pump(const Duration(milliseconds: 1));
 
+        clock.advance(const Duration(milliseconds: 200));
         await tester.pump(const Duration(milliseconds: 200));
         detector.fireLap();
         await tester.pump(const Duration(milliseconds: 1));
@@ -700,11 +948,14 @@ void main() {
 
     group('CA-RACE-004-02: melhor volta da sessão exibe borda roxa e texto MELHOR', () {
       testWidgets('borda tem cor #BF5AF2 após 1ª volta completada', (tester) async {
-        final detector = _FakeDetector();
-        await tester.pumpWidget(_buildScreen(detector: detector));
+        final clock = _TestClock();
+        final detector = _FakeDetector(clock: clock.call);
+        await tester.pumpWidget(_buildScreen(detector: detector, clock: clock.call));
 
         detector.fireLap();
         await tester.pump(const Duration(milliseconds: 1));
+        clock.advance(const Duration(milliseconds: 100));
+        await tester.pump(const Duration(milliseconds: 100));
         detector.fireLap();
         await tester.pump(const Duration(milliseconds: 1));
 
@@ -716,11 +967,14 @@ void main() {
       });
 
       testWidgets('DeltaDisplay exibe texto MELHOR', (tester) async {
-        final detector = _FakeDetector();
-        await tester.pumpWidget(_buildScreen(detector: detector));
+        final clock = _TestClock();
+        final detector = _FakeDetector(clock: clock.call);
+        await tester.pumpWidget(_buildScreen(detector: detector, clock: clock.call));
 
         detector.fireLap();
         await tester.pump(const Duration(milliseconds: 1));
+        clock.advance(const Duration(milliseconds: 100));
+        await tester.pump(const Duration(milliseconds: 100));
         detector.fireLap();
         await tester.pump(const Duration(milliseconds: 1));
 
@@ -730,12 +984,15 @@ void main() {
 
     group('CA-RACE-004-03: Personal Record exibe borda verde com pulso e banner PR', () {
       testWidgets('borda tem cor #00E676 ao bater PR', (tester) async {
-        final detector = _FakeDetector();
+        final clock = _TestClock();
+        final detector = _FakeDetector(clock: clock.call);
         await tester.pumpWidget(
-          _buildScreen(detector: detector, prThresholdMs: 999999),
+          _buildScreen(detector: detector, clock: clock.call, prThresholdMs: 999999),
         );
 
         detector.fireLap();
+        await tester.pump(const Duration(milliseconds: 1)); // entrega evento: _lapStartTime = T0
+        clock.advance(const Duration(milliseconds: 200));
         await tester.pump(const Duration(milliseconds: 200));
         detector.fireLap();
         await tester.pump(const Duration(milliseconds: 1));
@@ -750,19 +1007,21 @@ void main() {
       });
 
       testWidgets('borda tem animação de pulso (Opacity) ao bater PR', (tester) async {
-        final detector = _FakeDetector();
+        final clock = _TestClock();
+        final detector = _FakeDetector(clock: clock.call);
         await tester.pumpWidget(
-          _buildScreen(detector: detector, prThresholdMs: 999999),
+          _buildScreen(detector: detector, clock: clock.call, prThresholdMs: 999999),
         );
 
         detector.fireLap();
+        await tester.pump(const Duration(milliseconds: 1)); // entrega evento: _lapStartTime = T0
+        clock.advance(const Duration(milliseconds: 200));
         await tester.pump(const Duration(milliseconds: 200));
         detector.fireLap();
         await tester.pump(const Duration(milliseconds: 1));
         detector.fireLap();
         await tester.pump(const Duration(milliseconds: 1));
 
-        // Opacity widget deve envolver a borda no estado PR
         final opacityFinder = find.ancestor(
           of: find.byKey(const Key('race_event_border')),
           matching: find.byType(Opacity),
@@ -771,14 +1030,16 @@ void main() {
       });
 
       testWidgets('borda NÃO tem Opacity para estado voltaPior', (tester) async {
-        final detector = _FakeDetector();
-        await tester.pumpWidget(_buildScreen(detector: detector));
+        final clock = _TestClock();
+        final detector = _FakeDetector(clock: clock.call);
+        await tester.pumpWidget(_buildScreen(detector: detector, clock: clock.call));
 
         detector.fireLap();
         await tester.pump(const Duration(milliseconds: 1));
         detector.fireLap();
         await tester.pump(const Duration(milliseconds: 1));
 
+        clock.advance(const Duration(milliseconds: 200));
         await tester.pump(const Duration(milliseconds: 200));
         detector.fireLap();
         await tester.pump(const Duration(milliseconds: 1));
@@ -791,12 +1052,15 @@ void main() {
       });
 
       testWidgets('banner PERSONAL RECORD visível ao bater PR', (tester) async {
-        final detector = _FakeDetector();
+        final clock = _TestClock();
+        final detector = _FakeDetector(clock: clock.call);
         await tester.pumpWidget(
-          _buildScreen(detector: detector, prThresholdMs: 999999),
+          _buildScreen(detector: detector, clock: clock.call, prThresholdMs: 999999),
         );
 
         detector.fireLap();
+        await tester.pump(const Duration(milliseconds: 1)); // entrega evento: _lapStartTime = T0
+        clock.advance(const Duration(milliseconds: 200));
         await tester.pump(const Duration(milliseconds: 200));
         detector.fireLap();
         await tester.pump(const Duration(milliseconds: 1));
@@ -807,12 +1071,15 @@ void main() {
       });
 
       testWidgets('DeltaDisplay exibe ▲ ao bater PR', (tester) async {
-        final detector = _FakeDetector();
+        final clock = _TestClock();
+        final detector = _FakeDetector(clock: clock.call);
         await tester.pumpWidget(
-          _buildScreen(detector: detector, prThresholdMs: 999999),
+          _buildScreen(detector: detector, clock: clock.call, prThresholdMs: 999999),
         );
 
         detector.fireLap();
+        await tester.pump(const Duration(milliseconds: 1)); // entrega evento: _lapStartTime = T0
+        clock.advance(const Duration(milliseconds: 200));
         await tester.pump(const Duration(milliseconds: 200));
         detector.fireLap();
         await tester.pump(const Duration(milliseconds: 1));
@@ -830,65 +1097,65 @@ void main() {
 
     group('CA-RACE-004-04: borda retorna ao estado neutro após 3s', () {
       testWidgets('borda desaparece após 3s sem novo evento', (tester) async {
-        final detector = _FakeDetector();
-        await tester.pumpWidget(_buildScreen(detector: detector));
+        final clock = _TestClock();
+        final detector = _FakeDetector(clock: clock.call);
+        await tester.pumpWidget(_buildScreen(detector: detector, clock: clock.call));
 
         detector.fireLap();
         await tester.pump(const Duration(milliseconds: 1));
+        clock.advance(const Duration(milliseconds: 100));
+        await tester.pump(const Duration(milliseconds: 100));
         detector.fireLap(); // completa volta 1 → melhorVolta
         await tester.pump(const Duration(milliseconds: 1));
 
-        // Borda visível logo após o evento
         expect(find.byKey(const Key('race_event_border')), findsOneWidget);
 
-        // Avança 3s → timer dispara → borda some
         await tester.pump(const Duration(seconds: 3));
 
         expect(find.byKey(const Key('race_event_border')), findsNothing);
       });
 
       testWidgets('borda ainda visível antes de 3s', (tester) async {
-        final detector = _FakeDetector();
-        await tester.pumpWidget(_buildScreen(detector: detector));
+        final clock = _TestClock();
+        final detector = _FakeDetector(clock: clock.call);
+        await tester.pumpWidget(_buildScreen(detector: detector, clock: clock.call));
 
         detector.fireLap();
         await tester.pump(const Duration(milliseconds: 1));
+        clock.advance(const Duration(milliseconds: 100));
+        await tester.pump(const Duration(milliseconds: 100));
         detector.fireLap();
         await tester.pump(const Duration(milliseconds: 1));
 
-        // Avança apenas 2s
         await tester.pump(const Duration(seconds: 2));
 
         expect(find.byKey(const Key('race_event_border')), findsOneWidget);
       });
 
       testWidgets('nova volta reinicia o timer de 3s', (tester) async {
-        final detector = _FakeDetector();
-        await tester.pumpWidget(_buildScreen(detector: detector));
+        final clock = _TestClock();
+        final detector = _FakeDetector(clock: clock.call);
+        await tester.pumpWidget(_buildScreen(detector: detector, clock: clock.call));
 
         // Volta 1 lenta
         detector.fireLap();
+        clock.advance(const Duration(milliseconds: 200));
         await tester.pump(const Duration(milliseconds: 200));
         detector.fireLap(); // completa volta 1
         await tester.pump(const Duration(milliseconds: 1));
 
-        // Espera 2s (menos de 3s desde volta 1)
         await tester.pump(const Duration(seconds: 2));
 
         // Completa volta 2 — reinicia o timer de 3s
         detector.fireLap();
         await tester.pump(const Duration(milliseconds: 1));
 
-        // Avança mais 2s desde volta 2 (4s desde volta 1, mas apenas 2s desde volta 2)
         await tester.pump(const Duration(seconds: 2));
 
-        // Borda ainda visível pois o timer foi reiniciado
         expect(find.byKey(const Key('race_event_border')), findsOneWidget);
 
-        // Avança mais 1s (3s desde volta 2)
         await tester.pump(const Duration(seconds: 1));
 
-        // Agora a borda desapareceu
         expect(find.byKey(const Key('race_event_border')), findsNothing);
       });
     });
@@ -905,7 +1172,7 @@ void main() {
 
         final buttonFinder = find.byKey(const Key('end_button'));
         final gesture = await tester.startGesture(tester.getCenter(buttonFinder));
-        await tester.pump(); // registra o primeiro tick do AnimationController
+        await tester.pump();
         await tester.pump(const Duration(seconds: 1));
 
         final fractionBox = tester.widget<FractionallySizedBox>(

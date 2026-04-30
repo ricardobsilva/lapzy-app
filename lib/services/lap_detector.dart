@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'package:geolocator/geolocator.dart';
 import '../models/track.dart';
-import 'track_geometry.dart';
 
 /// Evento emitido pelo LapDetector.
 sealed class LapEvent {}
@@ -25,6 +24,14 @@ class SectorCrossedEvent extends LapEvent {
 ///
 /// Emite [LapCrossedEvent] e [SectorCrossedEvent] conforme o piloto
 /// cruza as linhas definidas na [Track].
+///
+/// Para cada [TrackLine], todos os sub-segmentos de [TrackLine.allPoints]
+/// são verificados — linhas curvas (com middlePoints) são tratadas
+/// como polilinhas segmento a segmento.
+///
+/// O timestamp de cada evento é interpolado a partir dos timestamps GPS
+/// das duas posições que enquadram o cruzamento, eliminando o erro de
+/// latência de callback (até 1 / taxa_GPS segundos).
 class LapDetector {
   final Track track;
 
@@ -45,11 +52,13 @@ class LapDetector {
   final _controller = StreamController<LapEvent>.broadcast();
   StreamSubscription<Position>? _gpsSub;
   GeoPoint? _previousPosition;
+  DateTime? _previousTimestamp;
 
   Stream<LapEvent> get events => _controller.stream;
 
   void start() {
     _previousPosition = null;
+    _previousTimestamp = null;
     _gpsSub = positionStreamFactory().listen(
       _onPosition,
       onError: (_) {
@@ -62,6 +71,7 @@ class LapDetector {
     _gpsSub?.cancel();
     _gpsSub = null;
     _previousPosition = null;
+    _previousTimestamp = null;
   }
 
   void dispose() {
@@ -71,47 +81,73 @@ class LapDetector {
 
   void _onPosition(Position pos) {
     final current = GeoPoint(pos.latitude, pos.longitude);
+    final currentTime = pos.timestamp;
     final previous = _previousPosition;
+    final previousTime = _previousTimestamp;
 
-    if (previous != null) {
-      _checkLine(previous, current, track.startFinishLine, onCrossed: () {
-        _controller.add(LapCrossedEvent(DateTime.now()));
-      });
+    if (previous != null && previousTime != null) {
+      final lapTime = _checkLine(
+        previous, current, previousTime, currentTime,
+        track.startFinishLine,
+      );
+      if (lapTime != null) {
+        _controller.add(LapCrossedEvent(lapTime));
+      }
 
       for (int i = 0; i < track.sectorBoundaries.length; i++) {
-        final idx = i;
-        _checkLine(previous, current, track.sectorBoundaries[i], onCrossed: () {
-          _controller.add(SectorCrossedEvent(idx, DateTime.now()));
-        });
+        final sectorTime = _checkLine(
+          previous, current, previousTime, currentTime,
+          track.sectorBoundaries[i],
+        );
+        if (sectorTime != null) {
+          _controller.add(SectorCrossedEvent(i, sectorTime));
+        }
       }
     }
 
     _previousPosition = current;
+    _previousTimestamp = currentTime;
   }
 
-  void _checkLine(
+  /// Verifica se o vetor de movimento [prev]→[curr] cruza algum sub-segmento
+  /// de [line]. Se cruzar, retorna o instante interpolado do cruzamento.
+  ///
+  /// Itera sobre todos os pares consecutivos de [TrackLine.allPoints], tratando
+  /// a linha como uma polilinha. Para linhas sem middlePoints o comportamento é
+  /// idêntico à verificação de segmento único original.
+  DateTime? _checkLine(
     GeoPoint prev,
     GeoPoint curr,
-    TrackLine? line, {
-    required VoidCallback onCrossed,
-  }) {
-    if (line == null) return;
+    DateTime prevTime,
+    DateTime currTime,
+    TrackLine? line,
+  ) {
+    if (line == null) return null;
 
-    final a = line.a;
-    final b = line.b;
+    final points = line.allPoints;
+    for (int i = 0; i < points.length - 1; i++) {
+      final a = points[i];
+      final b = points[i + 1];
 
-    final signPrev = _crossSign(a, b, prev);
-    final signCurr = _crossSign(a, b, curr);
+      // Passo 1: mudança de sinal confirma cruzamento da reta infinita.
+      final signPrev = _crossSign(a, b, prev);
+      final signCurr = _crossSign(a, b, curr);
+      if (signPrev == 0 || signCurr == 0) continue;
+      if (signPrev == signCurr) continue;
 
-    if (signPrev == 0 || signCurr == 0) return;
-    if (signPrev == signCurr) return; // mesmo lado — sem cruzamento
+      // Passo 2: verifica se o cruzamento cai dentro do sub-segmento (com buffer).
+      final params = _crossingParams(prev, curr, a, b, line.widthMeters);
+      if (params == null) continue;
 
-    // Verifica se o cruzamento ocorre dentro do corredor de detecção.
-    // Usa o ponto mais próximo da linha (curr) para verificar distância.
-    final distToLine = _perpendicularDistance(curr, a, b);
-    if (distToLine > line.widthMeters) return;
-
-    onCrossed();
+      // Passo 3: interpola o instante exato do cruzamento usando timestamps GPS,
+      // eliminando o erro de latência de callback.
+      final dtMicros = currTime.difference(prevTime).inMicroseconds;
+      final crossingTime = prevTime.add(
+        Duration(microseconds: (dtMicros * params.t).round()),
+      );
+      return crossingTime;
+    }
+    return null;
   }
 
   /// Sinal do produto vetorial (B-A) × (P-A) em coordenadas 2D planas.
@@ -124,25 +160,55 @@ class LapDetector {
     return 0;
   }
 
-  /// Distância perpendicular de [p] ao segmento [a]→[b] em metros.
-  static double _perpendicularDistance(GeoPoint p, GeoPoint a, GeoPoint b) {
-    // Converte para coordenadas cartesianas aproximadas (metros).
+  /// Resolve o sistema paramétrico de interseção entre o vetor de movimento
+  /// [prev]→[curr] e o segmento [a]→[b].
+  ///
+  /// Retorna `(s, t)` onde:
+  /// - `s` é o parâmetro ao longo de [a]→[b] (0 = ponto A, 1 = ponto B),
+  ///   verificado contra os limites do segmento com tolerância [bufferMeters]/2.
+  /// - `t` é o parâmetro ao longo de [prev]→[curr] (0 = prev, 1 = curr),
+  ///   usado para interpolar o timestamp do cruzamento.
+  ///
+  /// Retorna null se as retas forem paralelas ou se `s` estiver fora dos
+  /// limites do segmento.
+  static ({double s, double t})? _crossingParams(
+    GeoPoint prev,
+    GeoPoint curr,
+    GeoPoint a,
+    GeoPoint b,
+    double bufferMeters,
+  ) {
     const lat2m = 111320.0;
     final lng2m = 111320.0 * math.cos(a.lat * math.pi / 180);
 
-    final bx = (b.lng - a.lng) * lng2m;
-    final by = (b.lat - a.lat) * lat2m;
-    final px = (p.lng - a.lng) * lng2m;
-    final py = (p.lat - a.lat) * lat2m;
+    // Vetor de movimento (metros).
+    final mx = (curr.lng - prev.lng) * lng2m;
+    final my = (curr.lat - prev.lat) * lat2m;
 
-    final abLen = math.sqrt(bx * bx + by * by);
-    if (abLen < 1e-9) return TrackGeometry.haversine(p, a);
+    // Vetor do segmento a→b (metros).
+    final lx = (b.lng - a.lng) * lng2m;
+    final ly = (b.lat - a.lat) * lat2m;
 
-    // Distância da reta infinita (não do segmento).
-    final cross = (bx * py - by * px).abs();
-    return cross / abLen;
+    // Denominador do sistema paramétrico: lx·my − mx·ly.
+    final denom = lx * my - mx * ly;
+    if (denom.abs() < 1e-9) return null; // retas paralelas
+
+    // Vetor de a para prev (metros).
+    final ax = (a.lng - prev.lng) * lng2m;
+    final ay = (a.lat - prev.lat) * lat2m;
+
+    // s: parâmetro ao longo do segmento a→b onde ocorre o cruzamento.
+    // s = (Mx·Ay − My·Ax) / denom
+    final s = (mx * ay - my * ax) / denom;
+
+    final segLen = math.sqrt(lx * lx + ly * ly);
+    final tolerance = segLen > 0 ? (bufferMeters / 2) / segLen : 0.0;
+    if (s < -tolerance || s > 1.0 + tolerance) return null;
+
+    // t: parâmetro ao longo do vetor de movimento prev→curr onde ocorre o cruzamento.
+    // t = (Lx·Ay − Ly·Ax) / denom
+    final t = (lx * ay - ly * ax) / denom;
+
+    return (s: s, t: t.clamp(0.0, 1.0));
   }
 }
-
-/// Alias para evitar import de Flutter em lap_detector.dart
-typedef VoidCallback = void Function();
