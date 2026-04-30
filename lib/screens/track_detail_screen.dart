@@ -5,6 +5,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../models/track.dart';
+import '../repositories/track_repository.dart';
+import 'race_screen.dart';
 import 'track_creation_screen.dart';
 
 const _kBg = Color(0xFF0A0A0A);
@@ -107,12 +109,89 @@ class _TrackDetailScreenState extends State<TrackDetailScreen> {
   }
 
   void _navigateToEdit() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(
+    final saved = await Navigator.of(context).push<bool>(
+      MaterialPageRoute<bool>(
         builder: (_) => TrackCreationScreen(initialTrack: widget.track),
       ),
     );
-    if (mounted) Navigator.of(context).pop();
+    if (saved == true && mounted) {
+      _showPostEditSheet();
+    }
+  }
+
+  void _showPostEditSheet() {
+    final updatedTrack = TrackRepository().tracks.firstWhere(
+      (t) => t.id == widget.track.id,
+      orElse: () => widget.track,
+    );
+
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: _kSurface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 32,
+                    height: 32,
+                    decoration: const BoxDecoration(
+                      color: _kGreen,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.check, color: Colors.black, size: 18),
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    'Traçado atualizado',
+                    style: GoogleFonts.spaceMono(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: _PostEditButton(
+                  label: 'INICIAR CORRIDA',
+                  primary: true,
+                  onTap: () {
+                    Navigator.of(ctx).pop();
+                    Navigator.of(context).pushReplacement(
+                      MaterialPageRoute<void>(
+                        builder: (_) => RaceScreen(track: updatedTrack),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                child: _PostEditButton(
+                  label: 'IR PARA INÍCIO',
+                  primary: false,
+                  onTap: () {
+                    Navigator.of(ctx).pop();
+                    Navigator.of(context).popUntil((r) => r.isFirst);
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -301,6 +380,47 @@ class _EditButton extends StatelessWidget {
               fontWeight: FontWeight.w700,
               letterSpacing: 2,
               color: _kGreen,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PostEditButton extends StatelessWidget {
+  final String label;
+  final bool primary;
+  final VoidCallback onTap;
+
+  const _PostEditButton({
+    required this.label,
+    required this.primary,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        height: 48,
+        decoration: BoxDecoration(
+          color: primary ? _kGreen.withAlpha(20) : Colors.transparent,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: primary ? _kGreen.withAlpha(64) : Colors.white.withAlpha(30),
+            width: 1,
+          ),
+        ),
+        child: Center(
+          child: Text(
+            label,
+            style: GoogleFonts.spaceMono(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 2,
+              color: primary ? _kGreen : Colors.white.withAlpha(120),
             ),
           ),
         ),
