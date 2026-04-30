@@ -347,6 +347,44 @@ void main() {
         expect(find.text('Pista Existente'), findsOneWidget);
       });
 
+      testWidgets('strip middlePoints da linha S/C ao carregar traçado existente', (tester) async {
+        _setPhoneSize(tester);
+        addTearDown(() => _resetView(tester));
+
+        final trackWithCurvedSC = Track(
+          id: 'edit-curved',
+          name: 'Pista Curva',
+          createdAt: DateTime(2026, 1, 1),
+          startFinishLine: TrackLine(
+            a: const GeoPoint(-23.5505, -46.6333),
+            b: const GeoPoint(-23.5510, -46.6340),
+            middlePoints: const [
+              GeoPoint(-23.5507, -46.6336),
+              GeoPoint(-23.5508, -46.6338),
+            ],
+            widthMeters: 5.0,
+          ),
+        );
+        TrackRepository().add(trackWithCurvedSC);
+
+        await tester.pumpWidget(MaterialApp(
+          home: TrackCreationScreen(
+            mapBuilder: () => const ColoredBox(color: Color(0xFF0A0A0A)),
+            initialTrack: trackWithCurvedSC,
+            initialStep: 2,
+          ),
+        ));
+
+        await tester.tap(find.byKey(const Key('save_button')));
+        await tester.pumpAndSettle();
+
+        final saved = TrackRepository().tracks.firstWhere((t) => t.id == 'edit-curved');
+        expect(saved.startFinishLine!.middlePoints, isEmpty);
+        expect(saved.startFinishLine!.a, const GeoPoint(-23.5505, -46.6333));
+        expect(saved.startFinishLine!.b, const GeoPoint(-23.5510, -46.6340));
+        expect(saved.startFinishLine!.widthMeters, 5.0);
+      });
+
       testWidgets('CA-TRACK-001-07: salvar atualiza registro existente sem criar novo', (tester) async {
         _setPhoneSize(tester);
         addTearDown(() => _resetView(tester));
