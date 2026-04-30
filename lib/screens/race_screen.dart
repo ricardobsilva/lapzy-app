@@ -42,10 +42,14 @@ class RaceScreen extends StatefulWidget {
   /// Fábrica do LapDetector — injetável para testes.
   final LapDetector Function(Track)? detectorFactory;
 
+  /// Fonte de tempo — injetável para testes. Padrão: DateTime.now.
+  final DateTime Function()? clockFactory;
+
   const RaceScreen({
     required this.track,
     this.prThresholdMs,
     this.detectorFactory,
+    this.clockFactory,
     super.key,
   });
 
@@ -55,8 +59,9 @@ class RaceScreen extends StatefulWidget {
 
 class _RaceScreenState extends State<RaceScreen> {
   Timer? _lapTimer;
-  int _lapMs = 0;
+  DateTime? _lapStartTime;
   bool _hasStarted = false;
+  late final DateTime Function() _clock;
   int _lapNumber = 1;
   int? _bestLapMs;
   int? _deltaMs;
@@ -69,8 +74,14 @@ class _RaceScreenState extends State<RaceScreen> {
 
   Timer? _resetBorderTimer;
   int _nextSectorIndex = 0;
+  int _lapMsAtLastSector = 0;
   List<Color?> _sectorFeedbackColors = [];
   List<Timer?> _sectorFeedbackTimers = [];
+
+  /// Tempo decorrido na volta atual em ms, baseado no relógio injetado.
+  /// Resolução de ~1ms, sem deriva do timer periódico.
+  int get _lapMs =>
+      _lapStartTime == null ? 0 : _clock().difference(_lapStartTime!).inMilliseconds;
 
   int get _totalRaceMs =>
       _completedLaps.fold(0, (sum, l) => sum + l.lapMs) +
@@ -83,6 +94,7 @@ class _RaceScreenState extends State<RaceScreen> {
     _currentSectors = List.filled(sectorCount, null);
     _sectorFeedbackColors = List.filled(sectorCount, null);
     _sectorFeedbackTimers = List.filled(sectorCount, null);
+    _clock = widget.clockFactory ?? DateTime.now;
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.landscapeLeft,
       DeviceOrientation.landscapeRight,
@@ -115,8 +127,9 @@ class _RaceScreenState extends State<RaceScreen> {
   }
 
   void _startLapTimer() {
+    // Apenas dispara rebuild — _lapMs é computado do relógio injetado.
     _lapTimer = Timer.periodic(const Duration(milliseconds: 50), (_) {
-      if (mounted && _hasStarted) setState(() => _lapMs += 50);
+      if (mounted && _hasStarted) setState(() {});
     });
   }
 
@@ -128,7 +141,10 @@ class _RaceScreenState extends State<RaceScreen> {
   void _onLapEvent(LapEvent event) {
     if (event is LapCrossedEvent) {
       if (!_hasStarted) {
-        setState(() => _hasStarted = true);
+        setState(() {
+          _lapStartTime = _clock();
+          _hasStarted = true;
+        });
       } else {
         _onLapCompleted();
       }
@@ -153,9 +169,10 @@ class _RaceScreenState extends State<RaceScreen> {
       _bestLapMs = result.newBestLapMs;
       _deltaMs = result.deltaMs;
       _eventState = result.eventState;
-      _lapMs = 0;
+      _lapStartTime = _clock();
       _lapNumber++;
       _nextSectorIndex = 0;
+      _lapMsAtLastSector = 0;
       for (int i = 0; i < _currentSectors.length; i++) {
         _currentSectors[i] = null;
         _sectorFeedbackColors[i] = null;
@@ -175,7 +192,9 @@ class _RaceScreenState extends State<RaceScreen> {
     if (sectorIndex != _nextSectorIndex) return;
     if (sectorIndex >= _currentSectors.length) return;
 
-    final sectorTime = _lapMs;
+    // Split do setor: tempo desde o cruzamento anterior (ou início da volta).
+    final sectorTime = _lapMs - _lapMsAtLastSector;
+    _lapMsAtLastSector = _lapMs;
     final feedbackColor = _computeSectorFeedback(sectorIndex, sectorTime);
 
     setState(() {
