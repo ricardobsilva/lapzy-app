@@ -4,6 +4,96 @@
 
 ## Backlog
 
+- [ ] TASK-017 · Modo Bolso — Foreground Service Android (US POCKET-003)
+  Como piloto, quero que o GPS continue funcionando quando a tela apaga, para que eu possa guardar o celular no bolso sem perder a detecção de voltas.
+  refs: docs/principios.md, docs/testing.md
+
+  ### Contexto e decisões de design
+
+  **Problema**
+  O Android pode matar o processo do app quando a tela apaga (especialmente em dispositivos com agressiva gestão de bateria, como Samsung). O `Geolocator.getPositionStream()` para de receber eventos sem um Foreground Service ativo.
+
+  **Solução**
+  Criar um Android Foreground Service que mantém o processo vivo e o GPS rodando durante toda a sessão de corrida. O serviço deve:
+  - Iniciar quando a RaceScreen é montada
+  - Exibir uma notificação persistente obrigatória (requisito Android para Foreground Service): "Lapzy · Corrida em andamento"
+  - Parar quando a RaceScreen é desmontada (dispose)
+  - Usar `foregroundServiceType: location` no AndroidManifest
+
+  **Stack**
+  - Pacote recomendado: `flutter_foreground_task` (mantido, suporta location type)
+  - Alternativa nativa: implementar diretamente via MethodChannel em Kotlin
+
+  **Permissões adicionais**
+  - `FOREGROUND_SERVICE` (obrigatória)
+  - `FOREGROUND_SERVICE_LOCATION` (Android 14+, obrigatória)
+  - Nenhuma permissão nova de localização — já solicitadas nas tasks anteriores
+
+  ### Critérios de aceite
+
+  - CA-POCKET-003-01: com tela apagada (botão de desligar tela), o LapDetector continua emitindo LapCrossedEvent e SectorCrossedEvent
+  - CA-POCKET-003-02: uma notificação persistente "Lapzy · Corrida em andamento" fica visível na barra de status durante toda a corrida
+  - CA-POCKET-003-03: ao encerrar a corrida (FINALIZAR), o Foreground Service é parado e a notificação desaparece
+  - CA-POCKET-003-04: o Foreground Service não persiste após o app ser fechado pelo usuário (swipe no recents)
+  - CA-POCKET-003-05: no Samsung A35 (Android 14), o GPS detecta voltas corretamente com a tela apagada por pelo menos 10 minutos contínuos
+
+- [ ] TASK-016 · Modo Bolso — Wakelock Adaptativo (US POCKET-002)
+  Como piloto, quero que a tela apague durante a corrida quando não há eventos, para que a bateria dure a sessão inteira sem precisar de suporte de celular.
+  refs: docs/principios.md, docs/testing.md
+
+  ### Contexto e decisões de design
+
+  **Problema**
+  Hoje `WakelockPlus.enable()` mantém a tela acesa durante toda a corrida. Com o celular no bolso, isso drena a bateria rapidamente e gera risco de toque acidental.
+
+  **Solução: wakelock baseado em eventos**
+  - Remover o `WakelockPlus.enable()` permanente do `initState`
+  - Ao detectar um evento de corrida (LapCrossedEvent ou SectorCrossedEvent), chamar `WakelockPlus.enable()` por 5 segundos e depois `WakelockPlus.disable()`
+  - O Android gerencia o apagamento da tela naturalmente pelo timeout do sistema
+
+  **Comportamento esperado**
+  - Tela liga brevemente a cada cruzamento de linha (volta ou setor) para mostrar o feedback visual
+  - Entre eventos, a tela apaga normalmente pelo timeout do usuário
+  - Ao tocar na tela, ela acende normalmente (comportamento padrão Android)
+
+  **Dependência**
+  TASK-017 (Foreground Service) deve estar concluída antes — sem ela, apagar a tela pode matar o GPS.
+
+  ### Critérios de aceite
+
+  - CA-POCKET-002-01: a tela apaga automaticamente após o timeout de display configurado pelo usuário, sem nenhum toque
+  - CA-POCKET-002-02: ao cruzar a linha de largada/chegada, a tela acende por exatamente 5 segundos e apaga em seguida
+  - CA-POCKET-002-03: ao cruzar uma fronteira de setor, a tela acende por exatamente 5 segundos e apaga em seguida
+  - CA-POCKET-002-04: tocar na tela durante a corrida acende a tela normalmente (wakelock não interfere com interação do usuário)
+  - CA-POCKET-002-05: ao encerrar a corrida, `WakelockPlus.disable()` é chamado (comportamento idêntico ao atual no dispose)
+
+- [ ] TASK-015 · Modo Bolso — Proteção Contra Toque Acidental (US POCKET-001)
+  Como piloto, quero que toques acidentais no bolso não interrompam a corrida, para que eu possa guardar o celular com segurança.
+  refs: docs/principios.md, docs/testing.md
+
+  ### Contexto e decisões de design
+
+  **Problema**
+  Com a tela acesa no bolso (estado atual) ou acendendo por eventos (após TASK-016), existe risco de toque acidental no botão FINALIZAR. Embora o botão exija 2s de pressão contínua, tecido de bolso pode simular isso.
+
+  **Solução: lock de toque quando tela acende por evento**
+  Quando a tela acende via wakelock de evento (não por toque do usuário), bloquear input por 2 segundos exibindo um overlay semitransparente com o texto "TOQUE PARA INTERAGIR".
+
+  **Distinguir "acendeu por evento" de "acendeu por toque"**
+  - Ao disparar o wakelock de evento, setar um flag `_screenOnByEvent = true`
+  - Ao detectar o primeiro `PointerDownEvent` na tela, limpar o flag e remover o overlay
+  - Se a tela já estava acesa (usuário estava olhando), o flag não é setado — sem overlay
+
+  **Dependência**
+  TASK-016 (Wakelock Adaptativo) deve estar concluída antes.
+
+  ### Critérios de aceite
+
+  - CA-POCKET-001-01: quando a tela acende por evento de corrida (cruzamento de linha), um overlay "TOQUE PARA INTERAGIR" é exibido por 2 segundos bloqueando todos os toques
+  - CA-POCKET-001-02: após o overlay desaparecer (2s ou toque do usuário), a tela responde normalmente
+  - CA-POCKET-001-03: quando o usuário toca a tela manualmente para acendê-la (sem evento de corrida), o overlay NÃO aparece
+  - CA-POCKET-001-04: o botão FINALIZAR não pode ser ativado durante o período de bloqueio do overlay
+
 - [ ] TASK-014 · Gerenciamento de Traçados (US TRACK-001)
   Como piloto, quero visualizar, editar e excluir os traçados que configurei, para que eu mantenha minha biblioteca de pistas organizada sem perder o histórico de corridas associado a elas.
   refs: docs/lapzy_tela_inicial.md, docs/lapzy_tela_criacao_pista.md, docs/lapzy_criacao_pista_setores.md, docs/lapzy_tela_listagem_corridas.md, docs/lapzy_design_system.html, docs/principios.md, docs/identidade.md, docs/testing.md
