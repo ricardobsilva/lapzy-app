@@ -142,19 +142,34 @@ class _RaceScreenState extends State<RaceScreen> {
     if (event is LapCrossedEvent) {
       if (!_hasStarted) {
         setState(() {
-          _lapStartTime = _clock();
+          // Usa o timestamp GPS interpolado como âncora da volta —
+          // evita o drift de até ±2.5s causado por latência de callback.
+          _lapStartTime = event.timestamp;
           _hasStarted = true;
         });
       } else {
-        _onLapCompleted();
+        _onLapCompleted(event.timestamp, suspect: false);
+      }
+    } else if (event is LapCrossedSuspectEvent) {
+      if (!_hasStarted) {
+        setState(() {
+          _lapStartTime = event.timestamp;
+          _hasStarted = true;
+        });
+      } else {
+        _onLapCompleted(event.timestamp, suspect: true);
       }
     } else if (event is SectorCrossedEvent) {
-      _onSectorCompleted(event.sectorIndex);
+      _onSectorCompleted(event);
     }
   }
 
-  void _onLapCompleted() {
-    final lapMs = _lapMs;
+  /// [crossingTime] é o timestamp GPS interpolado do cruzamento da S/C.
+  /// [suspect] indica que o LapDetector classificou esta volta como outlier.
+  void _onLapCompleted(DateTime crossingTime, {required bool suspect}) {
+    // Tempo calculado a partir dos timestamps GPS interpolados —
+    // preciso mesmo com GPS a 0.2 Hz (Samsung A35).
+    final lapMs = crossingTime.difference(_lapStartTime!).inMilliseconds;
     final result = DeltaCalculator.compute(
       lapMs: lapMs,
       previousBestMs: _bestLapMs,
@@ -168,8 +183,8 @@ class _RaceScreenState extends State<RaceScreen> {
       ));
       _bestLapMs = result.newBestLapMs;
       _deltaMs = result.deltaMs;
-      _eventState = result.eventState;
-      _lapStartTime = _clock();
+      _eventState = suspect ? RaceEventState.neutral : result.eventState;
+      _lapStartTime = crossingTime;
       _lapNumber++;
       _nextSectorIndex = 0;
       _lapMsAtLastSector = 0;
@@ -187,14 +202,18 @@ class _RaceScreenState extends State<RaceScreen> {
     });
   }
 
-  void _onSectorCompleted(int sectorIndex) {
+  void _onSectorCompleted(SectorCrossedEvent event) {
+    final sectorIndex = event.sectorIndex;
     if (!_hasStarted) return;
     if (sectorIndex != _nextSectorIndex) return;
     if (sectorIndex >= _currentSectors.length) return;
 
-    // Split do setor: tempo desde o cruzamento anterior (ou início da volta).
-    final sectorTime = _lapMs - _lapMsAtLastSector;
-    _lapMsAtLastSector = _lapMs;
+    // Split do setor usando timestamp GPS interpolado, não relógio de parede.
+    // Garante que S1+S2+S3 usem a mesma base de tempo que o lapMs final.
+    final crossingMs =
+        event.timestamp.difference(_lapStartTime!).inMilliseconds;
+    final sectorTime = crossingMs - _lapMsAtLastSector;
+    _lapMsAtLastSector = crossingMs;
     final feedbackColor = _computeSectorFeedback(sectorIndex, sectorTime);
 
     setState(() {
