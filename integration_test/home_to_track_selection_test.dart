@@ -6,7 +6,7 @@ void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets('fluxo: home → toque em INICIAR → sheet de seleção de pista abre', (tester) async {
-    app.main();
+    await app.main();
     await tester.pumpAndSettle();
 
     expect(find.text('INICIAR'), findsOneWidget);
@@ -18,7 +18,7 @@ void main() {
   });
 
   testWidgets('fluxo: home → toque em INICIAR → estado vazio exibido sem pistas', (tester) async {
-    app.main();
+    await app.main();
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('INICIAR'));
@@ -29,7 +29,7 @@ void main() {
   });
 
   testWidgets('fluxo: home → toque em INICIAR → botão + NOVA PISTA visível', (tester) async {
-    app.main();
+    await app.main();
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('INICIAR'));
@@ -39,7 +39,7 @@ void main() {
   });
 
   testWidgets('fluxo: home → toque em INICIAR → campo de busca disponível', (tester) async {
-    app.main();
+    await app.main();
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('INICIAR'));
