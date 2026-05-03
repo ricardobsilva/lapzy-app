@@ -42,7 +42,7 @@ class LapResult {
 
   factory LapResult.fromJson(Map<String, dynamic> json) => LapResult(
         lapMs: json['lapMs'] as int,
-        sectors: (json['sectors'] as List<dynamic>)
+        sectors: ((json['sectors'] as List<dynamic>?) ?? const [])
             .map((s) => s as int?)
             .toList(),
       );

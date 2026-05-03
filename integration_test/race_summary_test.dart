@@ -16,7 +16,7 @@ void main() {
         TrackRepository().clearForTesting();
         TrackRepository().add(const Track(id: '1', name: 'Pista Resumo'));
 
-        app.main();
+        await app.main();
         await tester.pumpAndSettle();
 
         await tester.tap(find.text('INICIAR'));
@@ -46,7 +46,7 @@ void main() {
         TrackRepository().clearForTesting();
         TrackRepository().add(const Track(id: '1', name: 'Pista Share'));
 
-        app.main();
+        await app.main();
         await tester.pumpAndSettle();
 
         await tester.tap(find.text('INICIAR'));
@@ -75,7 +75,7 @@ void main() {
         TrackRepository().clearForTesting();
         TrackRepository().add(const Track(id: '1', name: 'Pista ND'));
 
-        app.main();
+        await app.main();
         await tester.pumpAndSettle();
 
         await tester.tap(find.text('INICIAR'));
@@ -104,7 +104,7 @@ void main() {
         TrackRepository().clearForTesting();
         TrackRepository().add(const Track(id: '1', name: 'Pista Vazia'));
 
-        app.main();
+        await app.main();
         await tester.pumpAndSettle();
 
         await tester.tap(find.text('INICIAR'));
@@ -133,7 +133,7 @@ void main() {
         TrackRepository().clearForTesting();
         TrackRepository().add(const Track(id: '1', name: 'Pista Sem Setores'));
 
-        app.main();
+        await app.main();
         await tester.pumpAndSettle();
 
         await tester.tap(find.text('INICIAR'));

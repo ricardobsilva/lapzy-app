@@ -54,7 +54,7 @@ void main() {
         addTearDown(resetState);
         await resetState();
 
-        app.main();
+        await app.main();
         await tester.pumpAndSettle();
 
         await tester.tap(find.byKey(const Key('home_tracks_button')));
@@ -69,7 +69,7 @@ void main() {
         addTearDown(resetState);
         await resetState();
 
-        app.main();
+        await app.main();
         await tester.pumpAndSettle();
 
         await tester.tap(find.byKey(const Key('home_tracks_button')));
@@ -91,7 +91,7 @@ void main() {
           createdAt: DateTime.utc(2026, 4, 29, 14, 32),
         ));
 
-        app.main();
+        await app.main();
         await tester.pumpAndSettle();
 
         await tester.tap(find.byKey(const Key('home_tracks_button')));
@@ -116,7 +116,7 @@ void main() {
           createdAt: DateTime.utc(2026, 4, 29),
         ));
 
-        app.main();
+        await app.main();
         await tester.pumpAndSettle();
 
         await tester.tap(find.byKey(const Key('home_tracks_button')));
@@ -139,7 +139,7 @@ void main() {
           createdAt: DateTime.utc(2026, 4, 15, 10, 0),
         ));
 
-        app.main();
+        await app.main();
         await tester.pumpAndSettle();
 
         await tester.tap(find.byKey(const Key('home_tracks_button')));
@@ -165,7 +165,7 @@ void main() {
           sectorCount: 2,
         ));
 
-        app.main();
+        await app.main();
         await tester.pumpAndSettle();
 
         await tester.tap(find.byKey(const Key('home_tracks_button')));
@@ -185,7 +185,7 @@ void main() {
 
         await TrackRepository().save(makeTrack(id: 'del-1', name: 'Pista Teste'));
 
-        app.main();
+        await app.main();
         await tester.pumpAndSettle();
 
         await tester.tap(find.byKey(const Key('home_tracks_button')));
@@ -207,7 +207,7 @@ void main() {
 
         await TrackRepository().save(makeTrack(id: 'del-2', name: 'Pista Teste'));
 
-        app.main();
+        await app.main();
         await tester.pumpAndSettle();
 
         await tester.tap(find.byKey(const Key('home_tracks_button')));
@@ -232,7 +232,7 @@ void main() {
 
         await TrackRepository().save(makeTrack(id: 'del-3', name: 'Pista Manter'));
 
-        app.main();
+        await app.main();
         await tester.pumpAndSettle();
 
         await tester.tap(find.byKey(const Key('home_tracks_button')));
@@ -257,7 +257,7 @@ void main() {
 
         await TrackRepository().save(makeTrack(id: 'del-4', name: 'Pista Remover'));
 
-        app.main();
+        await app.main();
         await tester.pumpAndSettle();
 
         await tester.tap(find.byKey(const Key('home_tracks_button')));
