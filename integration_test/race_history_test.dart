@@ -48,7 +48,7 @@ void main() {
         addTearDown(resetState);
         await resetState();
 
-        app.main();
+        await app.main();
         await tester.pumpAndSettle();
 
         await tester.tap(find.byKey(const Key('home_history_button')));
@@ -63,7 +63,7 @@ void main() {
         addTearDown(resetState);
         await resetState();
 
-        app.main();
+        await app.main();
         await tester.pumpAndSettle();
 
         await tester.tap(find.byKey(const Key('home_history_button')));
@@ -77,7 +77,7 @@ void main() {
         addTearDown(resetState);
         await resetState();
 
-        app.main();
+        await app.main();
         await tester.pumpAndSettle();
 
         await tester.tap(find.byKey(const Key('home_history_button')));
@@ -106,7 +106,7 @@ void main() {
           date: DateTime.utc(2026, 4, 3, 9, 15),
         ));
 
-        app.main();
+        await app.main();
         await tester.pumpAndSettle();
 
         await tester.tap(find.byKey(const Key('home_history_button')));
@@ -131,7 +131,7 @@ void main() {
           date: DateTime.utc(2026, 4, 15, 14, 0),
         ));
 
-        app.main();
+        await app.main();
         await tester.pumpAndSettle();
 
         await tester.tap(find.byKey(const Key('home_history_button')));
@@ -153,7 +153,7 @@ void main() {
           date: DateTime.utc(2026, 4, 12, 14, 32),
         ));
 
-        app.main();
+        await app.main();
         await tester.pumpAndSettle();
 
         await tester.tap(find.byKey(const Key('home_history_button')));
@@ -179,7 +179,7 @@ void main() {
           date: DateTime.utc(2026, 3, 15, 11, 5),
         ));
 
-        app.main();
+        await app.main();
         await tester.pumpAndSettle();
 
         await tester.tap(find.byKey(const Key('home_history_button')));
@@ -209,7 +209,7 @@ void main() {
           createdAt: DateTime.utc(2026, 4, 10, 14, 45),
         ));
 
-        app.main();
+        await app.main();
         await tester.pumpAndSettle();
 
         await tester.tap(find.byKey(const Key('home_history_button')));
@@ -228,7 +228,7 @@ void main() {
         addTearDown(resetState);
         await resetState();
 
-        app.main();
+        await app.main();
         await tester.pumpAndSettle();
 
         await tester.tap(find.byKey(const Key('home_history_button')));

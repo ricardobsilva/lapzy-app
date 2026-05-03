@@ -14,7 +14,7 @@ void main() {
       testWidgets(
           'fluxo: home → INICIAR → + NOVA PISTA → tela de criação abre',
           (tester) async {
-        app.main();
+        await app.main();
         await tester.pumpAndSettle();
 
         await tester.tap(find.text('INICIAR'));
@@ -29,7 +29,7 @@ void main() {
       testWidgets(
           'fluxo: home → INICIAR → + NOVA PISTA → sheet fecha antes de abrir criação',
           (tester) async {
-        app.main();
+        await app.main();
         await tester.pumpAndSettle();
 
         await tester.tap(find.text('INICIAR'));
@@ -44,7 +44,7 @@ void main() {
       testWidgets(
           'fluxo: home → INICIAR → + NOVA PISTA → barra de progresso visível com 4 passos',
           (tester) async {
-        app.main();
+        await app.main();
         await tester.pumpAndSettle();
 
         await tester.tap(find.text('INICIAR'));
@@ -62,7 +62,7 @@ void main() {
       testWidgets(
           'fluxo: home → INICIAR → + NOVA PISTA → não exibe label TRAÇADO',
           (tester) async {
-        app.main();
+        await app.main();
         await tester.pumpAndSettle();
 
         await tester.tap(find.text('INICIAR'));
@@ -79,7 +79,7 @@ void main() {
 
     group('passo inicial (LARGADA)', () {
       testWidgets('abre no passo LARGADA com painel correto', (tester) async {
-        app.main();
+        await app.main();
         await tester.pumpAndSettle();
 
         await tester.tap(find.text('INICIAR'));
@@ -93,7 +93,7 @@ void main() {
 
       testWidgets('exibe botão TRAÇAR para entrar em modo de desenho',
           (tester) async {
-        app.main();
+        await app.main();
         await tester.pumpAndSettle();
 
         await tester.tap(find.text('INICIAR'));
@@ -107,7 +107,7 @@ void main() {
 
       testWidgets('hint correto no mapa aparece ao ativar modo traçar',
           (tester) async {
-        app.main();
+        await app.main();
         await tester.pumpAndSettle();
 
         await tester.tap(find.text('INICIAR'));
@@ -123,7 +123,7 @@ void main() {
       });
 
       testWidgets('não exibe botão FECHAR PISTA (step removido)', (tester) async {
-        app.main();
+        await app.main();
         await tester.pumpAndSettle();
 
         await tester.tap(find.text('INICIAR'));
@@ -141,7 +141,7 @@ void main() {
     group('botão voltar', () {
       testWidgets('retorna para a tela inicial ao pressionar voltar',
           (tester) async {
-        app.main();
+        await app.main();
         await tester.pumpAndSettle();
 
         await tester.tap(find.text('INICIAR'));

@@ -230,7 +230,7 @@ void main() {
 
   testWidgets('seed: cria pistas e corridas realistas no dispositivo',
       (tester) async {
-    app.main();
+    await app.main();
     await tester.pumpAndSettle();
 
     // Salva as 3 pistas (upsert — seguro rodar múltiplas vezes)

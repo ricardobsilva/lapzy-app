@@ -4,6 +4,214 @@
 
 ## Backlog
 
+- [ ] TASK-022 · Feature — Heatmap de Velocidade no Traçado (bottom sheet detalhe de volta)
+  Como piloto, quero visualizar um heatmap de velocidade sobreposto ao traçado da pista no detalhe de uma volta, para que eu identifique visualmente os pontos onde estou mais rápido e mais lento no circuito.
+  refs: docs/lapzy_heatmap_velocidade.md, docs/lapzy_criacao_pista_setores.md, docs/tech.md, docs/telas.md
+
+  ### Subtasks
+
+  - [ ] 1. Coletar e armazenar amostras de velocidade GPS por volta (lat, lng, velocidade em m/s)
+  - [ ] 2. Calcular velocidade interpolada para cada segmento do centerline da pista
+  - [ ] 3. Normalizar velocidade por sessão (min/max) para mapeamento de cor
+  - [ ] 4. Renderizar polilinha colorida no mapa (gradiente frio→quente: azul→verde→amarelo→vermelho)
+  - [ ] 5. Implementar bottom sheet "detalhe de volta" acessível a partir da RaceSummaryScreen
+  - [ ] 6. Testes unitários: cálculo de velocidade, normalização, mapeamento de cor
+  - [ ] 7. Testes de widget: renderização do heatmap nos estados (dados completos, sem dados, volta única)
+
+  ### Critérios de aceite
+
+  - CA-HM-001-01: ao tocar em uma volta na RaceSummaryScreen, abre bottom sheet com mapa exibindo o traçado colorido pelo heatmap de velocidade
+  - CA-HM-001-02: a escala de cor mapeia velocidade mínima da sessão para frio (azul) e máxima para quente (vermelho), com gradiente contínuo
+  - CA-HM-001-03: quando não há dados de velocidade GPS suficientes para uma volta, o traçado é exibido em cor neutra sem heatmap
+  - CA-HM-001-04: o bottom sheet é dispensável com swipe down e não bloqueia navegação
+  - CA-HM-001-05: nenhuma amostra de velocidade é armazenada se a volta não tiver dados GPS com velocidade válida (≥ 0 m/s)
+
+- [ ] TASK-021 · UX/UI — Melhorias na Tela de Corrida (pós-teste em pista)
+  Como piloto, quero uma tela de corrida mais legível e informativa durante a sessão, para que eu consiga interpretar os dados sem tirar o foco da pilotagem.
+  refs: docs/tela_corrida_svg.md, docs/lapzy_design_system.html, docs/identidade.md, docs/principios.md, docs/testing.md
+
+  ### Contexto
+
+  Após o primeiro teste real em kartódromo (2026-05-01, Rei dos Reis), identificou-se que a tela de corrida apresenta pontos de atrito de UX que dificultam a leitura rápida durante a pilotagem. Esta task consolida melhorias de apresentação e interação levantadas no teste.
+
+  ### Melhorias a avaliar e implementar
+
+  - **Legibilidade do cronômetro de volta**: verificar se o tamanho de fonte e contraste são adequados a ~60cm de distância com vibrações do kart
+  - **Feedback de setor mais evidente**: quando um setor é concluído, o delta vs. melhor setor deve ser imediatamente legível (cor e tamanho)
+  - **Número da volta atual**: exibir destaque maior para a volta corrente — facilita rastrear quantas voltas foram feitas sem interação
+  - **Histórico inline de voltas**: considerar exibir as últimas 2-3 voltas com tempos para comparação imediata
+  - **Estado "sem setor capturado"**: quando setores retornam null, a UI deve degradar com elegância (ex: "—" no lugar de campo vazio ou zero)
+
+  ### Critérios de aceite
+
+  - CA-UX-001-01: cronômetro de volta legível sem esforço a 60cm com tela em movimento
+  - CA-UX-001-02: ao concluir um setor, o tempo e delta (verde/vermelho vs. melhor setor) ficam visíveis por pelo menos 3s sem ação do usuário
+  - CA-UX-001-03: número da volta atual em destaque visual claro (hierarquia tipográfica diferente do cronômetro)
+  - CA-UX-001-04: quando `sectorTime == null`, a UI exibe "—" (não zero, não vazio, não erro)
+  - CA-UX-001-05: nenhuma nova interação exige mais de 2 toques
+
+- [x] TASK-020 · Bug — Oscilação Sistemática de ~5s no Tempo de Volta
+  Como piloto, quero que os tempos de volta reflitam o tempo real percorrido, sem oscilação sistemática entre voltas consecutivas, para que eu possa comparar voltas com precisão.
+  refs: docs/principios.md, docs/testing.md
+
+  ### Contexto e análise dos dados de pista (2026-05-01)
+
+  Durante o teste em pista foram gravadas duas sessões no kartódromo Rei dos Reis (Maceió/AL). Os dados revelam um padrão de oscilação **sistemático e regular** que não corresponde à variação real de pilotagem.
+
+  ---
+
+  #### Corrida 1 — "traçado rei dos reis" (17:03, 19 voltas)
+
+  | Volta | lapMs | Cluster |
+  |-------|-------|---------|
+  | 1  | 74.958s | warm-up |
+  | 2  | 69.964s | ~70s |
+  | 3  | 70.021s | ~70s |
+  | 4  | 65.039s | ~65s |
+  | 5  | **259.929s** | anomalia (parada em pista) |
+  | 6  | 70.005s | ~70s |
+  | 7  | 65.071s | ~65s |
+  | 8  | 69.923s | ~70s |
+  | 9  | 65.041s | ~65s |
+  | 10 | 64.980s | ~65s |
+  | 11 | 70.066s | ~70s |
+  | 12 | **64.917s** | ~65s ← melhor volta |
+  | 13 | 70.041s | ~70s |
+  | 14 | 65.034s | ~65s |
+  | 15 | 64.944s | ~65s |
+  | 16 | 65.033s | ~65s |
+  | 17 | 69.972s | ~70s |
+  | 18 | 64.997s | ~65s |
+  | 19 | 69.987s | ~70s |
+
+  **Cluster ~65s**: média 65.002s (8 voltas, desvio < 160ms)
+  **Cluster ~70s**: média 69.990s (6 voltas, desvio < 150ms)
+  **Delta entre clusters**: ~4.988s ≈ **5 segundos exatos**
+
+  Setores (3 configurados): apenas S1 capturado em 4/19 voltas (21%); S2 e S3 = null em 100% das voltas.
+
+  ---
+
+  #### Corrida 2 — "Rei dos Reis 2" (17:48, 19 voltas)
+
+  | Volta | lapMs | Setores (S1, S2, S3) | Obs |
+  |-------|-------|----------------------|-----|
+  | 1  | 74.945s | [45.000, null, null] | warm-up |
+  | 2  | 75.007s | [null, null, null] | warm-up |
+  | 3  | 65.079s | [null, null, null] | ~65s |
+  | 4  | 69.964s | [null, null, null] | ~70s |
+  | 5  | **95.008s** | [40.018, **0.001**, 9.987] | anomalia + S2 errado |
+  | 6  | **110.000s** | [null, null, null] | anomalia |
+  | 7  | 69.970s | [null, null, null] | ~70s |
+  | 8  | 65.047s | [35.022, 5.055, 9.948] | ~65s |
+  | 9  | 69.991s | [null, null, null] | ~70s |
+  | 10 | **64.963s** | [34.960, 5.001, 10.034] | ~65s ← melhor volta |
+  | 11 | 69.988s | [null, null, null] | ~70s |
+  | 12 | 65.005s | [35.026, 5.008, 10.020] | ~65s |
+  | 13 | 65.028s | [40.049, **0.002**, 9.994] | ~65s + S2 errado |
+  | 14 | 69.984s | [34.987, 9.971, 10.069] | ~70s |
+  | 15 | 65.008s | [40.028, 5.059, **4.899**] | ~65s + S3 baixo |
+  | 16 | 69.982s | [39.982, 4.983, 10.023] | ~70s |
+  | 17 | 70.033s | [null, null, null] | ~70s |
+  | 18 | 65.001s | [null, null, null] | ~65s |
+  | 19 | 69.942s | [null, null, null] | ~70s |
+
+  **Cluster ~65s**: média 65.019s | **Cluster ~70s**: média 69.982s | **Delta**: **~4.963s**
+
+  **Soma de setores ≠ lapMs** (voltas com dados completos):
+  | Volta | S1+S2+S3 | lapMs | Gap |
+  |-------|----------|-------|-----|
+  | 8  | 50.025s | 65.047s | **15.022s** (23%) |
+  | 10 | 49.995s | 64.963s | **14.968s** (23%) |
+  | 12 | 50.054s | 65.005s | **14.951s** (23%) |
+  | 14 | 55.027s | 69.984s | **14.957s** (21%) |
+  | 16 | 54.988s | 69.982s | **14.994s** (21%) |
+
+  Gap consistente de ~15s — indica que há um trecho do circuito não coberto por nenhum setor (provavelmente entre a linha S/C e o início do S1).
+
+  ---
+
+  #### O ideal vs. o que aconteceu
+
+  | Métrica | Ideal | Obtido |
+  |---------|-------|--------|
+  | Variação entre voltas consecutivas (pilotagem estável) | ≤ 0.3s | **~5.0s** (sistemático) |
+  | Setores cobertos por volta | 100% (toda volta tem S1+S2+S3) | **21% traçado 1 / ~42% traçado 2** |
+  | S1+S2+S3 = lapMs | sim (diferença ≤ 0.1s) | **gap fixo de ~15s** |
+  | S2 mínimo razoável | > 5s (qualquer setor de kart) | **0.001s e 0.002s** (claramente errado) |
+
+  ---
+
+  #### Hipóteses para a oscilação de ~5s
+
+  A regularidade extrema (5.0s ± 0.1s entre os dois clusters, em DOIS traçados diferentes) aponta para uma causa sistemática no `LapDetector`, não em variação de pilotagem.
+
+  **H1 — Detecção dupla por geometria**: A linha de largada/chegada de "traçado rei dos reis" tem `middlePoints: []` (segmento único) e `widthMeters: 3.0m`. A tolerância lateral de 1.5m pode estar causando dupla detecção em diferentes posições GPS ao longo do buffer, gerando um evento "cedo" (~65s) e um evento "tardio" (~70s) em voltas alternadas.
+
+  **H2 — Clamping de `t` na interpolação**: Em `_crossingParams`, `t.clamp(0.0, 1.0)` força o timestamp ao início ou fim do segmento GPS quando a interseção cai fora do vetor de movimento. Isso pode introduzir erro sistemático quando a velocidade de cruzamento é baixa ou o ângulo é rasante, produzindo timestamps sempre "adiantados" ou "atrasados" de forma alternada.
+
+  **H3 — Persistência do estado entre voltas**: `_previousPosition` e `_previousTimestamp` são preservados entre eventos de volta. Se o timestamp de um `LapCrossedEvent` é atribuído ao instante interpolado, mas `_previousTimestamp` não é atualizado para esse instante (continua sendo o timestamp do GPS), a próxima volta começa do timestamp GPS real — criando assimetria acumulada.
+
+  **Hipótese mais provável (H3)**: O `LapDetector` usa o timestamp GPS do último ponto como âncora da próxima volta, mas registra o evento de volta no timestamp *interpolado*. Isso cria um drift: se a interpolação diz que o cruzamento foi 2.5s antes do GPS atualizar, a próxima volta começa 2.5s "mais tarde" no cálculo, resultando em volta seguinte ~5s mais longa. Na volta subsequente o drift se cancela, criando a oscilação alternada.
+
+  ### Critérios de aceite
+
+  - CA-BUG-003-01: em 20 voltas consecutivas de pilotagem estável, nenhum par de voltas adjacentes difere mais de 1.0s por causa do algoritmo de detecção (excluindo saídas de pit e falhas de GPS)
+  - CA-BUG-003-02: a soma S1+S2+S3 é igual ao lapMs com diferença ≤ 100ms quando todos os setores são capturados
+  - CA-BUG-003-03: S2 e S3 em "Rei dos Reis 2" nunca registram valores < 1s (indicam bug de timestamp, não tempo real)
+  - CA-BUG-003-04: testes unitários reproduzem o cenário de oscilação com um stream GPS simulado e verificam que após o fix a alternância desaparece
+
+- [ ] TASK-019 · Bug — Tela de Resumo com Dados Inconsistentes
+  Como piloto, quero que a tela de resumo pós-corrida exiba dados corretos e coerentes, para que eu possa analisar minha performance sem questionar a veracidade dos números.
+  refs: docs/telas.md, docs/lapzy_design_system.html, docs/principios.md, docs/testing.md
+
+  ### Contexto
+
+  Após o teste em pista (2026-05-01), a tela de resumo apresentou informações inconsistentes. Os dados gravados mostram possíveis fontes:
+
+  - **Melhor volta incorreta**: com a oscilação de ~5s (TASK-020), a melhor volta calculada pode ser uma volta "curta" do cluster ~65s que não representa o tempo real de pista — ou pode ser inflada pelo cluster ~70s
+  - **Setores do resumo**: quando setores são null em todas as voltas (caso do traçado 1), o resumo não deve exibir uma tabela de setores vazia ou com zeros — deve degradar com elegância
+  - **Contagem de voltas**: verificar se voltas com lapMs anômalo (ex: 259s, 110s) entram no cálculo de média e melhor volta ou são filtradas
+  - **Média de volta**: se calculada incluindo warm-up e anomalias, o número fica distorcido
+
+  ### Critérios de aceite
+
+  - CA-BUG-002-01: a "melhor volta" exibida no resumo corresponde ao menor `lapMs` entre voltas válidas (excluindo a primeira volta se for warm-up e voltas > 3× a mediana)
+  - CA-BUG-002-02: quando todos os setores de todas as voltas são null, a seção de setores não é renderizada no resumo (nem como zeros, nem como "—")
+  - CA-BUG-002-03: a média de volta exclui outliers (voltas > 2× a mediana do conjunto) do cálculo
+  - CA-BUG-002-04: o número total de voltas exibido corresponde a todas as voltas registradas, incluindo warm-up e outliers (transparência ao piloto)
+  - CA-BUG-002-05: testes de widget cobrem os estados: todos setores null, setores parciais, outliers presentes
+
+- [x] TASK-018 · Bug — Setores Não Detectados na Maioria das Voltas
+  Como piloto, quero que os tempos de cada setor sejam capturados de forma confiável em toda volta, para que eu possa identificar onde perco e ganho tempo no circuito.
+  refs: docs/principios.md, docs/testing.md
+
+  ### Contexto
+
+  No teste em pista (2026-05-01), a taxa de captura de setores foi gravemente insuficiente:
+
+  - **traçado rei dos reis** (3 setores): S1 capturado em apenas 4 de 19 voltas (21%); S2 e S3 capturados em **0 voltas**
+  - **Rei dos Reis 2** (3 setores): setores capturados parcial ou totalmente em ~8 de 19 voltas (~42%); S2 com valores de 1ms e 2ms em 2 voltas (claramente erros de timestamp)
+
+  ### Possíveis causas
+
+  1. **`_crossSign == 0` ignora cruzamentos tangentes**: `if (signPrev == 0 || signCurr == 0) continue` descarta cruzamentos onde o ponto GPS cai exatamente sobre a reta da fronteira de setor — improvável em dados reais, mas pode mascarar cruzamentos com produtos vetoriais muito próximos de zero (precisão floating point)
+
+  2. **GPS esparso + distanceFilter**: com `distanceFilter: 0`, o Geolocator emite posições a cada update de hardware (~1Hz no Samsung A35). Se a velocidade do kart é ~50km/h (~14m/s) e a zona de detecção da fronteira de setor tem largura de 6-7m, o kart atravessa a zona em ~0.4s — podendo saltar de um lado para o outro entre dois updates de 1Hz sem o vetor de movimento cruzar a linha no algoritmo
+
+  3. **Múltiplos sub-segmentos em middlePoints**: as fronteiras de setor têm 15-40 middlePoints (curvas detalhadas). O algoritmo itera sobre todos os pares. Se o vetor de movimento GPS cruza a reta infinita de algum sub-segmento intermediário mas não dentro dos bounds do segmento, o cruzamento é descartado. Fronteiras de setor curvas podem ter sub-segmentos muito curtos onde a tolerância `bufferMeters/2` é insuficiente
+
+  4. **Ordem de verificação**: S/F e setores são verificados no mesmo callback. Se o vetor GPS cruza tanto a S/F quanto uma fronteira de setor no mesmo update, apenas o evento de S/F é emitido (loop encerra com `continue` após emitir? não — mas o estado pode ficar inconsistente)
+
+  ### Critérios de aceite
+
+  - CA-BUG-001-01: em corrida com 3 setores configurados e piloto completando voltas inteiras, taxa de captura de setores ≥ 90% das voltas
+  - CA-BUG-001-02: nenhum setor registra tempo < 1s (indica double-fire ou timestamp errado)
+  - CA-BUG-001-03: quando um setor não é detectado (null), o próximo setor também é null — o app não tenta acumular tempo parcial sobre base inválida
+  - CA-BUG-001-04: testes unitários reproduzem a falha de detecção com streams GPS simulados onde o kart atravessa a fronteira entre dois updates consecutivos
+
+## Backlog
+
 - [ ] TASK-017 · Modo Bolso — Foreground Service Android (US POCKET-003)
   Como piloto, quero que o GPS continue funcionando quando a tela apaga, para que eu possa guardar o celular no bolso sem perder a detecção de voltas.
   refs: docs/principios.md, docs/testing.md

@@ -90,7 +90,7 @@ void main() {
         TrackRepository().clearForTesting();
         TrackRepository().add(const Track(id: '1', name: 'Pista UUID Test'));
 
-        app.main();
+        await app.main();
         await tester.pumpAndSettle();
 
         await tester.tap(find.text('INICIAR'));
@@ -120,7 +120,7 @@ void main() {
 
         TrackRepository().add(const Track(id: '1', name: 'Pista Sessão'));
 
-        app.main();
+        await app.main();
         await tester.pumpAndSettle();
 
         await tester.tap(find.text('INICIAR'));
@@ -164,7 +164,7 @@ void main() {
 
         TrackRepository().add(const Track(id: '1', name: 'Pista Campos'));
 
-        app.main();
+        await app.main();
         await tester.pumpAndSettle();
 
         await tester.tap(find.text('INICIAR'));
@@ -209,7 +209,7 @@ void main() {
 
         TrackRepository().add(const Track(id: '1', name: 'Pista Reload'));
 
-        app.main();
+        await app.main();
         await tester.pumpAndSettle();
 
         await tester.tap(find.text('INICIAR'));
