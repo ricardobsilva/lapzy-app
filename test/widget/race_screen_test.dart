@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lapzy/models/track.dart';
 import 'package:lapzy/repositories/race_session_repository.dart';
@@ -65,6 +66,25 @@ const _trackWithSectors = Track(
   ],
 );
 
+const _foregroundChannel = MethodChannel('lapzy/foreground_service');
+
+/// Instala handler no canal do Foreground Service e retorna lista de chamadas
+/// registradas. O handler é limpo automaticamente ao final do teste via
+/// [addTearDown] — cada teste recebe seu próprio estado isolado.
+List<String> _setupForegroundChannel() {
+  final calls = <String>[];
+  TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+      .setMockMethodCallHandler(_foregroundChannel, (call) async {
+    calls.add(call.method);
+    return null;
+  });
+  addTearDown(() {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(_foregroundChannel, null);
+  });
+  return calls;
+}
+
 Widget _buildScreen({
   _FakeDetector? detector,
   int? prThresholdMs,
@@ -85,6 +105,18 @@ Widget _buildScreen({
 // ── TESTES ────────────────────────────────────────────────────────────────────
 
 void main() {
+  setUp(() {
+    // Silencia o canal do Foreground Service em todos os testes que não
+    // precisam inspecionar suas chamadas.
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(_foregroundChannel, (_) async => null);
+  });
+
+  tearDown(() {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(_foregroundChannel, null);
+  });
+
   group('RaceScreen', () {
     group('estado inicial (antes do 1º cruzamento)', () {
       testWidgets('exibe label TEMPO DA VOLTA', (tester) async {
@@ -1316,6 +1348,57 @@ void main() {
           find.descendant(of: buttonFinder, matching: find.byType(FractionallySizedBox)),
         );
         expect(fractionBox.widthFactor, 0.0);
+      });
+    });
+
+    group('Foreground Service (CA-POCKET-003)', () {
+      testWidgets('CA-POCKET-003-02: chama start ao montar a RaceScreen', (tester) async {
+        final calls = _setupForegroundChannel();
+
+        await tester.pumpWidget(_buildScreen());
+        await tester.pump();
+
+        expect(calls, contains('start'));
+      });
+
+      testWidgets('CA-POCKET-003-04: chama stop ao desmontar a RaceScreen', (tester) async {
+        final calls = _setupForegroundChannel();
+
+        await tester.pumpWidget(_buildScreen());
+        await tester.pump();
+
+        await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+        await tester.pump();
+
+        expect(calls, contains('stop'));
+      });
+
+      testWidgets('start é chamado antes de stop no ciclo mount/dispose', (tester) async {
+        final calls = _setupForegroundChannel();
+
+        await tester.pumpWidget(_buildScreen());
+        await tester.pump();
+        await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+        await tester.pump();
+
+        expect(calls.indexOf('start'), lessThan(calls.indexOf('stop')));
+      });
+
+      testWidgets('CA-POCKET-003-04: stop é chamado ao encerrar a corrida via FINALIZAR', (tester) async {
+        SharedPreferences.setMockInitialValues({});
+        RaceSessionRepository().clearForTesting();
+        final calls = _setupForegroundChannel();
+
+        await tester.pumpWidget(_buildScreen());
+
+        final buttonFinder = find.byKey(const Key('end_button'));
+        final gesture = await tester.startGesture(tester.getCenter(buttonFinder));
+        await tester.pump(const Duration(seconds: 3));
+        await tester.pumpAndSettle();
+        await gesture.up();
+
+        expect(calls, contains('stop'));
+        RaceSessionRepository().clearForTesting();
       });
     });
   });
