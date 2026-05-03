@@ -45,23 +45,24 @@ class SectorCrossedEvent extends LapEvent {
 /// Emite [LapCrossedEvent], [LapCrossedSuspectEvent] e [SectorCrossedEvent]
 /// conforme o piloto cruza as linhas definidas na [Track].
 ///
-/// ### Garantias
-/// - **Cooldown**: nova detecção da S/C bloqueada por [minLapMs] ms após uma
-///   volta válida — evita dupla contagem por GPS ruidoso.
+/// ### Garantias — S/F
+/// - **Cooldown**: nova detecção bloqueada por [minLapMs] ms após cruzamento válido.
 /// - **Direção**: após o primeiro cruzamento, apenas cruzamentos no mesmo
-///   sentido (diferença de heading ≤ 90°) são aceitos — rejeita travessias
-///   no sentido contrário.
-/// - **Outlier**: se a duração da volta desviar mais de [maxOutlierFraction]
-///   OU [maxOutlierMs] da mediana das últimas [recentLapsForMedian] voltas
-///   válidas, o evento emitido é [LapCrossedSuspectEvent] em vez de
-///   [LapCrossedEvent].
-/// - **Timestamp interpolado**: o instante exato do cruzamento é calculado
-///   por interpolação linear entre os dois timestamps GPS adjacentes,
-///   eliminando o erro de latência de callback.
+///   sentido (diferença de heading ≤ 90°) são aceitos.
+/// - **Outlier**: se a duração desviar mais de [maxOutlierFraction] OU
+///   [maxOutlierMs] da mediana das últimas [recentLapsForMedian] voltas,
+///   o evento emitido é [LapCrossedSuspectEvent].
+/// - **Timestamp interpolado**: o instante exato é calculado por interpolação
+///   linear entre os dois timestamps GPS adjacentes.
 ///
-/// Para cada [TrackLine], todos os sub-segmentos de [TrackLine.allPoints]
-/// são verificados — linhas curvas (com middlePoints) são tratadas como
-/// polilinhas segmento a segmento.
+/// ### Garantias — Setores
+/// - **Buffer de acurácia GPS**: a tolerância de endpoint dos segmentos inclui
+///   um buffer de acurácia GPS (~5 m) para compensar GPS impreciso no A35.
+/// - **Fallback por proximidade**: quando o algoritmo de sub-segmento falha
+///   (ex.: fronteiras curvas com middlePoints), usa a direção global A→B +
+///   distância perpendicular para detectar o cruzamento.
+/// - **Cooldown por setor**: nova detecção bloqueada por [minSectorMs] ms após
+///   o último cruzamento da mesma fronteira — evita double-fire.
 class LapDetector {
   final Track track;
 
@@ -69,21 +70,20 @@ class LapDetector {
   final Stream<Position> Function() positionStreamFactory;
 
   /// Cooldown entre dois cruzamentos válidos da S/C (ms).
-  /// Cruzamentos detectados antes deste intervalo são silenciosamente
-  /// descartados. Padrão: 20 000 ms (20 s).
   final int minLapMs;
 
   /// Fração de desvio da mediana que classifica uma volta como suspeita.
-  /// Ex: 0.20 = 20% de diferença. Padrão: 0.20.
   final double maxOutlierFraction;
 
   /// Desvio absoluto (ms) que classifica uma volta como suspeita.
-  /// A condição é OR com [maxOutlierFraction]. Padrão: 5 000 ms.
   final int maxOutlierMs;
 
   /// Número de voltas recentes usadas para calcular a mediana.
-  /// Padrão: 5.
   final int recentLapsForMedian;
+
+  /// Cooldown entre dois cruzamentos válidos da mesma fronteira de setor (ms).
+  /// Padrão: 10 000 ms (10 s) — tempo mínimo razoável entre dois setores.
+  final int minSectorMs;
 
   LapDetector({
     required this.track,
@@ -92,6 +92,7 @@ class LapDetector {
     this.maxOutlierFraction = 0.20,
     this.maxOutlierMs = 5000,
     this.recentLapsForMedian = 5,
+    this.minSectorMs = 10000,
   }) : positionStreamFactory = positionStreamFactory ??
             (() => Geolocator.getPositionStream(
                   locationSettings: const LocationSettings(
@@ -108,12 +109,18 @@ class LapDetector {
   /// Timestamp do último cruzamento válido da S/C.
   DateTime? _lastCrossingTime;
 
-  /// Heading de referência (radianos) estabelecido no primeiro cruzamento.
-  /// Subsequentes cruzamentos com diferença > 90° são rejeitados.
+  /// Heading de referência (radianos) estabelecido no primeiro cruzamento S/C.
   double? _referenceHeading;
 
   /// Últimas N durações de volta válidas, em ms, para cálculo de mediana.
   final List<int> _recentLapMs = [];
+
+  /// Último sinal do produto vetorial A→B por fronteira de setor.
+  /// Usado pelo fallback de proximidade. 0 = ainda não estabelecido.
+  final List<int> _sectorLastSign = [];
+
+  /// Timestamp do último cruzamento por fronteira de setor (para cooldown).
+  final List<DateTime?> _sectorLastCrossing = [];
 
   Stream<LapEvent> get events => _controller.stream;
 
@@ -123,6 +130,12 @@ class LapDetector {
     _lastCrossingTime = null;
     _referenceHeading = null;
     _recentLapMs.clear();
+    _sectorLastSign
+      ..clear()
+      ..addAll(List.filled(track.sectorBoundaries.length, 0));
+    _sectorLastCrossing
+      ..clear()
+      ..addAll(List.filled(track.sectorBoundaries.length, null));
     _gpsSub = positionStreamFactory().listen(
       _onPosition,
       onError: (_) {
@@ -139,6 +152,8 @@ class LapDetector {
     _lastCrossingTime = null;
     _referenceHeading = null;
     _recentLapMs.clear();
+    _sectorLastSign.clear();
+    _sectorLastCrossing.clear();
   }
 
   void dispose() {
@@ -156,9 +171,9 @@ class LapDetector {
       _checkStartFinish(previous, current, previousTime, currentTime);
 
       for (int i = 0; i < track.sectorBoundaries.length; i++) {
-        final sectorTime = _checkLine(
+        final sectorTime = _checkSectorCrossing(
           previous, current, previousTime, currentTime,
-          track.sectorBoundaries[i],
+          track.sectorBoundaries[i], i,
         );
         if (sectorTime != null) {
           debugPrint(
@@ -169,8 +184,131 @@ class LapDetector {
       }
     }
 
+    // Atualiza sinal por setor após verificar cruzamentos — o sinal anterior
+    // é usado pelo fallback de proximidade no próximo update.
+    // Apenas posições dentro de 20 m da fronteira são usadas para evitar
+    // falsos sign-changes quando o GPS está longe (ex.: após cruzamento S/C).
+    for (int i = 0; i < track.sectorBoundaries.length; i++) {
+      final s = _crossSign(
+        track.sectorBoundaries[i].a,
+        track.sectorBoundaries[i].b,
+        current,
+      );
+      if (s != 0) {
+        const proximityM = 20.0;
+        final perp = _perpDistMeters(
+          current,
+          track.sectorBoundaries[i].a,
+          track.sectorBoundaries[i].b,
+        ).abs();
+        if (perp <= proximityM) _sectorLastSign[i] = s;
+      }
+    }
+
     _previousPosition = current;
     _previousTimestamp = currentTime;
+  }
+
+  /// Detecta cruzamento de fronteira de setor com três mecanismos em cascata:
+  /// 1. Sign-change por sub-segmento com buffer de acurácia GPS (primário).
+  /// 2. Fallback por proximidade perpendicular à linha A→B.
+  /// 3. Cooldown: rejeita se o cruzamento foi detectado há menos de [minSectorMs].
+  DateTime? _checkSectorCrossing(
+    GeoPoint prev,
+    GeoPoint curr,
+    DateTime prevTime,
+    DateTime currTime,
+    TrackLine boundary,
+    int index,
+  ) {
+    // ── 1. SIGN-CHANGE com buffer de acurácia GPS ──────────────────────────
+    // O buffer de 5 m compensa GPS de ~5-10 m de acurácia no Samsung A35.
+    // Isso expande a tolerância de endpoint de widthMeters/2 para
+    // widthMeters/2 + 5 m, evitando rejeições quando o cruzamento aparece
+    // ligeiramente fora dos extremos do segmento.
+    const gpsAccuracyBuffer = 5.0;
+    DateTime? crossingTime = _checkLine(
+      prev, curr, prevTime, currTime, boundary,
+      gpsAccuracyBuffer: gpsAccuracyBuffer,
+    );
+
+    // ── 2. FALLBACK: direção global A→B + distância perpendicular ──────────
+    // Cobre casos onde nenhum sub-segmento da polilinha cruza o vetor GPS
+    // (ex.: fronteiras curvas com muitos middlePoints).
+    crossingTime ??= _checkLineByProximity(
+      prev, curr, prevTime, currTime, boundary, index,
+    );
+
+    if (crossingTime == null) return null;
+
+    // ── 3. COOLDOWN ────────────────────────────────────────────────────────
+    final lastCrossing = _sectorLastCrossing[index];
+    if (lastCrossing != null) {
+      final ms = crossingTime.difference(lastCrossing).inMilliseconds;
+      if (ms < minSectorMs) {
+        debugPrint(
+          '[LapDetector] Setor $index rejeitado (cooldown) — '
+          'ms=$ms < minSectorMs=$minSectorMs',
+        );
+        return null;
+      }
+    }
+
+    _sectorLastCrossing[index] = crossingTime;
+    return crossingTime;
+  }
+
+  /// Fallback de detecção: verifica se a direção global A→B mudou de sinal
+  /// E se o GPS está dentro da zona de proximidade perpendicular da fronteira.
+  ///
+  /// Cobre fronteiras curvas onde o algoritmo de sub-segmento falha porque
+  /// nenhum segmento individual produz um sign-change com crossing dentro dos
+  /// limites — situação comum com 15-40 middlePoints.
+  DateTime? _checkLineByProximity(
+    GeoPoint prev,
+    GeoPoint curr,
+    DateTime prevTime,
+    DateTime currTime,
+    TrackLine boundary,
+    int index,
+  ) {
+    final prevSign = _sectorLastSign[index];
+    if (prevSign == 0) return null;
+
+    final currSign = _crossSign(boundary.a, boundary.b, curr);
+    if (currSign == 0 || prevSign == currSign) return null;
+
+    // Distância perpendicular à reta A→B em metros (sem sinal).
+    const gpsAccuracy = 5.0;
+    final threshold = boundary.widthMeters / 2 + gpsAccuracy;
+    final perpPrev = _perpDistMeters(prev, boundary.a, boundary.b).abs();
+    final perpCurr = _perpDistMeters(curr, boundary.a, boundary.b).abs();
+
+    if (perpPrev > threshold && perpCurr > threshold) {
+      debugPrint(
+        '[LapDetector] Setor $index fallback rejeitado (distância perp) — '
+        'perpPrev=${perpPrev.toStringAsFixed(1)}m '
+        'perpCurr=${perpCurr.toStringAsFixed(1)}m '
+        'threshold=${threshold.toStringAsFixed(1)}m',
+      );
+      return null;
+    }
+
+    // Interpola o timestamp: quanto mais próximo da fronteira, maior o peso.
+    final t = perpPrev / (perpPrev + perpCurr + 1e-9);
+    final dtMicros = currTime.difference(prevTime).inMicroseconds;
+    final crossingTime = prevTime.add(
+      Duration(microseconds: (dtMicros * t).round()),
+    );
+
+    debugPrint(
+      '[LapDetector] Setor $index via fallback de proximidade — '
+      'perpPrev=${perpPrev.toStringAsFixed(1)}m '
+      'perpCurr=${perpCurr.toStringAsFixed(1)}m | '
+      'timestamp=${crossingTime.toIso8601String()}',
+    );
+
+    return crossingTime;
   }
 
   /// Avalia o cruzamento da linha S/C com todas as validações:
@@ -247,7 +385,6 @@ class LapDetector {
           event = LapCrossedEvent(crossingTime);
         }
       } else {
-        // Ainda não há mediana suficiente — aceita sem verificação de outlier.
         debugPrint(
           '[LapDetector] S/C válido (sem mediana ainda) — '
           'lapMs=$lapMs | heading=${heading.toStringAsFixed(3)} rad',
@@ -256,7 +393,6 @@ class LapDetector {
         event = LapCrossedEvent(crossingTime);
       }
     } else {
-      // Primeiro cruzamento: apenas inicia o timer, sem volta a registrar.
       debugPrint(
         '[LapDetector] S/C inicial — '
         'timestamp=${crossingTime.toIso8601String()} | '
@@ -278,18 +414,18 @@ class LapDetector {
   }
 
   /// Verifica se o vetor de movimento [prev]→[curr] cruza algum sub-segmento
-  /// de [line]. Se cruzar, retorna o instante interpolado do cruzamento.
+  /// de [line] via sign-change. Se cruzar, retorna o instante interpolado.
   ///
-  /// Itera sobre todos os pares consecutivos de [TrackLine.allPoints], tratando
-  /// a linha como uma polilinha. Para linhas sem middlePoints o comportamento é
-  /// idêntico à verificação de segmento único original.
+  /// [gpsAccuracyBuffer]: metros adicionados à tolerância de endpoint para
+  /// compensar imprecisão do GPS. Use 0 para S/C (padrão), ~5 m para setores.
   DateTime? _checkLine(
     GeoPoint prev,
     GeoPoint curr,
     DateTime prevTime,
     DateTime currTime,
-    TrackLine? line,
-  ) {
+    TrackLine? line, {
+    double gpsAccuracyBuffer = 0.0,
+  }) {
     if (line == null) return null;
 
     final points = line.allPoints;
@@ -297,18 +433,17 @@ class LapDetector {
       final a = points[i];
       final b = points[i + 1];
 
-      // Passo 1: mudança de sinal confirma cruzamento da reta infinita.
       final signPrev = _crossSign(a, b, prev);
       final signCurr = _crossSign(a, b, curr);
       if (signPrev == 0 || signCurr == 0) continue;
       if (signPrev == signCurr) continue;
 
-      // Passo 2: verifica se o cruzamento cai dentro do sub-segmento (com buffer).
-      final params = _crossingParams(prev, curr, a, b, line.widthMeters);
+      final params = _crossingParams(
+        prev, curr, a, b, line.widthMeters,
+        gpsAccuracyBuffer: gpsAccuracyBuffer,
+      );
       if (params == null) continue;
 
-      // Passo 3: interpola o instante exato do cruzamento usando timestamps GPS,
-      // eliminando o erro de latência de callback.
       final dtMicros = currTime.difference(prevTime).inMicroseconds;
       final crossingTime = prevTime.add(
         Duration(microseconds: (dtMicros * params.t).round()),
@@ -319,7 +454,6 @@ class LapDetector {
   }
 
   /// Sinal do produto vetorial (B-A) × (P-A) em coordenadas 2D planas.
-  /// Retorna 1, -1 ou 0.
   static int _crossSign(GeoPoint a, GeoPoint b, GeoPoint p) {
     final cross = (b.lat - a.lat) * (p.lng - a.lng) -
         (b.lng - a.lng) * (p.lat - a.lat);
@@ -331,55 +465,60 @@ class LapDetector {
   /// Resolve o sistema paramétrico de interseção entre o vetor de movimento
   /// [prev]→[curr] e o segmento [a]→[b].
   ///
-  /// Retorna `(s, t)` onde:
-  /// - `s` é o parâmetro ao longo de [a]→[b] (0 = ponto A, 1 = ponto B),
-  ///   verificado contra os limites do segmento com tolerância [bufferMeters]/2.
-  /// - `t` é o parâmetro ao longo de [prev]→[curr] (0 = prev, 1 = curr),
-  ///   usado para interpolar o timestamp do cruzamento.
-  ///
-  /// Retorna null se as retas forem paralelas ou se `s` estiver fora dos
-  /// limites do segmento.
+  /// [gpsAccuracyBuffer]: buffer adicional em metros na tolerância de endpoint.
   static ({double s, double t})? _crossingParams(
     GeoPoint prev,
     GeoPoint curr,
     GeoPoint a,
     GeoPoint b,
-    double bufferMeters,
-  ) {
+    double bufferMeters, {
+    double gpsAccuracyBuffer = 0.0,
+  }) {
     const lat2m = 111320.0;
     final lng2m = 111320.0 * math.cos(a.lat * math.pi / 180);
 
-    // Vetor de movimento (metros).
     final mx = (curr.lng - prev.lng) * lng2m;
     final my = (curr.lat - prev.lat) * lat2m;
 
-    // Vetor do segmento a→b (metros).
     final lx = (b.lng - a.lng) * lng2m;
     final ly = (b.lat - a.lat) * lat2m;
 
-    // Denominador do sistema paramétrico: lx·my − mx·ly.
     final denom = lx * my - mx * ly;
-    if (denom.abs() < 1e-9) return null; // retas paralelas
+    if (denom.abs() < 1e-9) return null;
 
-    // Vetor de a para prev (metros).
     final ax = (a.lng - prev.lng) * lng2m;
     final ay = (a.lat - prev.lat) * lat2m;
 
-    // s: parâmetro ao longo do segmento a→b onde ocorre o cruzamento.
     final s = (mx * ay - my * ax) / denom;
 
     final segLen = math.sqrt(lx * lx + ly * ly);
-    final tolerance = segLen > 0 ? (bufferMeters / 2) / segLen : 0.0;
+    final tolerance =
+        segLen > 0 ? (bufferMeters / 2 + gpsAccuracyBuffer) / segLen : 0.0;
     if (s < -tolerance || s > 1.0 + tolerance) return null;
 
-    // t: parâmetro ao longo do vetor de movimento prev→curr.
     final t = (lx * ay - ly * ax) / denom;
 
     return (s: s, t: t.clamp(0.0, 1.0));
   }
 
+  /// Distância perpendicular com sinal (metros) de [p] à reta que passa por
+  /// [a] e [b]. Positivo = mesmo lado que a normal (b-a rotacionada 90°).
+  static double _perpDistMeters(GeoPoint p, GeoPoint a, GeoPoint b) {
+    const lat2m = 111320.0;
+    final lng2m = 111320.0 * math.cos(a.lat * math.pi / 180);
+
+    final lx = (b.lng - a.lng) * lng2m;
+    final ly = (b.lat - a.lat) * lat2m;
+    final len = math.sqrt(lx * lx + ly * ly);
+    if (len < 1e-9) return 0;
+
+    final ax = (p.lng - a.lng) * lng2m;
+    final ay = (p.lat - a.lat) * lat2m;
+
+    return (lx * ay - ly * ax) / len;
+  }
+
   /// Bearing do vetor [from]→[to] em radianos no intervalo [-π, π].
-  /// 0 = norte, π/2 = leste, -π/2 = oeste, ±π = sul.
   static double _bearing(GeoPoint from, GeoPoint to) {
     const toRad = math.pi / 180;
     final dLng = (to.lng - from.lng) * toRad;

@@ -498,8 +498,8 @@ void main() {
 
         detector.fireLap();
         await tester.pump(const Duration(milliseconds: 1));
-        clock.advance(const Duration(milliseconds: 300));
-        await tester.pump(const Duration(milliseconds: 300));
+        clock.advance(const Duration(milliseconds: 1300));
+        await tester.pump(const Duration(milliseconds: 1300));
         detector.fireSector(0);
         await tester.pump(const Duration(milliseconds: 1));
 
@@ -523,8 +523,8 @@ void main() {
 
         detector.fireLap();
         await tester.pump(const Duration(milliseconds: 1));
-        clock.advance(const Duration(milliseconds: 100));
-        await tester.pump(const Duration(milliseconds: 100));
+        clock.advance(const Duration(milliseconds: 1100));
+        await tester.pump(const Duration(milliseconds: 1100));
         detector.fireSector(0);
         await tester.pump(const Duration(milliseconds: 1));
 
@@ -570,19 +570,19 @@ void main() {
         final detector = _FakeDetector(clock: clock.call);
         await tester.pumpWidget(_buildScreen(detector: detector, clock: clock.call, track: _trackWithSectors));
 
-        // Volta 1: S1 em ~300ms
+        // Volta 1: S1 em ~3000ms
         detector.fireLap();
         await tester.pump(const Duration(milliseconds: 1));
-        clock.advance(const Duration(milliseconds: 300));
-        await tester.pump(const Duration(milliseconds: 300));
+        clock.advance(const Duration(milliseconds: 3000));
+        await tester.pump(const Duration(milliseconds: 3000));
         detector.fireSector(0);
         await tester.pump(const Duration(milliseconds: 1));
         detector.fireLap();
         await tester.pump(const Duration(milliseconds: 1));
 
-        // Volta 2: S1 em ~100ms (mais rápido)
-        clock.advance(const Duration(milliseconds: 100));
-        await tester.pump(const Duration(milliseconds: 100));
+        // Volta 2: S1 em ~1000ms (mais rápido)
+        clock.advance(const Duration(milliseconds: 1000));
+        await tester.pump(const Duration(milliseconds: 1000));
         detector.fireSector(0);
         await tester.pump(const Duration(milliseconds: 1));
 
@@ -596,19 +596,19 @@ void main() {
         final detector = _FakeDetector(clock: clock.call);
         await tester.pumpWidget(_buildScreen(detector: detector, clock: clock.call, track: _trackWithSectors));
 
-        // Volta 1: S1 em ~100ms
+        // Volta 1: S1 em ~1000ms
         detector.fireLap();
         await tester.pump(const Duration(milliseconds: 1));
-        clock.advance(const Duration(milliseconds: 100));
-        await tester.pump(const Duration(milliseconds: 100));
+        clock.advance(const Duration(milliseconds: 1000));
+        await tester.pump(const Duration(milliseconds: 1000));
         detector.fireSector(0);
         await tester.pump(const Duration(milliseconds: 1));
         detector.fireLap();
         await tester.pump(const Duration(milliseconds: 1));
 
-        // Volta 2: S1 em ~300ms (mais lento)
-        clock.advance(const Duration(milliseconds: 300));
-        await tester.pump(const Duration(milliseconds: 300));
+        // Volta 2: S1 em ~3000ms (mais lento)
+        clock.advance(const Duration(milliseconds: 3000));
+        await tester.pump(const Duration(milliseconds: 3000));
         detector.fireSector(0);
         await tester.pump(const Duration(milliseconds: 1));
 
@@ -624,15 +624,15 @@ void main() {
 
         detector.fireLap();
         await tester.pump(const Duration(milliseconds: 1));
-        clock.advance(const Duration(milliseconds: 300));
-        await tester.pump(const Duration(milliseconds: 300));
+        clock.advance(const Duration(milliseconds: 3000));
+        await tester.pump(const Duration(milliseconds: 3000));
         detector.fireSector(0);
         await tester.pump(const Duration(milliseconds: 1));
         detector.fireLap();
         await tester.pump(const Duration(milliseconds: 1));
 
-        clock.advance(const Duration(milliseconds: 100));
-        await tester.pump(const Duration(milliseconds: 100));
+        clock.advance(const Duration(milliseconds: 1000));
+        await tester.pump(const Duration(milliseconds: 1000));
         detector.fireSector(0);
         await tester.pump(const Duration(milliseconds: 1));
 
@@ -656,8 +656,8 @@ void main() {
 
         detector.fireLap();
         await tester.pump(const Duration(milliseconds: 1));
-        clock.advance(const Duration(milliseconds: 200));
-        await tester.pump(const Duration(milliseconds: 200));
+        clock.advance(const Duration(milliseconds: 1200));
+        await tester.pump(const Duration(milliseconds: 1200));
         detector.fireSector(0);
         await tester.pump(const Duration(milliseconds: 1));
 
@@ -672,19 +672,19 @@ void main() {
         final detector = _FakeDetector(clock: clock.call);
         await tester.pumpWidget(_buildScreen(detector: detector, clock: clock.call, track: _trackWithSectors));
 
-        // Volta 1: S1 em ~300ms
+        // Volta 1: S1 em ~3000ms
         detector.fireLap();
         await tester.pump(const Duration(milliseconds: 1));
-        clock.advance(const Duration(milliseconds: 300));
-        await tester.pump(const Duration(milliseconds: 300));
+        clock.advance(const Duration(milliseconds: 3000));
+        await tester.pump(const Duration(milliseconds: 3000));
         detector.fireSector(0);
         await tester.pump(const Duration(milliseconds: 1));
         detector.fireLap();
         await tester.pump(const Duration(milliseconds: 1));
 
-        // Volta 2: S1 em ~100ms → borda verde ativa
-        clock.advance(const Duration(milliseconds: 100));
-        await tester.pump(const Duration(milliseconds: 100));
+        // Volta 2: S1 em ~1000ms → borda verde ativa
+        clock.advance(const Duration(milliseconds: 1000));
+        await tester.pump(const Duration(milliseconds: 1000));
         detector.fireSector(0);
         await tester.pump(const Duration(milliseconds: 1));
 
@@ -707,6 +707,91 @@ void main() {
       });
     });
 
+    group('CA-BUG-001-02: tempo de setor < 1s é rejeitado', () {
+      testWidgets('setor disparado 500ms após início da volta não é registrado', (tester) async {
+        final clock = _TestClock();
+        final detector = _FakeDetector(clock: clock.call);
+        await tester.pumpWidget(_buildScreen(
+          detector: detector,
+          clock: clock.call,
+          track: _trackWithSectors,
+        ));
+
+        detector.fireLap();
+        await tester.pump(const Duration(milliseconds: 1));
+
+        // Avança apenas 500ms — abaixo do mínimo de 1000ms
+        clock.advance(const Duration(milliseconds: 500));
+        await tester.pump(const Duration(milliseconds: 500));
+        detector.fireSector(0);
+        await tester.pump(const Duration(milliseconds: 1));
+
+        // Nenhum tempo de setor deve estar visível
+        expect(
+          find.byWidgetPredicate(
+            (w) =>
+                w is Text &&
+                w.data != null &&
+                RegExp(r'^\d+\.\d{3}$').hasMatch(w.data!),
+          ),
+          findsNothing,
+          reason: 'Setor com tempo < 1s não deve ser registrado',
+        );
+      });
+
+      testWidgets('setor disparado 1200ms após início da volta é registrado', (tester) async {
+        final clock = _TestClock();
+        final detector = _FakeDetector(clock: clock.call);
+        await tester.pumpWidget(_buildScreen(
+          detector: detector,
+          clock: clock.call,
+          track: _trackWithSectors,
+        ));
+
+        detector.fireLap();
+        await tester.pump(const Duration(milliseconds: 1));
+
+        // Avança 1200ms — acima do mínimo de 1000ms
+        clock.advance(const Duration(milliseconds: 1200));
+        await tester.pump(const Duration(milliseconds: 1200));
+        detector.fireSector(0);
+        await tester.pump(const Duration(milliseconds: 1));
+
+        expect(find.text('1.200'), findsOneWidget,
+            reason: 'Setor com tempo >= 1s deve ser registrado normalmente');
+      });
+
+      testWidgets('setor rejeitado por < 1s não avança _nextSectorIndex', (tester) async {
+        // Se sectorTime < 1s for rejeitado, _nextSectorIndex permanece em 0.
+        // O próximo evento S1 (agora com tempo > 1s) deve ser aceito.
+        final clock = _TestClock();
+        final detector = _FakeDetector(clock: clock.call);
+        await tester.pumpWidget(_buildScreen(
+          detector: detector,
+          clock: clock.call,
+          track: _trackWithSectors,
+        ));
+
+        detector.fireLap();
+        await tester.pump(const Duration(milliseconds: 1));
+
+        // Evento de setor rejeitado (500ms)
+        clock.advance(const Duration(milliseconds: 500));
+        await tester.pump(const Duration(milliseconds: 500));
+        detector.fireSector(0);
+        await tester.pump(const Duration(milliseconds: 1));
+
+        // Segundo evento de setor válido (700ms depois do primeiro → 1200ms total)
+        clock.advance(const Duration(milliseconds: 700));
+        await tester.pump(const Duration(milliseconds: 700));
+        detector.fireSector(0);
+        await tester.pump(const Duration(milliseconds: 1));
+
+        expect(find.text('1.200'), findsOneWidget,
+            reason: 'Setor rejeitado não deve consumir o slot — próximo S1 válido deve ser aceito');
+      });
+    });
+
     group('splits de setor (tempo do setor, não cumulativo)', () {
       testWidgets('S1 exibe tempo desde o início da volta', (tester) async {
         final clock = _TestClock();
@@ -719,12 +804,12 @@ void main() {
 
         detector.fireLap();
         await tester.pump(const Duration(milliseconds: 1));
-        clock.advance(const Duration(milliseconds: 200));
-        await tester.pump(const Duration(milliseconds: 200));
-        detector.fireSector(0); // S1 split = 200ms
+        clock.advance(const Duration(milliseconds: 1200));
+        await tester.pump(const Duration(milliseconds: 1200));
+        detector.fireSector(0); // S1 split = 1200ms
         await tester.pump(const Duration(milliseconds: 1));
 
-        expect(find.text('0.200'), findsOneWidget);
+        expect(find.text('1.200'), findsOneWidget);
       });
 
       testWidgets('S2 exibe split do setor, não tempo cumulativo', (tester) async {
@@ -739,20 +824,20 @@ void main() {
         detector.fireLap();
         await tester.pump(const Duration(milliseconds: 1));
 
-        // S1: lapMs = 100ms → split S1 = 100ms
-        clock.advance(const Duration(milliseconds: 100));
-        await tester.pump(const Duration(milliseconds: 100));
+        // S1: lapMs = 1000ms → split S1 = 1000ms
+        clock.advance(const Duration(milliseconds: 1000));
+        await tester.pump(const Duration(milliseconds: 1000));
         detector.fireSector(0);
         await tester.pump(const Duration(milliseconds: 1));
 
-        // S2: lapMs = 300ms → split S2 = 300 - 100 = 200ms (não 300ms)
-        clock.advance(const Duration(milliseconds: 200));
-        await tester.pump(const Duration(milliseconds: 200));
+        // S2: lapMs = 3000ms → split S2 = 3000 - 1000 = 2000ms (não 3000ms)
+        clock.advance(const Duration(milliseconds: 2000));
+        await tester.pump(const Duration(milliseconds: 2000));
         detector.fireSector(1);
         await tester.pump(const Duration(milliseconds: 1));
 
-        expect(find.text('0.200'), findsOneWidget); // split correto
-        expect(find.text('0.300'), findsNothing);   // valor cumulativo NÃO exibido
+        expect(find.text('2.000'), findsOneWidget); // split correto
+        expect(find.text('3.000'), findsNothing);   // valor cumulativo NÃO exibido
       });
 
       testWidgets('S3 exibe split do setor desde S2', (tester) async {
@@ -767,22 +852,22 @@ void main() {
         detector.fireLap();
         await tester.pump(const Duration(milliseconds: 1));
 
-        clock.advance(const Duration(milliseconds: 100));
-        await tester.pump(const Duration(milliseconds: 100));
-        detector.fireSector(0); // S1 = 100ms
+        clock.advance(const Duration(milliseconds: 1000));
+        await tester.pump(const Duration(milliseconds: 1000));
+        detector.fireSector(0); // S1 = 1000ms
         await tester.pump(const Duration(milliseconds: 1));
 
-        clock.advance(const Duration(milliseconds: 200));
-        await tester.pump(const Duration(milliseconds: 200));
-        detector.fireSector(1); // S2 split = 200ms
+        clock.advance(const Duration(milliseconds: 1500));
+        await tester.pump(const Duration(milliseconds: 1500));
+        detector.fireSector(1); // S2 split = 1500ms
         await tester.pump(const Duration(milliseconds: 1));
 
-        clock.advance(const Duration(milliseconds: 150));
-        await tester.pump(const Duration(milliseconds: 150));
-        detector.fireSector(2); // S3 split = 150ms
+        clock.advance(const Duration(milliseconds: 2000));
+        await tester.pump(const Duration(milliseconds: 2000));
+        detector.fireSector(2); // S3 split = 2000ms
         await tester.pump(const Duration(milliseconds: 1));
 
-        expect(find.text('0.150'), findsOneWidget);
+        expect(find.text('2.000'), findsOneWidget);
       });
 
       testWidgets('splits resetam para zero no início de nova volta', (tester) async {
@@ -797,13 +882,13 @@ void main() {
         detector.fireLap();
         await tester.pump(const Duration(milliseconds: 1));
 
-        clock.advance(const Duration(milliseconds: 100));
-        await tester.pump(const Duration(milliseconds: 100));
+        clock.advance(const Duration(milliseconds: 1000));
+        await tester.pump(const Duration(milliseconds: 1000));
         detector.fireSector(0);
         await tester.pump(const Duration(milliseconds: 1));
 
-        clock.advance(const Duration(milliseconds: 200));
-        await tester.pump(const Duration(milliseconds: 200));
+        clock.advance(const Duration(milliseconds: 1500));
+        await tester.pump(const Duration(milliseconds: 1500));
         detector.fireSector(1);
         await tester.pump(const Duration(milliseconds: 1));
 
@@ -812,13 +897,13 @@ void main() {
         await tester.pump(const Duration(milliseconds: 1));
 
         // Nova volta: S1 deve contar a partir de zero
-        clock.advance(const Duration(milliseconds: 150));
-        await tester.pump(const Duration(milliseconds: 150));
+        clock.advance(const Duration(milliseconds: 2000));
+        await tester.pump(const Duration(milliseconds: 2000));
         detector.fireSector(0);
         await tester.pump(const Duration(milliseconds: 1));
 
-        expect(find.text('0.150'), findsOneWidget);
-        expect(find.text('0.200'), findsNothing); // split S2 da volta anterior não aparece
+        expect(find.text('2.000'), findsOneWidget);
+        expect(find.text('1.500'), findsNothing); // split S2 da volta anterior não aparece
       });
     });
 
@@ -832,28 +917,28 @@ void main() {
           track: _trackWithSectors,
         ));
 
-        // Volta 1: S1=100ms, S2 split=300ms
+        // Volta 1: S1=1000ms, S2 split=3000ms
         detector.fireLap();
         await tester.pump(const Duration(milliseconds: 1));
-        clock.advance(const Duration(milliseconds: 100));
-        await tester.pump(const Duration(milliseconds: 100));
+        clock.advance(const Duration(milliseconds: 1000));
+        await tester.pump(const Duration(milliseconds: 1000));
         detector.fireSector(0);
         await tester.pump(const Duration(milliseconds: 1));
-        clock.advance(const Duration(milliseconds: 300));
-        await tester.pump(const Duration(milliseconds: 300));
+        clock.advance(const Duration(milliseconds: 3000));
+        await tester.pump(const Duration(milliseconds: 3000));
         detector.fireSector(1);
         await tester.pump(const Duration(milliseconds: 1));
         detector.fireLap();
         await tester.pump(const Duration(milliseconds: 1));
 
-        // Volta 2: S1=100ms, S2 split=200ms (melhora de 100ms)
-        clock.advance(const Duration(milliseconds: 100));
-        await tester.pump(const Duration(milliseconds: 100));
+        // Volta 2: S1=1000ms, S2 split=2000ms (melhora de 1000ms)
+        clock.advance(const Duration(milliseconds: 1000));
+        await tester.pump(const Duration(milliseconds: 1000));
         detector.fireSector(0);
         await tester.pump(const Duration(milliseconds: 1));
-        clock.advance(const Duration(milliseconds: 200));
-        await tester.pump(const Duration(milliseconds: 200));
-        detector.fireSector(1); // 200 < 300 → verde
+        clock.advance(const Duration(milliseconds: 2000));
+        await tester.pump(const Duration(milliseconds: 2000));
+        detector.fireSector(1); // 2000 < 3000 → verde
         await tester.pump(const Duration(milliseconds: 1));
 
         final cell = tester.widget<Container>(find.byKey(const Key('sector_cell_s2')));
@@ -869,28 +954,28 @@ void main() {
           track: _trackWithSectors,
         ));
 
-        // Volta 1: S1=100ms, S2 split=200ms
+        // Volta 1: S1=1000ms, S2 split=2000ms
         detector.fireLap();
         await tester.pump(const Duration(milliseconds: 1));
-        clock.advance(const Duration(milliseconds: 100));
-        await tester.pump(const Duration(milliseconds: 100));
+        clock.advance(const Duration(milliseconds: 1000));
+        await tester.pump(const Duration(milliseconds: 1000));
         detector.fireSector(0);
         await tester.pump(const Duration(milliseconds: 1));
-        clock.advance(const Duration(milliseconds: 200));
-        await tester.pump(const Duration(milliseconds: 200));
+        clock.advance(const Duration(milliseconds: 2000));
+        await tester.pump(const Duration(milliseconds: 2000));
         detector.fireSector(1);
         await tester.pump(const Duration(milliseconds: 1));
         detector.fireLap();
         await tester.pump(const Duration(milliseconds: 1));
 
-        // Volta 2: S1=100ms, S2 split=300ms (piora de 100ms)
-        clock.advance(const Duration(milliseconds: 100));
-        await tester.pump(const Duration(milliseconds: 100));
+        // Volta 2: S1=1000ms, S2 split=3000ms (piora de 1000ms)
+        clock.advance(const Duration(milliseconds: 1000));
+        await tester.pump(const Duration(milliseconds: 1000));
         detector.fireSector(0);
         await tester.pump(const Duration(milliseconds: 1));
-        clock.advance(const Duration(milliseconds: 300));
-        await tester.pump(const Duration(milliseconds: 300));
-        detector.fireSector(1); // 300 > 200 → vermelho
+        clock.advance(const Duration(milliseconds: 3000));
+        await tester.pump(const Duration(milliseconds: 3000));
+        detector.fireSector(1); // 3000 > 2000 → vermelho
         await tester.pump(const Duration(milliseconds: 1));
 
         final cell = tester.widget<Container>(find.byKey(const Key('sector_cell_s2')));

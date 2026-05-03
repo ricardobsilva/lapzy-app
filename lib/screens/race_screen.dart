@@ -213,6 +213,16 @@ class _RaceScreenState extends State<RaceScreen> {
     final crossingMs =
         event.timestamp.difference(_lapStartTime!).inMilliseconds;
     final sectorTime = crossingMs - _lapMsAtLastSector;
+
+    // CA-BUG-001-02: rejeita tempos < 1s — indica bug de timestamp ou
+    // double-fire que passou pelo cooldown do LapDetector.
+    if (sectorTime < 1000) {
+      debugPrint(
+        '[RaceScreen] Setor $sectorIndex rejeitado (tempo < 1s): ${sectorTime}ms',
+      );
+      return;
+    }
+
     _lapMsAtLastSector = crossingMs;
     final feedbackColor = _computeSectorFeedback(sectorIndex, sectorTime);
 

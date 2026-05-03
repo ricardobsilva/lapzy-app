@@ -821,7 +821,6 @@ void main() {
     group('passa perto mas não cruza', () {
       test('GPS tangencia a linha sem cruzar → sem evento', () async {
         final ctrl = StreamController<Position>();
-        // Linha em lat=-23.5, largura 6m (~0.000054 graus lat)
         const track = Track(
           id: 'narrow',
           name: 'Narrow',
@@ -846,6 +845,341 @@ void main() {
         await Future.delayed(Duration.zero);
 
         expect(events, isEmpty);
+
+        detector.dispose();
+        await ctrl.close();
+      });
+    });
+
+    // ── TASK-018: detecção de setor com GPS esparso ───────────────────────────
+
+    group('TASK-018: buffer de acurácia GPS no endpoint do segmento', () {
+      // CA-BUG-001-04: reproduz o cenário de cruzamento ~2m além do endpoint.
+      // Sem buffer (widthMeters=3m → tol=1.5m): s≈1.21 > 1.15 → rejeitado.
+      // Com buffer de 5m (tol=6.5m): s≈1.21 < 1.65 → aceito.
+      //
+      // Setup: fronteira de ~9.5m (A→B horizontal), kart cruza a 2m além de B.
+      // Representa GPS de ~5m de acurácia em kart que cruza perto do extremo.
+      test('cruzamento 2m além do endpoint é detectado com buffer de acurácia', () async {
+        final ctrl = StreamController<Position>();
+        // Fronteira horizontal em lat=-23.490, de lng=-46.630 até ≈-46.629907
+        // (~9.5m de comprimento, sem middlePoints)
+        const track = Track(
+          id: 'test',
+          name: 'Test',
+          startFinishLine: TrackLine(
+            a: GeoPoint(-23.500, -46.630),
+            b: GeoPoint(-23.500, -46.620),
+            widthMeters: 50.0,
+          ),
+          sectorBoundaries: [
+            TrackLine(
+              a: GeoPoint(-23.490, -46.630),
+              b: GeoPoint(-23.490, -46.629907), // ~9.5m de comprimento
+              widthMeters: 3.0,
+            ),
+          ],
+        );
+        final detector = LapDetector(
+          track: track,
+          positionStreamFactory: () => ctrl.stream,
+          minLapMs: 1000,
+          minSectorMs: 1000,
+        );
+        detector.start();
+
+        final events = <LapEvent>[];
+        detector.events.listen(events.add);
+
+        final base = DateTime(2026, 1, 1, 12, 0, 0);
+
+        // Inicia volta (S/C)
+        ctrl.add(_posAt(-23.5004, -46.625, base));
+        await Future.delayed(Duration.zero);
+        ctrl.add(_posAt(-23.4996, -46.625, base.add(const Duration(seconds: 1))));
+        await Future.delayed(Duration.zero);
+
+        // Cruza setor com GPS ≈2m além do endpoint B (-46.629907)
+        // lng = -46.630 + 0.0001126 = -46.6298874 (s≈1.21)
+        final tSector = base.add(const Duration(seconds: 30));
+        ctrl.add(_posAt(-23.4904, -46.6298874, tSector));
+        await Future.delayed(Duration.zero);
+        ctrl.add(_posAt(-23.4896, -46.6298874,
+            tSector.add(const Duration(seconds: 1))));
+        await Future.delayed(Duration.zero);
+
+        final sectorEvents = events.whereType<SectorCrossedEvent>().toList();
+        expect(sectorEvents, hasLength(1),
+            reason: 'Buffer de acurácia GPS deve aceitar cruzamento 2m além do endpoint');
+        expect(sectorEvents.first.sectorIndex, 0);
+
+        detector.dispose();
+        await ctrl.close();
+      });
+
+      test('cruzamento muito além do endpoint (>10m) não é detectado', () async {
+        final ctrl = StreamController<Position>();
+        const track = Track(
+          id: 'test',
+          name: 'Test',
+          startFinishLine: TrackLine(
+            a: GeoPoint(-23.500, -46.630),
+            b: GeoPoint(-23.500, -46.620),
+            widthMeters: 50.0,
+          ),
+          sectorBoundaries: [
+            TrackLine(
+              a: GeoPoint(-23.490, -46.630),
+              b: GeoPoint(-23.490, -46.629907), // ~9.5m de comprimento
+              widthMeters: 3.0,
+            ),
+          ],
+        );
+        final detector = LapDetector(
+          track: track,
+          positionStreamFactory: () => ctrl.stream,
+          minLapMs: 1000,
+          minSectorMs: 1000,
+        );
+        detector.start();
+
+        final events = <LapEvent>[];
+        detector.events.listen(events.add);
+
+        final base = DateTime(2026, 1, 1, 12, 0, 0);
+
+        ctrl.add(_posAt(-23.5004, -46.625, base));
+        await Future.delayed(Duration.zero);
+        ctrl.add(_posAt(-23.4996, -46.625, base.add(const Duration(seconds: 1))));
+        await Future.delayed(Duration.zero);
+
+        // GPS muito além do endpoint: lng = A + 0.0003 (~30m além de B)
+        final tSector = base.add(const Duration(seconds: 30));
+        ctrl.add(_posAt(-23.4904, -46.6297, tSector));
+        await Future.delayed(Duration.zero);
+        ctrl.add(_posAt(-23.4896, -46.6297,
+            tSector.add(const Duration(seconds: 1))));
+        await Future.delayed(Duration.zero);
+
+        expect(events.whereType<SectorCrossedEvent>(), isEmpty,
+            reason: 'GPS 30m além do endpoint não deve ser aceito');
+
+        detector.dispose();
+        await ctrl.close();
+      });
+    });
+
+    group('TASK-018: fallback de proximidade para fronteiras curvas', () {
+      // Fronteira em forma de V invertido: A e B na mesma lat, midPoint mais ao sul.
+      // Para GPS movendo-se de sul para norte no centro do V:
+      //   - Nenhum sub-segmento (A→mid, mid→B) produz sign-change com o vetor GPS.
+      //   - A direção global A→B SIM produz sign-change.
+      //   - A distância perpendicular à reta A→B é ~7.8m < threshold (8m para widthMeters=6m).
+      // → Deve ser detectado via fallback de proximidade.
+      test('fronteira curva (V invertido) com GPS ±7.8m detecta via fallback', () async {
+        final ctrl = StreamController<Position>();
+        // A e B na mesma lat (-23.5000), midPoint 0.0001° mais ao sul (-23.5001)
+        // e ao centro do lng → forma um V cujo fundo aponta para o sul.
+        const track = Track(
+          id: 'test',
+          name: 'Test',
+          startFinishLine: TrackLine(
+            a: GeoPoint(-23.500, -46.630),
+            b: GeoPoint(-23.500, -46.620),
+            widthMeters: 50.0,
+          ),
+          sectorBoundaries: [
+            TrackLine(
+              a: GeoPoint(-23.5000, -46.625),
+              b: GeoPoint(-23.5000, -46.623),
+              middlePoints: [GeoPoint(-23.5001, -46.624)],
+              widthMeters: 6.0,
+            ),
+          ],
+        );
+        final detector = LapDetector(
+          track: track,
+          positionStreamFactory: () => ctrl.stream,
+          minLapMs: 1000,
+          minSectorMs: 1000,
+        );
+        detector.start();
+
+        final events = <LapEvent>[];
+        detector.events.listen(events.add);
+
+        final base = DateTime(2026, 1, 1, 12, 0, 0);
+
+        // Inicia volta (S/C) — usa lng=-46.628 para evitar cruzar pelo
+        // endpoint A da fronteira de setor (que está em lng=-46.625).
+        ctrl.add(_posAt(-23.5004, -46.628, base));
+        await Future.delayed(Duration.zero);
+        ctrl.add(_posAt(-23.4996, -46.628, base.add(const Duration(seconds: 1))));
+        await Future.delayed(Duration.zero);
+
+        // Estabelece sinal do setor antes do cruzamento (GPS ao sul do setor)
+        ctrl.add(_posAt(-23.50007, -46.624,
+            base.add(const Duration(seconds: 29))));
+        await Future.delayed(Duration.zero);
+
+        // GPS cruza o V: prev ≈7.8m ao sul da linha A→B, curr ≈7.8m ao norte.
+        // Nenhum sub-segmento do V produz sign-change → fallback de proximidade.
+        final tSector = base.add(const Duration(seconds: 30));
+        ctrl.add(_posAt(-23.50007, -46.624, tSector));
+        await Future.delayed(Duration.zero);
+        ctrl.add(_posAt(-23.49993, -46.624,
+            tSector.add(const Duration(seconds: 1))));
+        await Future.delayed(Duration.zero);
+
+        final sectorEvents = events.whereType<SectorCrossedEvent>().toList();
+        expect(sectorEvents, hasLength(1),
+            reason: 'Fallback de proximidade deve detectar cruzamento de V invertido');
+        expect(sectorEvents.first.sectorIndex, 0);
+
+        detector.dispose();
+        await ctrl.close();
+      });
+
+      test('GPS longe da fronteira curva (>threshold) não dispara fallback', () async {
+        final ctrl = StreamController<Position>();
+        const track = Track(
+          id: 'test',
+          name: 'Test',
+          startFinishLine: TrackLine(
+            a: GeoPoint(-23.500, -46.630),
+            b: GeoPoint(-23.500, -46.620),
+            widthMeters: 50.0,
+          ),
+          sectorBoundaries: [
+            TrackLine(
+              a: GeoPoint(-23.5000, -46.625),
+              b: GeoPoint(-23.5000, -46.623),
+              middlePoints: [GeoPoint(-23.5001, -46.624)],
+              widthMeters: 6.0,
+            ),
+          ],
+        );
+        final detector = LapDetector(
+          track: track,
+          positionStreamFactory: () => ctrl.stream,
+          minLapMs: 1000,
+          minSectorMs: 1000,
+        );
+        detector.start();
+
+        final events = <LapEvent>[];
+        detector.events.listen(events.add);
+
+        final base = DateTime(2026, 1, 1, 12, 0, 0);
+
+        // Usa lng=-46.628 para evitar cruzar pelo endpoint A da fronteira (lng=-46.625).
+        ctrl.add(_posAt(-23.5004, -46.628, base));
+        await Future.delayed(Duration.zero);
+        ctrl.add(_posAt(-23.4996, -46.628, base.add(const Duration(seconds: 1))));
+        await Future.delayed(Duration.zero);
+
+        // GPS estabelece sinal ao sul — usa lng=-46.627 (fora da faixa da fronteira
+        // V, que vai de -46.625 a -46.623) para evitar cruzar o vértice do V.
+        ctrl.add(_posAt(-23.50015, -46.627,
+            base.add(const Duration(seconds: 29))));
+        await Future.delayed(Duration.zero);
+
+        // GPS muda de lado mas está ~16.7m perpendicular (> threshold 8m)
+        final tSector = base.add(const Duration(seconds: 30));
+        ctrl.add(_posAt(-23.50015, -46.627, tSector));
+        await Future.delayed(Duration.zero);
+        ctrl.add(_posAt(-23.49985, -46.627,
+            tSector.add(const Duration(seconds: 1))));
+        await Future.delayed(Duration.zero);
+
+        expect(events.whereType<SectorCrossedEvent>(), isEmpty,
+            reason: 'GPS longe da fronteira não deve disparar fallback');
+
+        detector.dispose();
+        await ctrl.close();
+      });
+    });
+
+    group('TASK-018: cooldown por fronteira de setor', () {
+      test('segundo cruzamento de setor dentro do cooldown → rejeitado', () async {
+        final ctrl = StreamController<Position>();
+        final track = _trackWithSectors();
+        final detector = LapDetector(
+          track: track,
+          positionStreamFactory: () => ctrl.stream,
+          minLapMs: 1000,
+          minSectorMs: 10000, // 10s de cooldown
+        );
+        detector.start();
+
+        final events = <LapEvent>[];
+        detector.events.listen(events.add);
+
+        final base = DateTime(2026, 1, 1, 12, 0, 0);
+
+        // Primeiro cruzamento do setor 0
+        ctrl.add(_posAt(-23.4904, -46.625, base));
+        await Future.delayed(Duration.zero);
+        ctrl.add(_posAt(-23.4896, -46.625,
+            base.add(const Duration(seconds: 1))));
+        await Future.delayed(Duration.zero);
+
+        // Segundo cruzamento do setor 0 a 3s (< cooldown de 10s)
+        ctrl.add(_posAt(-23.4904, -46.625,
+            base.add(const Duration(seconds: 3))));
+        await Future.delayed(Duration.zero);
+        ctrl.add(_posAt(-23.4896, -46.625,
+            base.add(const Duration(seconds: 4))));
+        await Future.delayed(Duration.zero);
+
+        final sectorEvents = events.whereType<SectorCrossedEvent>().toList();
+        expect(sectorEvents, hasLength(1),
+            reason: 'Segundo cruzamento dentro do cooldown deve ser rejeitado');
+
+        detector.dispose();
+        await ctrl.close();
+      });
+
+      test('segundo cruzamento de setor após o cooldown → aceito', () async {
+        final ctrl = StreamController<Position>();
+        final track = _trackWithSectors();
+        final detector = LapDetector(
+          track: track,
+          positionStreamFactory: () => ctrl.stream,
+          minLapMs: 1000,
+          minSectorMs: 5000, // 5s de cooldown
+        );
+        detector.start();
+
+        final events = <LapEvent>[];
+        detector.events.listen(events.add);
+
+        final base = DateTime(2026, 1, 1, 12, 0, 0);
+
+        // Primeiro cruzamento do setor 0 (sul→norte)
+        ctrl.add(_posAt(-23.4904, -46.625, base));
+        await Future.delayed(Duration.zero);
+        ctrl.add(_posAt(-23.4896, -46.625,
+            base.add(const Duration(seconds: 1))));
+        await Future.delayed(Duration.zero);
+
+        // Recuo imediato ao sul (2s) — back-crossing dentro do cooldown de 5s
+        // → rejeitado pelo cooldown, reestabelece GPS ao sul para a próxima volta.
+        ctrl.add(_posAt(-23.4904, -46.625,
+            base.add(const Duration(seconds: 2))));
+        await Future.delayed(Duration.zero);
+
+        // Segundo cruzamento a 20s (> cooldown de 5s desde o primeiro)
+        ctrl.add(_posAt(-23.4904, -46.625,
+            base.add(const Duration(seconds: 20))));
+        await Future.delayed(Duration.zero);
+        ctrl.add(_posAt(-23.4896, -46.625,
+            base.add(const Duration(seconds: 21))));
+        await Future.delayed(Duration.zero);
+
+        final sectorEvents = events.whereType<SectorCrossedEvent>().toList();
+        expect(sectorEvents, hasLength(2),
+            reason: 'Segundo cruzamento após o cooldown deve ser aceito');
 
         detector.dispose();
         await ctrl.close();
