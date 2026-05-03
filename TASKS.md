@@ -2,6 +2,7 @@
 
 ## Doing
 
+<<<<<<< HEAD
 ## Backlog
 
 - [ ] TASK-022 · Feature — Heatmap de Velocidade no Traçado (bottom sheet detalhe de volta)
@@ -218,6 +219,9 @@
 
   ### Contexto e decisões de design
 
+  **Fluxo natural do usuário**
+  O piloto não precisa de toggle nem sensor: ele simplesmente bloqueia a tela com o botão de power e guarda o celular no bolso. O wakelock permanente (`WakelockPlus.enable()`) não impede esse gesto — o botão de power é um override do sistema. O Foreground Service garante que o GPS continue rodando com a tela bloqueada.
+
   **Problema**
   O Android pode matar o processo do app quando a tela apaga (especialmente em dispositivos com agressiva gestão de bateria, como Samsung). O `Geolocator.getPositionStream()` para de receber eventos sem um Foreground Service ativo.
 
@@ -225,12 +229,19 @@
   Criar um Android Foreground Service que mantém o processo vivo e o GPS rodando durante toda a sessão de corrida. O serviço deve:
   - Iniciar quando a RaceScreen é montada
   - Exibir uma notificação persistente obrigatória (requisito Android para Foreground Service): "Lapzy · Corrida em andamento"
+  - A notificação deve ter intent que traz o app ao foreground ao ser tocada
   - Parar quando a RaceScreen é desmontada (dispose)
   - Usar `foregroundServiceType: location` no AndroidManifest
 
+  **Retorno ao app com corrida ativa**
+  Quando o usuário abre o app (via notificação ou ícone) com a tela bloqueada e corrida em andamento:
+  - O Flutter retorna ao foreground com estado preservado (processo vivo pelo Foreground Service)
+  - A RaceScreen já está ativa em landscape (`setPreferredOrientations` continua valendo)
+  - O `launchMode="singleTop"` no AndroidManifest impede criação de nova Activity
+
   **Stack**
-  - Pacote recomendado: `flutter_foreground_task` (mantido, suporta location type)
-  - Alternativa nativa: implementar diretamente via MethodChannel em Kotlin
+  - Implementação nativa via MethodChannel em Kotlin (sem dependência de pacote externo)
+  - Um único canal `lapzy/foreground_service` com métodos `start` e `stop`
 
   **Permissões adicionais**
   - `FOREGROUND_SERVICE` (obrigatória)
@@ -239,123 +250,16 @@
 
   ### Critérios de aceite
 
-  - CA-POCKET-003-01: com tela apagada (botão de desligar tela), o LapDetector continua emitindo LapCrossedEvent e SectorCrossedEvent
+  - CA-POCKET-003-01: com tela bloqueada (botão de power), o LapDetector continua emitindo LapCrossedEvent e SectorCrossedEvent
   - CA-POCKET-003-02: uma notificação persistente "Lapzy · Corrida em andamento" fica visível na barra de status durante toda a corrida
-  - CA-POCKET-003-03: ao encerrar a corrida (FINALIZAR), o Foreground Service é parado e a notificação desaparece
-  - CA-POCKET-003-04: o Foreground Service não persiste após o app ser fechado pelo usuário (swipe no recents)
-  - CA-POCKET-003-05: no Samsung A35 (Android 14), o GPS detecta voltas corretamente com a tela apagada por pelo menos 10 minutos contínuos
+  - CA-POCKET-003-03: tocar na notificação abre o app e exibe a RaceScreen em landscape com a corrida em andamento
+  - CA-POCKET-003-04: ao encerrar a corrida (FINALIZAR), o Foreground Service é parado e a notificação desaparece
+  - CA-POCKET-003-05: o Foreground Service não persiste após o app ser fechado pelo usuário (swipe no recents)
+  - CA-POCKET-003-06: no Samsung A35 (Android 14), o GPS detecta voltas corretamente com a tela bloqueada por pelo menos 10 minutos contínuos
 
-- [ ] TASK-016 · Modo Bolso — Wakelock Adaptativo (US POCKET-002)
-  Como piloto, quero que a tela apague durante a corrida quando não há eventos, para que a bateria dure a sessão inteira sem precisar de suporte de celular.
-  refs: docs/principios.md, docs/testing.md
-
-  ### Contexto e decisões de design
-
-  **Problema**
-  Hoje `WakelockPlus.enable()` mantém a tela acesa durante toda a corrida. Com o celular no bolso, isso drena a bateria rapidamente e gera risco de toque acidental.
-
-  **Solução: wakelock baseado em eventos**
-  - Remover o `WakelockPlus.enable()` permanente do `initState`
-  - Ao detectar um evento de corrida (LapCrossedEvent ou SectorCrossedEvent), chamar `WakelockPlus.enable()` por 5 segundos e depois `WakelockPlus.disable()`
-  - O Android gerencia o apagamento da tela naturalmente pelo timeout do sistema
-
-  **Comportamento esperado**
-  - Tela liga brevemente a cada cruzamento de linha (volta ou setor) para mostrar o feedback visual
-  - Entre eventos, a tela apaga normalmente pelo timeout do usuário
-  - Ao tocar na tela, ela acende normalmente (comportamento padrão Android)
-
-  **Dependência**
-  TASK-017 (Foreground Service) deve estar concluída antes — sem ela, apagar a tela pode matar o GPS.
-
-  ### Critérios de aceite
-
-  - CA-POCKET-002-01: a tela apaga automaticamente após o timeout de display configurado pelo usuário, sem nenhum toque
-  - CA-POCKET-002-02: ao cruzar a linha de largada/chegada, a tela acende por exatamente 5 segundos e apaga em seguida
-  - CA-POCKET-002-03: ao cruzar uma fronteira de setor, a tela acende por exatamente 5 segundos e apaga em seguida
-  - CA-POCKET-002-04: tocar na tela durante a corrida acende a tela normalmente (wakelock não interfere com interação do usuário)
-  - CA-POCKET-002-05: ao encerrar a corrida, `WakelockPlus.disable()` é chamado (comportamento idêntico ao atual no dispose)
-
-- [ ] TASK-015 · Modo Bolso — Proteção Contra Toque Acidental (US POCKET-001)
-  Como piloto, quero que toques acidentais no bolso não interrompam a corrida, para que eu possa guardar o celular com segurança.
-  refs: docs/principios.md, docs/testing.md
-
-  ### Contexto e decisões de design
-
-  **Problema**
-  Com a tela acesa no bolso (estado atual) ou acendendo por eventos (após TASK-016), existe risco de toque acidental no botão FINALIZAR. Embora o botão exija 2s de pressão contínua, tecido de bolso pode simular isso.
-
-  **Solução: lock de toque quando tela acende por evento**
-  Quando a tela acende via wakelock de evento (não por toque do usuário), bloquear input por 2 segundos exibindo um overlay semitransparente com o texto "TOQUE PARA INTERAGIR".
-
-  **Distinguir "acendeu por evento" de "acendeu por toque"**
-  - Ao disparar o wakelock de evento, setar um flag `_screenOnByEvent = true`
-  - Ao detectar o primeiro `PointerDownEvent` na tela, limpar o flag e remover o overlay
-  - Se a tela já estava acesa (usuário estava olhando), o flag não é setado — sem overlay
-
-  **Dependência**
-  TASK-016 (Wakelock Adaptativo) deve estar concluída antes.
-
-  ### Critérios de aceite
-
-  - CA-POCKET-001-01: quando a tela acende por evento de corrida (cruzamento de linha), um overlay "TOQUE PARA INTERAGIR" é exibido por 2 segundos bloqueando todos os toques
-  - CA-POCKET-001-02: após o overlay desaparecer (2s ou toque do usuário), a tela responde normalmente
-  - CA-POCKET-001-03: quando o usuário toca a tela manualmente para acendê-la (sem evento de corrida), o overlay NÃO aparece
-  - CA-POCKET-001-04: o botão FINALIZAR não pode ser ativado durante o período de bloqueio do overlay
-
-- [ ] TASK-014 · Gerenciamento de Traçados (US TRACK-001)
-  Como piloto, quero visualizar, editar e excluir os traçados que configurei, para que eu mantenha minha biblioteca de pistas organizada sem perder o histórico de corridas associado a elas.
-  refs: docs/lapzy_tela_inicial.md, docs/lapzy_tela_criacao_pista.md, docs/lapzy_criacao_pista_setores.md, docs/lapzy_tela_listagem_corridas.md, docs/lapzy_design_system.html, docs/principios.md, docs/identidade.md, docs/testing.md
-
-  ### Contexto e decisões de design
-
-  **Acesso pela Home**
-  - Novo ícone na top bar da HomeScreen, seguindo o mesmo padrão do ícone de histórico (relógio)
-  - Posicionamento: avaliar na implementação se o ícone de pistas entra ao lado do histórico (esquerda) ou em outra posição que não polua o layout minimalista existente
-  - Ícone sugerido: mapa/circuito (ex: `Icons.map_outlined` ou SVG equivalente ao estilo dos demais ícones da top bar)
-
-  **TrackListScreen**
-  - Layout idêntico à RaceListScreen: top bar com `‹` + label "TRAÇADOS" centralizado
-  - Cada item: nome do traçado (bold) + data de criação formatada (pt-BR, ex: "29 abr 2026 · 14:32") + seta `›`
-  - Ordenação: mais recente no topo (createdAt decrescente)
-  - Estado vazio: mensagem "Nenhum traçado configurado." + subtítulo "Crie um traçado para começar a cronometrar." + botão ghost verde "CRIAR TRAÇADO"
-  - Swipe para esquerda em qualquer item → exibe ação de exclusão (ver fluxo de exclusão abaixo)
-
-  **TrackDetailScreen (visualização)**
-  - Reutiliza o layout da tela de criação (mapa + painel inferior) em modo somente leitura
-  - Mapa exibe o traçado completo: polyline do centerline, linha de largada/chegada, setores coloridos
-  - Gestos de câmera habilitados (zoom/scroll); gestos de edição desabilitados
-  - Painel inferior mostra: nome da pista, data de criação, número de setores configurados
-  - Botão "EDITAR" (ghost verde) → abre fluxo de edição
-  - Botão `‹` (back) → volta para TrackListScreen
-
-  **Fluxo de edição**
-  - Ao tocar em "EDITAR", abre a tela de criação de pista (TrackCreationScreen) pré-populada com os dados exatos do traçado selecionado: centerline, posição S/C, setores, nome
-  - O wizard inicia no passo 0 (TRAÇADO) mas com todos os dados já preenchidos — usuário pode avançar passo a passo ou tocar em nós já concluídos para editar diretamente
-  - Ao salvar, o registro existente é atualizado (mesmo `id`, `updatedAt` atualizado) — histórico de corridas associado permanece intacto
-  - TrackCreationScreen precisa aceitar um `Track? initialTrack` opcional para distinguir criação de edição
-
-  **Fluxo de exclusão**
-  - Swipe para a esquerda no item da lista revela painel vermelho com ícone de lixeira e label "EXCLUIR"
-  - Ao confirmar o swipe (soltar após > 50% da largura) OU tocar no painel revelado → exibe bottom sheet de confirmação:
-    - Título: "Excluir traçado?"
-    - Corpo: "Nenhum histórico será perdido, mas você não poderá mais iniciar novas corridas com essas configurações."
-    - Botão primário: "EXCLUIR" (vermelho `Color(0xFFFF3B30)`)
-    - Botão secundário: "CANCELAR" (ghost, branco baixa opacidade)
-  - Ao confirmar: remove do TrackRepository + remove da lista com animação de saída
-  - RaceSessionRecord mantém `trackName` desnormalizado (já implementado em TASK-012) — histórico não é afetado
-
-  ### Critérios de aceite
-
-  - CA-TRACK-001-01: ícone de traçados na HomeScreen navega para TrackListScreen
-  - CA-TRACK-001-02: TrackListScreen exibe todos os traçados salvos, ordenados por createdAt decrescente, com nome e data de criação formatada
-  - CA-TRACK-001-03: TrackListScreen em estado vazio exibe mensagem adequada e botão "CRIAR TRAÇADO"
-  - CA-TRACK-001-04: toque em um item da lista navega para TrackDetailScreen com o traçado correto carregado no mapa (centerline, S/C, setores)
-  - CA-TRACK-001-05: TrackDetailScreen exibe nome, data de criação e número de setores no painel inferior; mapa é interativo (zoom/scroll) mas sem gestos de edição
-  - CA-TRACK-001-06: botão "EDITAR" em TrackDetailScreen abre TrackCreationScreen com todos os campos pré-populados com os dados do traçado selecionado
-  - CA-TRACK-001-07: salvar a edição atualiza o registro existente (mesmo id) sem afetar RaceSessionRecords que referenciam esse traçado
-  - CA-TRACK-001-08: swipe para esquerda em item da lista revela ação de exclusão; ao confirmar, exibe bottom sheet com texto exato definido acima
-  - CA-TRACK-001-09: ao confirmar exclusão, traçado é removido do TrackRepository e da lista com animação; histórico de corridas não é alterado
-  - CA-TRACK-001-10: ao cancelar a exclusão, o item retorna à posição original sem nenhuma alteração
+=======
+>>>>>>> 328599c (doc: alterado status de tasks para done)
+## Backlog
 
 ## Done (recente)
 
@@ -442,3 +346,102 @@
 
 - [x] TASK-001 · Tela Inicial
   refs: docs/lapzy_tela_inicial.md, docs/lapzy_design_system.html, docs/principios.md
+
+- [x] TASK-017 · Modo Bolso — Foreground Service Android (US POCKET-003)
+  Como piloto, quero que o GPS continue funcionando quando a tela apaga, para que eu possa guardar o celular no bolso sem perder a detecção de voltas.
+  refs: docs/principios.md, docs/testing.md
+
+  ### Contexto e decisões de design
+
+  **Fluxo natural do usuário**
+  O piloto não precisa de toggle nem sensor: ele simplesmente bloqueia a tela com o botão de power e guarda o celular no bolso. O wakelock permanente (`WakelockPlus.enable()`) não impede esse gesto — o botão de power é um override do sistema. O Foreground Service garante que o GPS continue rodando com a tela bloqueada.
+
+  **Problema**
+  O Android pode matar o processo do app quando a tela apaga (especialmente em dispositivos com agressiva gestão de bateria, como Samsung). O `Geolocator.getPositionStream()` para de receber eventos sem um Foreground Service ativo.
+
+  **Solução**
+  Criar um Android Foreground Service que mantém o processo vivo e o GPS rodando durante toda a sessão de corrida. O serviço deve:
+  - Iniciar quando a RaceScreen é montada
+  - Exibir uma notificação persistente obrigatória (requisito Android para Foreground Service): "Lapzy · Corrida em andamento"
+  - A notificação deve ter intent que traz o app ao foreground ao ser tocada
+  - Parar quando a RaceScreen é desmontada (dispose)
+  - Usar `foregroundServiceType: location` no AndroidManifest
+
+  **Retorno ao app com corrida ativa**
+  Quando o usuário abre o app (via notificação ou ícone) com a tela bloqueada e corrida em andamento:
+  - O Flutter retorna ao foreground com estado preservado (processo vivo pelo Foreground Service)
+  - A RaceScreen já está ativa em landscape (`setPreferredOrientations` continua valendo)
+  - O `launchMode="singleTop"` no AndroidManifest impede criação de nova Activity
+
+  **Stack**
+  - Implementação nativa via MethodChannel em Kotlin (sem dependência de pacote externo)
+  - Um único canal `lapzy/foreground_service` com métodos `start` e `stop`
+
+  **Permissões adicionais**
+  - `FOREGROUND_SERVICE` (obrigatória)
+  - `FOREGROUND_SERVICE_LOCATION` (Android 14+, obrigatória)
+  - Nenhuma permissão nova de localização — já solicitadas nas tasks anteriores
+
+  ### Critérios de aceite
+
+  - CA-POCKET-003-01: com tela bloqueada (botão de power), o LapDetector continua emitindo LapCrossedEvent e SectorCrossedEvent
+  - CA-POCKET-003-02: uma notificação persistente "Lapzy · Corrida em andamento" fica visível na barra de status durante toda a corrida
+  - CA-POCKET-003-03: tocar na notificação abre o app e exibe a RaceScreen em landscape com a corrida em andamento
+  - CA-POCKET-003-04: ao encerrar a corrida (FINALIZAR), o Foreground Service é parado e a notificação desaparece
+  - CA-POCKET-003-05: o Foreground Service não persiste após o app ser fechado pelo usuário (swipe no recents)
+  - CA-POCKET-003-06: no Samsung A35 (Android 14), o GPS detecta voltas corretamente com a tela bloqueada por pelo menos 10 minutos contínuos
+
+- [x] TASK-014 · Gerenciamento de Traçados (US TRACK-001)
+  Como piloto, quero visualizar, editar e excluir os traçados que configurei, para que eu mantenha minha biblioteca de pistas organizada sem perder o histórico de corridas associado a elas.
+  refs: docs/lapzy_tela_inicial.md, docs/lapzy_tela_criacao_pista.md, docs/lapzy_criacao_pista_setores.md, docs/lapzy_tela_listagem_corridas.md, docs/lapzy_design_system.html, docs/principios.md, docs/identidade.md, docs/testing.md
+
+  ### Contexto e decisões de design
+
+  **Acesso pela Home**
+  - Novo ícone na top bar da HomeScreen, seguindo o mesmo padrão do ícone de histórico (relógio)
+  - Posicionamento: avaliar na implementação se o ícone de pistas entra ao lado do histórico (esquerda) ou em outra posição que não polua o layout minimalista existente
+  - Ícone sugerido: mapa/circuito (ex: `Icons.map_outlined` ou SVG equivalente ao estilo dos demais ícones da top bar)
+
+  **TrackListScreen**
+  - Layout idêntico à RaceListScreen: top bar com `‹` + label "TRAÇADOS" centralizado
+  - Cada item: nome do traçado (bold) + data de criação formatada (pt-BR, ex: "29 abr 2026 · 14:32") + seta `›`
+  - Ordenação: mais recente no topo (createdAt decrescente)
+  - Estado vazio: mensagem "Nenhum traçado configurado." + subtítulo "Crie um traçado para começar a cronometrar." + botão ghost verde "CRIAR TRAÇADO"
+  - Swipe para esquerda em qualquer item → exibe ação de exclusão (ver fluxo de exclusão abaixo)
+
+  **TrackDetailScreen (visualização)**
+  - Reutiliza o layout da tela de criação (mapa + painel inferior) em modo somente leitura
+  - Mapa exibe o traçado completo: polyline do centerline, linha de largada/chegada, setores coloridos
+  - Gestos de câmera habilitados (zoom/scroll); gestos de edição desabilitados
+  - Painel inferior mostra: nome da pista, data de criação, número de setores configurados
+  - Botão "EDITAR" (ghost verde) → abre fluxo de edição
+  - Botão `‹` (back) → volta para TrackListScreen
+
+  **Fluxo de edição**
+  - Ao tocar em "EDITAR", abre a tela de criação de pista (TrackCreationScreen) pré-populada com os dados exatos do traçado selecionado: centerline, posição S/C, setores, nome
+  - O wizard inicia no passo 0 (TRAÇADO) mas com todos os dados já preenchidos — usuário pode avançar passo a passo ou tocar em nós já concluídos para editar diretamente
+  - Ao salvar, o registro existente é atualizado (mesmo `id`, `updatedAt` atualizado) — histórico de corridas associado permanece intacto
+  - TrackCreationScreen precisa aceitar um `Track? initialTrack` opcional para distinguir criação de edição
+
+  **Fluxo de exclusão**
+  - Swipe para a esquerda no item da lista revela painel vermelho com ícone de lixeira e label "EXCLUIR"
+  - Ao confirmar o swipe (soltar após > 50% da largura) OU tocar no painel revelado → exibe bottom sheet de confirmação:
+    - Título: "Excluir traçado?"
+    - Corpo: "Nenhum histórico será perdido, mas você não poderá mais iniciar novas corridas com essas configurações."
+    - Botão primário: "EXCLUIR" (vermelho `Color(0xFFFF3B30)`)
+    - Botão secundário: "CANCELAR" (ghost, branco baixa opacidade)
+  - Ao confirmar: remove do TrackRepository + remove da lista com animação de saída
+  - RaceSessionRecord mantém `trackName` desnormalizado (já implementado em TASK-012) — histórico não é afetado
+
+  ### Critérios de aceite
+
+  - CA-TRACK-001-01: ícone de traçados na HomeScreen navega para TrackListScreen
+  - CA-TRACK-001-02: TrackListScreen exibe todos os traçados salvos, ordenados por createdAt decrescente, com nome e data de criação formatada
+  - CA-TRACK-001-03: TrackListScreen em estado vazio exibe mensagem adequada e botão "CRIAR TRAÇADO"
+  - CA-TRACK-001-04: toque em um item da lista navega para TrackDetailScreen com o traçado correto carregado no mapa (centerline, S/C, setores)
+  - CA-TRACK-001-05: TrackDetailScreen exibe nome, data de criação e número de setores no painel inferior; mapa é interativo (zoom/scroll) mas sem gestos de edição
+  - CA-TRACK-001-06: botão "EDITAR" em TrackDetailScreen abre TrackCreationScreen com todos os campos pré-populados com os dados do traçado selecionado
+  - CA-TRACK-001-07: salvar a edição atualiza o registro existente (mesmo id) sem afetar RaceSessionRecords que referenciam esse traçado
+  - CA-TRACK-001-08: swipe para esquerda em item da lista revela ação de exclusão; ao confirmar, exibe bottom sheet com texto exato definido acima
+  - CA-TRACK-001-09: ao confirmar exclusão, traçado é removido do TrackRepository e da lista com animação; histórico de corridas não é alterado
+  - CA-TRACK-001-10: ao cancelar a exclusão, o item retorna à posição original sem nenhuma alteração

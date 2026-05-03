@@ -10,6 +10,7 @@ import '../models/race_session_record.dart';
 import '../models/track.dart';
 import '../repositories/race_session_repository.dart';
 import '../services/delta_calculator.dart';
+import '../services/foreground_location_service.dart';
 import '../services/lap_detector.dart';
 import 'race_summary_screen.dart';
 
@@ -101,6 +102,7 @@ class _RaceScreenState extends State<RaceScreen> {
     ]);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     WakelockPlus.enable();
+    unawaited(ForegroundLocationService.start());
     _detector = widget.detectorFactory != null
         ? widget.detectorFactory!(widget.track)
         : LapDetector(track: widget.track);
@@ -118,6 +120,7 @@ class _RaceScreenState extends State<RaceScreen> {
     _detectorSub?.cancel();
     _detector.dispose();
     WakelockPlus.disable();
+    unawaited(ForegroundLocationService.stop());
     SystemChrome.setEnabledSystemUIMode(
       SystemUiMode.manual,
       overlays: SystemUiOverlay.values,
