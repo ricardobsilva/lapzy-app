@@ -14,6 +14,14 @@ void _mockWakelock() {
   );
 }
 
+void _mockForegroundService() {
+  TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+      .setMockMethodCallHandler(
+    const MethodChannel('lapzy/foreground_service'),
+    (_) async => null,
+  );
+}
+
 class _TestClock {
   DateTime _now;
   _TestClock([DateTime? initial]) : _now = initial ?? DateTime(2026);
@@ -91,7 +99,10 @@ void _setLandscape(WidgetTester tester) {
 const _k1ms = Duration(milliseconds: 1);
 
 void main() {
-  setUp(_mockWakelock);
+  setUp(() {
+    _mockWakelock();
+    _mockForegroundService();
+  });
 
   group('evidências — bordas por volta', () {
     testWidgets('borda_melhor_volta — roxo (1ª volta concluída)', (tester) async {
