@@ -79,6 +79,9 @@ class _RaceScreenState extends State<RaceScreen> {
   List<Color?> _sectorFeedbackColors = [];
   List<Timer?> _sectorFeedbackTimers = [];
 
+  /// Melhor tempo de cada setor na corrida — base para detecção de roxo (novo recorde de setor).
+  List<int?> _bestSectorTimes = [];
+
   /// Tempo decorrido na volta atual em ms, baseado no relógio injetado.
   /// Resolução de ~1ms, sem deriva do timer periódico.
   int get _lapMs =>
@@ -95,6 +98,7 @@ class _RaceScreenState extends State<RaceScreen> {
     _currentSectors = List.filled(sectorCount, null);
     _sectorFeedbackColors = List.filled(sectorCount, null);
     _sectorFeedbackTimers = List.filled(sectorCount, null);
+    _bestSectorTimes = List.filled(sectorCount, null);
     _clock = widget.clockFactory ?? DateTime.now;
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.landscapeLeft,
@@ -191,6 +195,15 @@ class _RaceScreenState extends State<RaceScreen> {
       _lapNumber++;
       _nextSectorIndex = 0;
       _lapMsAtLastSector = 0;
+      // Atualiza o melhor setor da corrida para a lógica de roxo.
+      final justCompleted = _completedLaps.last;
+      for (int i = 0; i < justCompleted.sectors.length; i++) {
+        final t = justCompleted.sectors[i];
+        if (t == null) continue;
+        if (_bestSectorTimes[i] == null || t < _bestSectorTimes[i]!) {
+          _bestSectorTimes[i] = t;
+        }
+      }
       for (int i = 0; i < _currentSectors.length; i++) {
         _currentSectors[i] = null;
         _sectorFeedbackColors[i] = null;
@@ -240,18 +253,24 @@ class _RaceScreenState extends State<RaceScreen> {
     }
   }
 
+  /// Feedback de setor comparado à volta anterior:
+  /// - Roxo  → melhor setor da corrida até agora (novo recorde de setor)
+  /// - Verde → melhor que o mesmo setor na volta anterior
+  /// - Vermelho → pior que o mesmo setor na volta anterior
   Color? _computeSectorFeedback(int sectorIndex, int currentTime) {
     if (_completedLaps.isEmpty) return null;
-    final prevTime = _prevLapSectorTime(sectorIndex);
+    if (sectorIndex >= _bestSectorTimes.length) return null;
+
+    final prevLap = _completedLaps.last;
+    final prevTime =
+        sectorIndex < prevLap.sectors.length ? prevLap.sectors[sectorIndex] : null;
     if (prevTime == null) return null;
+
+    final best = _bestSectorTimes[sectorIndex];
+    if (best != null && currentTime < best) return _kPurple;
     if (currentTime < prevTime) return _kGreen;
     if (currentTime > prevTime) return _kRed;
     return null;
-  }
-
-  int? _prevLapSectorTime(int sectorIndex) {
-    final lap = _completedLaps.last;
-    return sectorIndex < lap.sectors.length ? lap.sectors[sectorIndex] : null;
   }
 
   void _scheduleSectorFeedbackReset(int sectorIndex) {
@@ -320,15 +339,13 @@ class _RaceScreenState extends State<RaceScreen> {
                     sectors: List.unmodifiable(_currentSectors),
                     hasSectors: widget.track.sectorBoundaries.isNotEmpty,
                     sectorFeedbackColors: List.unmodifiable(_sectorFeedbackColors),
+                    totalRaceMs: _totalRaceMs,
+                    hasStarted: _hasStarted,
+                    bestLapMs: _bestLapMs,
                   ),
                 ),
                 const SizedBox(width: 12),
-                _RightColumn(
-                  totalRaceMs: _totalRaceMs,
-                  hasStarted: _hasStarted,
-                  bestLapMs: _bestLapMs,
-                  onEnd: _endRaceImmediately,
-                ),
+                _RightColumn(onEnd: _endRaceImmediately),
               ],
             ),
           ),
@@ -538,8 +555,8 @@ class _SectorCell extends StatelessWidget {
     final borderWidth = borderFeedbackColor != null ? 2.5 : (filled ? 2.0 : 1.5);
     return Container(
       key: Key('sector_cell_${label.toLowerCase()}'),
-      width: 84,
-      height: 78,
+      width: 90,
+      height: 84,
       decoration: BoxDecoration(
         color: filled ? color.withAlpha(51) : color.withAlpha(13),
         borderRadius: BorderRadius.circular(10),
@@ -551,23 +568,33 @@ class _SectorCell extends StatelessWidget {
           Text(
             label,
             style: GoogleFonts.rajdhani(
-              fontSize: 10,
+              fontSize: 11,
               fontWeight: FontWeight.w700,
               letterSpacing: 1,
               color: filled ? color : color.withAlpha(120),
             ),
           ),
-          if (filled) ...[
-            const SizedBox(height: 2),
+          const SizedBox(height: 2),
+          if (filled)
             Text(
               (timeMs! / 1000).toStringAsFixed(3),
               style: GoogleFonts.rajdhani(
-                fontSize: 14,
+                fontSize: 18,
                 fontWeight: FontWeight.w700,
                 color: color,
               ),
+            )
+          else
+            // CA-UX-001-04: setor não capturado exibe "—" em vez de vazio.
+            Text(
+              '—',
+              key: Key('sector_cell_dash_${label.toLowerCase()}'),
+              style: GoogleFonts.rajdhani(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: color.withAlpha(80),
+              ),
             ),
-          ],
         ],
       ),
     );
@@ -581,6 +608,9 @@ class _CenterColumn extends StatelessWidget {
   final List<int?> sectors;
   final bool hasSectors;
   final List<Color?> sectorFeedbackColors;
+  final int totalRaceMs;
+  final bool hasStarted;
+  final int? bestLapMs;
 
   const _CenterColumn({
     required this.lapMs,
@@ -589,13 +619,49 @@ class _CenterColumn extends StatelessWidget {
     required this.sectors,
     required this.hasSectors,
     required this.sectorFeedbackColors,
+    required this.totalRaceMs,
+    required this.hasStarted,
+    required this.bestLapMs,
   });
 
   @override
   Widget build(BuildContext context) {
+    // LayoutBuilder + ConstrainedBox garante centralização sem overflow em
+    // qualquer tamanho de tela (portrait em testes, landscape no dispositivo).
+    return LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        physics: const NeverScrollableScrollPhysics(),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: constraints.maxHeight),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildContent(),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildContent() {
     return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
+      mainAxisSize: MainAxisSize.min,
       children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Flexible(
+              child: _TotalTime(totalRaceMs: totalRaceMs, hasStarted: hasStarted),
+            ),
+            const SizedBox(width: 32),
+            Flexible(
+              child: _BestLap(bestLapMs: bestLapMs),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
         if (eventState == RaceEventState.personalRecord) ...[
           _PrBanner(),
           const SizedBox(height: 8),
@@ -614,7 +680,7 @@ class _CenterColumn extends StatelessWidget {
           _formatMs(lapMs),
           key: const Key('race_lap_time'),
           style: GoogleFonts.rajdhani(
-            fontSize: 88,
+            fontSize: 96,
             fontWeight: FontWeight.w700,
             color: Colors.white,
             height: 1,
@@ -712,36 +778,17 @@ class _DeltaPill extends StatelessWidget {
 }
 
 class _RightColumn extends StatelessWidget {
-  final int totalRaceMs;
-  final bool hasStarted;
-  final int? bestLapMs;
   final VoidCallback onEnd;
 
-  const _RightColumn({
-    required this.totalRaceMs,
-    required this.hasStarted,
-    required this.bestLapMs,
-    required this.onEnd,
-  });
+  const _RightColumn({required this.onEnd});
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
       width: 118,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              _TotalTime(totalRaceMs: totalRaceMs, hasStarted: hasStarted),
-              const SizedBox(height: 16),
-              _BestLap(bestLapMs: bestLapMs),
-            ],
-          ),
-          _EndButton(onEnd: onEnd),
-        ],
+      child: Align(
+        alignment: Alignment.bottomRight,
+        child: _EndButton(onEnd: onEnd),
       ),
     );
   }
@@ -756,7 +803,7 @@ class _TotalTime extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.end,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         Text(
           'TOTAL',
@@ -789,7 +836,7 @@ class _BestLap extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.end,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         Text(
           'MELHOR VOLTA',

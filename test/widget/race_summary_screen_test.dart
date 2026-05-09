@@ -80,7 +80,9 @@ void main() {
         expect(find.text('Pista Teste'), findsOneWidget);
       });
 
-      testWidgets('exibe contagem de voltas quando sem melhor volta', (tester) async {
+      testWidgets('exibe contagem total de voltas com posição da melhor', (tester) async {
+        // CA-BUG-002-01: a melhor volta é sempre computada a partir das voltas,
+        // mesmo sem bestLapMs explícito. _lapA (83887) < _lapB (85441) → melhor = lap 1.
         await tester.pumpWidget(_buildScreen(
           laps: [_lapA, _lapB],
         ));
@@ -88,7 +90,7 @@ void main() {
         final lapCountWidget = tester.widget<Text>(
           find.byKey(const Key('summary_lap_count')),
         );
-        expect(lapCountWidget.data, '2');
+        expect(lapCountWidget.data, '1/2');
       });
 
       testWidgets('exibe melhor volta com número/total quando disponível', (tester) async {
@@ -130,6 +132,15 @@ void main() {
           laps: [_lapA, _lapB],
         ));
 
+        final scrollable = find.descendant(
+          of: find.byType(CustomScrollView),
+          matching: find.byType(Scrollable),
+        ).first;
+        await tester.scrollUntilVisible(
+          find.byKey(const Key('summary_lap_time_2')), 100,
+          scrollable: scrollable,
+        );
+
         expect(find.byKey(const Key('summary_lap_time_1')), findsOneWidget);
         expect(find.byKey(const Key('summary_lap_time_2')), findsOneWidget);
       });
@@ -138,6 +149,15 @@ void main() {
         await tester.pumpWidget(_buildScreen(
           laps: [_lapA, _lapB],
         ));
+
+        final scrollable = find.descendant(
+          of: find.byType(CustomScrollView),
+          matching: find.byType(Scrollable),
+        ).first;
+        await tester.scrollUntilVisible(
+          find.byKey(const Key('summary_lap_number_2')), 100,
+          scrollable: scrollable,
+        );
 
         expect(find.byKey(const Key('summary_lap_number_1')), findsOneWidget);
         expect(find.byKey(const Key('summary_lap_number_2')), findsOneWidget);
@@ -154,6 +174,16 @@ void main() {
           laps: [_lapB, _lapA],
           bestLapMs: _lapA.lapMs,
         ));
+
+        // Rola até a linha da melhor volta (lap 2 = _lapA) para garantir renderização.
+        final scrollable = find.descendant(
+          of: find.byType(CustomScrollView),
+          matching: find.byType(Scrollable),
+        ).first;
+        await tester.scrollUntilVisible(
+          find.byKey(const Key('summary_lap_row_2')), 100,
+          scrollable: scrollable,
+        );
 
         expect(find.text('PR'), findsNWidgets(2));
       });
@@ -245,6 +275,15 @@ void main() {
           laps: [_lapA, _lapC],
         ));
 
+        final scrollable = find.descendant(
+          of: find.byType(CustomScrollView),
+          matching: find.byType(Scrollable),
+        ).first;
+        await tester.scrollUntilVisible(
+          find.byKey(const Key('summary_lap_delta_2')), 100,
+          scrollable: scrollable,
+        );
+
         final delta2 = tester.widget<Text>(
           find.byKey(const Key('summary_lap_delta_2')),
         );
@@ -257,6 +296,15 @@ void main() {
         await tester.pumpWidget(_buildScreen(
           laps: [_lapA, _lapB],
         ));
+
+        final scrollable = find.descendant(
+          of: find.byType(CustomScrollView),
+          matching: find.byType(Scrollable),
+        ).first;
+        await tester.scrollUntilVisible(
+          find.byKey(const Key('summary_lap_delta_2')), 100,
+          scrollable: scrollable,
+        );
 
         final delta2 = tester.widget<Text>(
           find.byKey(const Key('summary_lap_delta_2')),
@@ -594,6 +642,178 @@ void main() {
         // lançaria exception de RenderFlex
         expect(find.byKey(const Key('summary_lap_detail_sheet')), findsOneWidget);
         expect(tester.takeException(), isNull);
+      });
+    });
+
+    group('CA-BUG-002-01: melhor volta exclui warm-up e outliers', () {
+      testWidgets('exclui 1ª volta quando é warm-up (> 1.05× mediana das demais)', (tester) async {
+        // warm-up: 74000ms; demais ~65000ms
+        // mediana das demais = 65000; threshold = 68250
+        // 74000 > 68250 → excluída da melhor volta
+        final warmup = const LapResult(lapMs: 74000);
+        final lap1 = const LapResult(lapMs: 65000);
+        final lap2 = const LapResult(lapMs: 64000);
+        final lap3 = const LapResult(lapMs: 66000);
+        await tester.pumpWidget(_buildScreen(
+          laps: [warmup, lap1, lap2, lap3],
+          bestLapMs: 64000,
+        ));
+
+        final bestLap = tester.widget<Text>(find.byKey(const Key('summary_best_lap')));
+        expect(bestLap.data, '1:04.000');
+      });
+
+      testWidgets('exclui outlier (> 3× mediana) do cálculo da melhor volta', (tester) async {
+        final lap1 = const LapResult(lapMs: 65000);
+        final lap2 = const LapResult(lapMs: 64000);
+        final anomaly = const LapResult(lapMs: 259000);
+        final lap3 = const LapResult(lapMs: 66000);
+        await tester.pumpWidget(_buildScreen(
+          laps: [lap1, lap2, anomaly, lap3],
+          bestLapMs: 259000, // RaceScreen pode ter registrado errado
+        ));
+
+        final bestLap = tester.widget<Text>(find.byKey(const Key('summary_best_lap')));
+        // Melhor volta real = 64000ms = 1:04.000
+        expect(bestLap.data, '1:04.000');
+      });
+
+      testWidgets('badge PR marca a volta realmente mais rápida (não o outlier)', (tester) async {
+        final lap1 = const LapResult(lapMs: 65000);
+        final lap2 = const LapResult(lapMs: 64000);
+        final anomaly = const LapResult(lapMs: 259000);
+        await tester.pumpWidget(_buildScreen(
+          laps: [lap1, lap2, anomaly],
+          bestLapMs: 259000,
+        ));
+
+        // A linha da volta 3 (anomaly) NÃO deve ter badge PR
+        final row3 = find.byKey(const Key('summary_lap_row_3'));
+        final prInRow3 = find.descendant(of: row3, matching: find.text('PR'));
+        expect(prInRow3, findsNothing);
+
+        // A linha da volta 2 (64000ms) DEVE ter badge PR
+        final scrollable = find.descendant(
+          of: find.byType(CustomScrollView),
+          matching: find.byType(Scrollable),
+        ).first;
+        await tester.scrollUntilVisible(
+          find.byKey(const Key('summary_lap_row_2')), 100, scrollable: scrollable,
+        );
+        await tester.ensureVisible(find.byKey(const Key('summary_lap_row_2')));
+        await tester.pump();
+        final prInRow2 = find.descendant(
+          of: find.byKey(const Key('summary_lap_row_2')),
+          matching: find.text('PR'),
+        );
+        expect(prInRow2, findsOneWidget);
+      });
+    });
+
+    group('CA-BUG-002-02: seção de setores não renderizada quando todos são null', () {
+      testWidgets('seção SETORES não aparece quando sectors=[null,null,null] em todas as voltas', (tester) async {
+        final allNullSectors = [
+          const LapResult(lapMs: 65000, sectors: [null, null, null]),
+          const LapResult(lapMs: 66000, sectors: [null, null, null]),
+        ];
+        await tester.pumpWidget(_buildScreen(
+          laps: allNullSectors,
+          track: _trackWithSectors,
+        ));
+
+        expect(find.byKey(const Key('summary_sector_0')), findsNothing);
+        expect(find.byKey(const Key('summary_sector_1')), findsNothing);
+        expect(find.byKey(const Key('summary_sector_2')), findsNothing);
+      });
+
+      testWidgets('seção SETORES aparece quando ao menos um setor tem valor', (tester) async {
+        final partialSectors = [
+          const LapResult(lapMs: 65000, sectors: [30000, null, null]),
+          const LapResult(lapMs: 66000, sectors: [null, null, null]),
+        ];
+        await tester.pumpWidget(_buildScreen(
+          laps: partialSectors,
+          track: _trackWithSectors,
+        ));
+
+        expect(find.byKey(const Key('summary_sector_0')), findsOneWidget);
+      });
+
+      testWidgets('seção SETORES não aparece quando lista de setores está vazia', (tester) async {
+        final noSectors = [
+          const LapResult(lapMs: 65000),
+          const LapResult(lapMs: 66000),
+        ];
+        await tester.pumpWidget(_buildScreen(
+          laps: noSectors,
+          track: _trackTest,
+        ));
+
+        expect(find.byKey(const Key('summary_sector_0')), findsNothing);
+      });
+    });
+
+    group('CA-BUG-002-03: média de volta exclui outliers', () {
+      testWidgets('exibe MÉDIA VOLTA no hero quando há voltas válidas', (tester) async {
+        await tester.pumpWidget(_buildScreen(
+          laps: [_lapA, _lapB],
+          bestLapMs: _lapA.lapMs,
+        ));
+
+        expect(find.byKey(const Key('summary_avg_lap')), findsOneWidget);
+      });
+
+      testWidgets('não exibe MÉDIA VOLTA quando lista de voltas está vazia', (tester) async {
+        await tester.pumpWidget(_buildScreen(laps: []));
+
+        expect(find.byKey(const Key('summary_avg_lap')), findsNothing);
+      });
+
+      testWidgets('média exclui outlier — valor difere de incluir a anomalia', (tester) async {
+        // Sem outlier: média de [65000, 64000, 66000] = 65000
+        // Com outlier incluso: (65000 + 64000 + 259000 + 66000) / 4 = 113500
+        final lap1 = const LapResult(lapMs: 65000);
+        final lap2 = const LapResult(lapMs: 64000);
+        final anomaly = const LapResult(lapMs: 259000);
+        final lap3 = const LapResult(lapMs: 66000);
+        await tester.pumpWidget(_buildScreen(
+          laps: [lap1, lap2, anomaly, lap3],
+        ));
+
+        final avgWidget = tester.widget<Text>(find.byKey(const Key('summary_avg_lap')));
+        // Média correta sem outlier = (65000+64000+66000)/3 = 65000ms = 1:05.000
+        expect(avgWidget.data, '1:05.000');
+      });
+    });
+
+    group('CA-BUG-002-04: total de voltas inclui warm-up e outliers', () {
+      testWidgets('lapCount inclui todas as voltas inclusive anomalias', (tester) async {
+        final warmup = const LapResult(lapMs: 74000);
+        final lap1 = const LapResult(lapMs: 65000);
+        final anomaly = const LapResult(lapMs: 259000);
+        final lap2 = const LapResult(lapMs: 66000);
+        await tester.pumpWidget(_buildScreen(
+          laps: [warmup, lap1, anomaly, lap2],
+        ));
+
+        final lapCount = tester.widget<Text>(find.byKey(const Key('summary_lap_count')));
+        // Total = 4 (transparência ao piloto). Com melhor volta computada,
+        // o formato é 'bestLap/total'. O denominador deve ser sempre 4.
+        expect(lapCount.data, endsWith('/4'));
+      });
+
+      testWidgets('melhor volta referencia número correto da volta no total', (tester) async {
+        final warmup = const LapResult(lapMs: 74000);
+        final lap1 = const LapResult(lapMs: 65000);
+        final lap2 = const LapResult(lapMs: 64000);
+        await tester.pumpWidget(_buildScreen(
+          laps: [warmup, lap1, lap2],
+          bestLapMs: 64000,
+        ));
+
+        final lapCount = tester.widget<Text>(find.byKey(const Key('summary_lap_count')));
+        // melhor=volta 3 (índice 2 + 1), total=3
+        expect(lapCount.data, '3/3');
       });
     });
   });

@@ -618,9 +618,10 @@ void main() {
         detector.fireSector(0);
         await tester.pump(const Duration(milliseconds: 1));
 
+        // Volta 2 S1=1000ms é mais rápido que anterior (3000ms) e novo recorde → roxo
         final cell = tester.widget<Container>(find.byKey(const Key('sector_cell_s1')));
         final deco = cell.decoration as BoxDecoration;
-        expect(deco.border!.top.color, const Color(0xFF00E676));
+        expect(deco.border!.top.color, const Color(0xFFBF5AF2));
       });
 
       testWidgets('borda de S1 fica vermelha quando setor atual é mais lento que o anterior', (tester) async {
@@ -668,9 +669,9 @@ void main() {
         detector.fireSector(0);
         await tester.pump(const Duration(milliseconds: 1));
 
-        // Borda verde ativa imediatamente
+        // Volta 2 S1=1000ms é novo recorde da corrida → roxo imediatamente
         final cellBefore = tester.widget<Container>(find.byKey(const Key('sector_cell_s1')));
-        expect((cellBefore.decoration as BoxDecoration).border!.top.color, const Color(0xFF00E676));
+        expect((cellBefore.decoration as BoxDecoration).border!.top.color, const Color(0xFFBF5AF2));
 
         // Após 5s a borda volta ao estado normal do setor
         await tester.pump(const Duration(seconds: 5));
@@ -679,6 +680,7 @@ void main() {
         final borderColor = (cellAfter.decoration as BoxDecoration).border!.top.color;
         expect(borderColor, isNot(const Color(0xFF00E676)));
         expect(borderColor, isNot(const Color(0xFFFF3B30)));
+        expect(borderColor, isNot(const Color(0xFFBF5AF2)));
       });
 
       testWidgets('sem volta anterior não exibe borda de feedback', (tester) async {
@@ -973,8 +975,9 @@ void main() {
         detector.fireSector(1); // 2000 < 3000 → verde
         await tester.pump(const Duration(milliseconds: 1));
 
+        // Volta 2 S2=2000ms é mais rápido que anterior (3000ms) e novo recorde → roxo
         final cell = tester.widget<Container>(find.byKey(const Key('sector_cell_s2')));
-        expect((cell.decoration as BoxDecoration).border!.top.color, const Color(0xFF00E676));
+        expect((cell.decoration as BoxDecoration).border!.top.color, const Color(0xFFBF5AF2));
       });
 
       testWidgets('S2 fica vermelho quando split atual é mais lento que split anterior', (tester) async {
@@ -1399,6 +1402,198 @@ void main() {
 
         expect(calls, contains('stop'));
         RaceSessionRepository().clearForTesting();
+      });
+    });
+
+    group('CA-UX-001-04: sectorTime null exibe —', () {
+      testWidgets('antes do 1º cruzamento células de setor exibem —', (tester) async {
+        await tester.pumpWidget(_buildScreen(track: _trackWithSectors));
+
+        for (final sLabel in ['s1', 's2', 's3']) {
+          final dashInCell = find.descendant(
+            of: find.byKey(Key('sector_cell_$sLabel')),
+            matching: find.text('—'),
+          );
+          expect(dashInCell, findsOneWidget,
+              reason: 'Setor $sLabel deve exibir — quando null');
+        }
+      });
+
+      testWidgets('após 1º cruzamento (corrida iniciada) setores não completados exibem —', (tester) async {
+        final detector = _FakeDetector();
+        await tester.pumpWidget(_buildScreen(
+          detector: detector,
+          track: _trackWithSectors,
+        ));
+
+        detector.fireLap();
+        await tester.pump(const Duration(milliseconds: 1));
+
+        for (final sLabel in ['s1', 's2', 's3']) {
+          final dashInCell = find.descendant(
+            of: find.byKey(Key('sector_cell_$sLabel')),
+            matching: find.text('—'),
+          );
+          expect(dashInCell, findsOneWidget,
+              reason: 'Setor $sLabel deve exibir — enquanto não cruzado');
+        }
+      });
+
+      testWidgets('setor preenchido não exibe —', (tester) async {
+        final clock = _TestClock();
+        final detector = _FakeDetector(clock: clock.call);
+        await tester.pumpWidget(_buildScreen(
+          detector: detector,
+          clock: clock.call,
+          track: _trackWithSectors,
+        ));
+
+        detector.fireLap();
+        await tester.pump(const Duration(milliseconds: 1));
+        clock.advance(const Duration(milliseconds: 1500));
+        await tester.pump(const Duration(milliseconds: 1500));
+        detector.fireSector(0);
+        await tester.pump(const Duration(milliseconds: 1));
+
+        final dashInS1 = find.descendant(
+          of: find.byKey(const Key('sector_cell_s1')),
+          matching: find.text('—'),
+        );
+        expect(dashInS1, findsNothing,
+            reason: 'Setor preenchido não deve exibir —');
+      });
+    });
+
+    group('feedback de setor: roxo=melhor da corrida, verde=melhor que anterior, vermelho=pior que anterior', () {
+      testWidgets('roxo quando setor é novo recorde da corrida', (tester) async {
+        final clock = _TestClock();
+        final detector = _FakeDetector(clock: clock.call);
+        await tester.pumpWidget(_buildScreen(
+          detector: detector,
+          clock: clock.call,
+          track: _trackWithSectors,
+        ));
+
+        // Volta 1: S1 = 3000ms
+        detector.fireLap();
+        await tester.pump(const Duration(milliseconds: 1));
+        clock.advance(const Duration(milliseconds: 3000));
+        await tester.pump(const Duration(milliseconds: 3000));
+        detector.fireSector(0);
+        await tester.pump(const Duration(milliseconds: 1));
+        detector.fireLap();
+        await tester.pump(const Duration(milliseconds: 1));
+
+        // Volta 2: S1 = 2000ms → melhor que anterior (3000) e novo recorde → roxo
+        clock.advance(const Duration(milliseconds: 2000));
+        await tester.pump(const Duration(milliseconds: 2000));
+        detector.fireSector(0);
+        await tester.pump(const Duration(milliseconds: 1));
+
+        final cell = tester.widget<Container>(find.byKey(const Key('sector_cell_s1')));
+        expect(
+          (cell.decoration as BoxDecoration).border!.top.color,
+          const Color(0xFFBF5AF2),
+          reason: '2000ms < best=3000ms → roxo',
+        );
+      });
+
+      testWidgets('verde quando setor é melhor que anterior mas não é recorde', (tester) async {
+        final clock = _TestClock();
+        final detector = _FakeDetector(clock: clock.call);
+        await tester.pumpWidget(_buildScreen(
+          detector: detector,
+          clock: clock.call,
+          track: _trackWithSectors,
+        ));
+
+        // Volta 1: S1 = 2000ms → best = 2000ms
+        detector.fireLap();
+        await tester.pump(const Duration(milliseconds: 1));
+        clock.advance(const Duration(milliseconds: 2000));
+        await tester.pump(const Duration(milliseconds: 2000));
+        detector.fireSector(0);
+        await tester.pump(const Duration(milliseconds: 1));
+        detector.fireLap();
+        await tester.pump(const Duration(milliseconds: 1));
+
+        // Volta 2: S1 = 3000ms → pior que best e pior que anterior → best segue 2000ms
+        clock.advance(const Duration(milliseconds: 3000));
+        await tester.pump(const Duration(milliseconds: 3000));
+        detector.fireSector(0);
+        await tester.pump(const Duration(milliseconds: 1));
+        detector.fireLap();
+        await tester.pump(const Duration(milliseconds: 1));
+
+        // Volta 3: S1 = 2500ms → melhor que anterior (3000) mas pior que best (2000) → verde
+        clock.advance(const Duration(milliseconds: 2500));
+        await tester.pump(const Duration(milliseconds: 2500));
+        detector.fireSector(0);
+        await tester.pump(const Duration(milliseconds: 1));
+
+        final cell = tester.widget<Container>(find.byKey(const Key('sector_cell_s1')));
+        expect(
+          (cell.decoration as BoxDecoration).border!.top.color,
+          const Color(0xFF00E676),
+          reason: '2500ms < anterior=3000ms mas > best=2000ms → verde',
+        );
+      });
+
+      testWidgets('vermelho quando setor é pior que a volta anterior', (tester) async {
+        final clock = _TestClock();
+        final detector = _FakeDetector(clock: clock.call);
+        await tester.pumpWidget(_buildScreen(
+          detector: detector,
+          clock: clock.call,
+          track: _trackWithSectors,
+        ));
+
+        // Volta 1: S1 = 1500ms
+        detector.fireLap();
+        await tester.pump(const Duration(milliseconds: 1));
+        clock.advance(const Duration(milliseconds: 1500));
+        await tester.pump(const Duration(milliseconds: 1500));
+        detector.fireSector(0);
+        await tester.pump(const Duration(milliseconds: 1));
+        detector.fireLap();
+        await tester.pump(const Duration(milliseconds: 1));
+
+        // Volta 2: S1 = 3000ms → pior que anterior (1500ms) → vermelho
+        clock.advance(const Duration(milliseconds: 3000));
+        await tester.pump(const Duration(milliseconds: 3000));
+        detector.fireSector(0);
+        await tester.pump(const Duration(milliseconds: 1));
+
+        final cell = tester.widget<Container>(find.byKey(const Key('sector_cell_s1')));
+        expect(
+          (cell.decoration as BoxDecoration).border!.top.color,
+          const Color(0xFFFF3B30),
+          reason: '3000ms > anterior=1500ms → vermelho',
+        );
+      });
+
+      testWidgets('sem volta anterior não exibe feedback de cor', (tester) async {
+        final clock = _TestClock();
+        final detector = _FakeDetector(clock: clock.call);
+        await tester.pumpWidget(_buildScreen(
+          detector: detector,
+          clock: clock.call,
+          track: _trackWithSectors,
+        ));
+
+        // Somente 1ª volta — sem volta anterior para comparar
+        detector.fireLap();
+        await tester.pump(const Duration(milliseconds: 1));
+        clock.advance(const Duration(milliseconds: 1500));
+        await tester.pump(const Duration(milliseconds: 1500));
+        detector.fireSector(0);
+        await tester.pump(const Duration(milliseconds: 1));
+
+        final cell = tester.widget<Container>(find.byKey(const Key('sector_cell_s1')));
+        final borderColor = (cell.decoration as BoxDecoration).border!.top.color;
+        expect(borderColor, isNot(const Color(0xFF00E676)));
+        expect(borderColor, isNot(const Color(0xFFFF3B30)));
+        expect(borderColor, isNot(const Color(0xFFBF5AF2)));
       });
     });
   });

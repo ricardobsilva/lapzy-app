@@ -2,7 +2,6 @@
 
 ## Doing
 
-<<<<<<< HEAD
 ## Backlog
 
 - [ ] TASK-022 · Feature — Heatmap de Velocidade no Traçado (bottom sheet detalhe de volta)
@@ -50,6 +49,36 @@
   - CA-UX-001-03: número da volta atual em destaque visual claro (hierarquia tipográfica diferente do cronômetro)
   - CA-UX-001-04: quando `sectorTime == null`, a UI exibe "—" (não zero, não vazio, não erro)
   - CA-UX-001-05: nenhuma nova interação exige mais de 2 toques
+
+- [ ] TASK-019 · Bug — Tela de Resumo com Dados Inconsistentes
+  Como piloto, quero que a tela de resumo pós-corrida exiba dados corretos e coerentes, para que eu possa analisar minha performance sem questionar a veracidade dos números.
+  refs: docs/telas.md, docs/lapzy_design_system.html, docs/principios.md, docs/testing.md
+
+  ### Contexto
+
+  Após o teste em pista (2026-05-01), a tela de resumo apresentou informações inconsistentes. Os dados gravados mostram possíveis fontes:
+
+  - **Melhor volta incorreta**: com a oscilação de ~5s (TASK-020), a melhor volta calculada pode ser uma volta "curta" do cluster ~65s que não representa o tempo real de pista — ou pode ser inflada pelo cluster ~70s
+  - **Setores do resumo**: quando setores são null em todas as voltas (caso do traçado 1), o resumo não deve exibir uma tabela de setores vazia ou com zeros — deve degradar com elegância
+  - **Contagem de voltas**: verificar se voltas com lapMs anômalo (ex: 259s, 110s) entram no cálculo de média e melhor volta ou são filtradas
+  - **Média de volta**: se calculada incluindo warm-up e anomalias, o número fica distorcido
+
+  ### Critérios de aceite
+
+  - CA-BUG-002-01: a "melhor volta" exibida no resumo corresponde ao menor `lapMs` entre voltas válidas (excluindo a primeira volta se for warm-up e voltas > 3× a mediana)
+  - CA-BUG-002-02: quando todos os setores de todas as voltas são null, a seção de setores não é renderizada no resumo (nem como zeros, nem como "—")
+  - CA-BUG-002-03: a média de volta exclui outliers (voltas > 2× a mediana do conjunto) do cálculo
+  - CA-BUG-002-04: o número total de voltas exibido corresponde a todas as voltas registradas, incluindo warm-up e outliers (transparência ao piloto)
+  - CA-BUG-002-05: testes de widget cobrem os estados: todos setores null, setores parciais, outliers presentes
+
+## Done (recente)
+
+- [x] TASK-021 · UX/UI — Melhorias na Tela de Corrida (pós-teste em pista)
+  Como piloto, quero uma tela de corrida mais legível e informativa durante a sessão, para que eu consiga interpretar os dados sem tirar o foco da pilotagem.
+
+- [x] TASK-019 · Bug — Tela de Resumo com Dados Inconsistentes
+  Como piloto, quero que a tela de resumo pós-corrida exiba dados corretos e coerentes, para que eu possa analisar minha performance sem questionar a veracidade dos números.
+
 
 - [x] TASK-020 · Bug — Oscilação Sistemática de ~5s no Tempo de Volta
   Como piloto, quero que os tempos de volta reflitam o tempo real percorrido, sem oscilação sistemática entre voltas consecutivas, para que eu possa comparar voltas com precisão.
@@ -162,27 +191,6 @@
   - CA-BUG-003-03: S2 e S3 em "Rei dos Reis 2" nunca registram valores < 1s (indicam bug de timestamp, não tempo real)
   - CA-BUG-003-04: testes unitários reproduzem o cenário de oscilação com um stream GPS simulado e verificam que após o fix a alternância desaparece
 
-- [ ] TASK-019 · Bug — Tela de Resumo com Dados Inconsistentes
-  Como piloto, quero que a tela de resumo pós-corrida exiba dados corretos e coerentes, para que eu possa analisar minha performance sem questionar a veracidade dos números.
-  refs: docs/telas.md, docs/lapzy_design_system.html, docs/principios.md, docs/testing.md
-
-  ### Contexto
-
-  Após o teste em pista (2026-05-01), a tela de resumo apresentou informações inconsistentes. Os dados gravados mostram possíveis fontes:
-
-  - **Melhor volta incorreta**: com a oscilação de ~5s (TASK-020), a melhor volta calculada pode ser uma volta "curta" do cluster ~65s que não representa o tempo real de pista — ou pode ser inflada pelo cluster ~70s
-  - **Setores do resumo**: quando setores são null em todas as voltas (caso do traçado 1), o resumo não deve exibir uma tabela de setores vazia ou com zeros — deve degradar com elegância
-  - **Contagem de voltas**: verificar se voltas com lapMs anômalo (ex: 259s, 110s) entram no cálculo de média e melhor volta ou são filtradas
-  - **Média de volta**: se calculada incluindo warm-up e anomalias, o número fica distorcido
-
-  ### Critérios de aceite
-
-  - CA-BUG-002-01: a "melhor volta" exibida no resumo corresponde ao menor `lapMs` entre voltas válidas (excluindo a primeira volta se for warm-up e voltas > 3× a mediana)
-  - CA-BUG-002-02: quando todos os setores de todas as voltas são null, a seção de setores não é renderizada no resumo (nem como zeros, nem como "—")
-  - CA-BUG-002-03: a média de volta exclui outliers (voltas > 2× a mediana do conjunto) do cálculo
-  - CA-BUG-002-04: o número total de voltas exibido corresponde a todas as voltas registradas, incluindo warm-up e outliers (transparência ao piloto)
-  - CA-BUG-002-05: testes de widget cobrem os estados: todos setores null, setores parciais, outliers presentes
-
 - [x] TASK-018 · Bug — Setores Não Detectados na Maioria das Voltas
   Como piloto, quero que os tempos de cada setor sejam capturados de forma confiável em toda volta, para que eu possa identificar onde perco e ganho tempo no circuito.
   refs: docs/principios.md, docs/testing.md
@@ -210,142 +218,6 @@
   - CA-BUG-001-02: nenhum setor registra tempo < 1s (indica double-fire ou timestamp errado)
   - CA-BUG-001-03: quando um setor não é detectado (null), o próximo setor também é null — o app não tenta acumular tempo parcial sobre base inválida
   - CA-BUG-001-04: testes unitários reproduzem a falha de detecção com streams GPS simulados onde o kart atravessa a fronteira entre dois updates consecutivos
-
-## Backlog
-
-- [ ] TASK-017 · Modo Bolso — Foreground Service Android (US POCKET-003)
-  Como piloto, quero que o GPS continue funcionando quando a tela apaga, para que eu possa guardar o celular no bolso sem perder a detecção de voltas.
-  refs: docs/principios.md, docs/testing.md
-
-  ### Contexto e decisões de design
-
-  **Fluxo natural do usuário**
-  O piloto não precisa de toggle nem sensor: ele simplesmente bloqueia a tela com o botão de power e guarda o celular no bolso. O wakelock permanente (`WakelockPlus.enable()`) não impede esse gesto — o botão de power é um override do sistema. O Foreground Service garante que o GPS continue rodando com a tela bloqueada.
-
-  **Problema**
-  O Android pode matar o processo do app quando a tela apaga (especialmente em dispositivos com agressiva gestão de bateria, como Samsung). O `Geolocator.getPositionStream()` para de receber eventos sem um Foreground Service ativo.
-
-  **Solução**
-  Criar um Android Foreground Service que mantém o processo vivo e o GPS rodando durante toda a sessão de corrida. O serviço deve:
-  - Iniciar quando a RaceScreen é montada
-  - Exibir uma notificação persistente obrigatória (requisito Android para Foreground Service): "Lapzy · Corrida em andamento"
-  - A notificação deve ter intent que traz o app ao foreground ao ser tocada
-  - Parar quando a RaceScreen é desmontada (dispose)
-  - Usar `foregroundServiceType: location` no AndroidManifest
-
-  **Retorno ao app com corrida ativa**
-  Quando o usuário abre o app (via notificação ou ícone) com a tela bloqueada e corrida em andamento:
-  - O Flutter retorna ao foreground com estado preservado (processo vivo pelo Foreground Service)
-  - A RaceScreen já está ativa em landscape (`setPreferredOrientations` continua valendo)
-  - O `launchMode="singleTop"` no AndroidManifest impede criação de nova Activity
-
-  **Stack**
-  - Implementação nativa via MethodChannel em Kotlin (sem dependência de pacote externo)
-  - Um único canal `lapzy/foreground_service` com métodos `start` e `stop`
-
-  **Permissões adicionais**
-  - `FOREGROUND_SERVICE` (obrigatória)
-  - `FOREGROUND_SERVICE_LOCATION` (Android 14+, obrigatória)
-  - Nenhuma permissão nova de localização — já solicitadas nas tasks anteriores
-
-  ### Critérios de aceite
-
-  - CA-POCKET-003-01: com tela bloqueada (botão de power), o LapDetector continua emitindo LapCrossedEvent e SectorCrossedEvent
-  - CA-POCKET-003-02: uma notificação persistente "Lapzy · Corrida em andamento" fica visível na barra de status durante toda a corrida
-  - CA-POCKET-003-03: tocar na notificação abre o app e exibe a RaceScreen em landscape com a corrida em andamento
-  - CA-POCKET-003-04: ao encerrar a corrida (FINALIZAR), o Foreground Service é parado e a notificação desaparece
-  - CA-POCKET-003-05: o Foreground Service não persiste após o app ser fechado pelo usuário (swipe no recents)
-  - CA-POCKET-003-06: no Samsung A35 (Android 14), o GPS detecta voltas corretamente com a tela bloqueada por pelo menos 10 minutos contínuos
-
-=======
->>>>>>> 328599c (doc: alterado status de tasks para done)
-## Backlog
-
-## Done (recente)
-
-- [x] TASK-013 · Histórico de Corridas (US HIST-001)
-  Como piloto, quero acessar o histórico de todas as minhas corridas anteriores e revisar o resumo de cada uma, para que eu possa acompanhar minha evolução ao longo do tempo.
-  refs: docs/lapzy_tela_listagem_corridas.md, docs/telas.md, docs/lapzy_design_system.html, docs/principios.md, docs/identidade.md
-
-- [x] TASK-012 · Persistência Local de Sessões de Corrida (US PERSIST-002)
-  Como piloto, quero que os dados de cada corrida sejam salvos automaticamente no dispositivo, para que eu possa consultar meu histórico mesmo sem conexão com a internet.
-  refs: docs/telas.md, docs/principios.md
-  notas de arquitetura:
-  - Usar shared_preferences + JSON como storage local
-  - Modelo RaceSessionRecord deve ser independente de RaceSessionSnapshot (snapshot é live, record é histórico imutável)
-  - IDs devem ser UUIDs v4 — nunca timestamp — para não colidir em sync multi-dispositivo
-  - Datas em ISO 8601 (string) para portabilidade de sync
-  - Serialização de enums via string (ex: "melhorVolta"), nunca por índice — índice quebra com reordenação futura
-  - createdAt obrigatório em todo record — será usado para resolução de conflitos no sync
-  - LapResult precisa de toJson/fromJson (lapMs: int, sectors: List<int?>)
-    critérios de aceite:
-  - CA-PERSIST-002-01: RaceSessionRecord contém: id (UUID v4), trackId, trackName (desnormalizado), date (ISO 8601), laps (lapMs + sectors por volta), bestLapMs, createdAt
-  - CA-PERSIST-002-02: sessão é salva automaticamente no encerramento da corrida, antes de navegar para RaceSummaryScreen (sem ação do usuário)
-  - CA-PERSIST-002-03: histórico de sessões persiste após reiniciar o app
-  - CA-PERSIST-002-04: RaceSessionRepository expõe save(record), loadAll(), delete(id) — mesmo padrão do TrackRepository
-  - CA-PERSIST-002-05: RaceSummaryScreen pode ser construída a partir de um RaceSessionRecord (entrada alternativa via histórico)
-
-- [x] TASK-011 · Persistência Local de Pistas (US PERSIST-001)
-  Como piloto, quero que as pistas que criei sejam salvas no dispositivo, para que eu não precise reconfigurá-las a cada sessão.
-  refs: docs/lapzy_criacao_pista_setores.md, docs/tech.md, docs/principios.md
-  notas de arquitetura:
-  - Usar shared_preferences + JSON como storage local
-  - IDs devem ser UUIDs v4 — Track.id hoje usa timestamp (DateTime.now().millisecondsSinceEpoch.toString()); migrar para uuid package
-  - GeoPoint serializa como {lat, lng}; TrackLine serializa como {a, b, middlePoints, widthMeters}
-  - TrackRepository deve carregar pistas do storage na inicialização do app (antes de renderizar HomeScreen)
-  - lastSession deve ser atualizado ao salvar uma RaceSessionRecord para esta pista
-  - createdAt e updatedAt obrigatórios em Track para futura reconciliação de sync
-    critérios de aceite:
-  - CA-PERSIST-001-01: pista criada (nome, linha de largada/chegada, setores) persiste após reiniciar o app
-  - CA-PERSIST-001-02: todos os campos geográficos são restaurados com precisão (lat/lng, widthMeters, middlePoints de linhas curvas)
-  - CA-PERSIST-001-03: Track.id é UUID v4 gerado no momento da criação
-  - CA-PERSIST-001-04: TrackRepository inicializa carregando dados do storage (loadAll assíncrono, chamado em main antes do runApp ou via FutureBuilder na HomeScreen)
-  - CA-PERSIST-001-05: pista deletada é removida do storage imediatamente
-
-- [x] TASK-005 · Resumo Pós-Corrida
-  refs: docs/telas.md, docs/lapzy_design_system.html, docs/principios.md
-
-- [x] TASK-010 · Encerramento de Corrida Anti-Acidental (US END-001)
-  Como piloto, quero um mecanismo de encerramento que evite toques acidentais mas que seja rápido quando intencional, para que eu não encerre a corrida por engano enquanto dirijo.
-  refs: docs/tela_corrida_svg.md, docs/lapzy_design_system.html, docs/principios.md, docs/telas.md
-  critérios de aceite:
-  - CA-END-001-01: swipe a partir da borda direita (> 30px para dentro) → botão FINALIZAR fica visível em destaque (Color(0xFFFF3B30))
-  - CA-END-001-02: botão visível sem toque por 3s → retorna ao estado pequeno/opaco original
-  - CA-END-001-03: toque no botão FINALIZAR → sessão encerrada imediatamente, app navega para ResumoScreen e dados salvos automaticamente (sem ação do usuário)
-  - CA-END-001-04: ao carregar ResumoScreen, dados da sessão (voltas, tempos, setores) estão disponíveis e corretos; NÃO há botão "Descartar" ou opção de cancelar salvamento
-
-
-- [x] TASK-008 · Tempos Parciais por Setor em Tempo Real (US RACE-003)
-  Como piloto, quero ver o tempo parcial de cada setor enquanto ainda estou na volta, para que eu identifique onde perdi ou ganhei tempo sem esperar o fim da volta.
-  refs: docs/tela_corrida_svg.md, docs/lapzy_criacao_pista_setores.md, docs/lapzy_design_system.html, docs/principios.md, docs/identidade.md
-  critérios de aceite:
-  - CA-RACE-003-01: ao cruzar o início do S1, badge S1 fica ativo (Color(0xFF00B0FF)) e cronômetro de split S1 inicia
-  - CA-RACE-003-02: ao cruzar fim S1/início S2, tempo final do S1 é exibido no badge S1 e badge S2 fica ativo (Color(0xFFFFD600))
-  - CA-RACE-003-03: ao cruzar a linha de chegada, todos os badges exibem os tempos finais dos setores da volta
-  - CA-RACE-003-04: se a pista NÃO possui setores definidos, badges de setor NÃO são exibidos e o layout central mantém apenas o tempo de volta
-
-- [x] TASK-009 · Feedback Visual de Borda por Estado de Volta (US RACE-004)
-  refs: docs/tela_corrida_svg.md, docs/lapzy_design_system.html, docs/identidade.md, docs/principios.md
-
-- [x] TASK-007 · Cronômetro de Volta em Tempo Real (US RACE-002)
-  refs: docs/tela_corrida_svg.md, docs/lapzy_design_system.html, docs/principios.md, docs/telas.md
-
-- [x] TASK-003 · Tela de Corrida
-  refs: docs/tela_corrida_svg.md, docs/lapzy_design_system.html, docs/principios.md, docs/telas.md
-
-- [x] TASK-006 · Configurar Google Maps API Key para produção
-  Substituir o placeholder `YOUR_MAPS_API_KEY` no AndroidManifest.xml pela chave real.
-  Criar chave restrita (SHA-1 do keystore de release + package com.lapzy.lapzy) no Google Cloud Console.
-  Verificar se Maps SDK for Android está ativado no projeto.
-
-- [x] TASK-004 · Criação de Pista
-  refs: docs/lapzy_criacao_pista_setores.md, docs/tech.md, docs/telas.md
-
-- [x] TASK-002 · Bottom Sheet Seleção de Pista
-  refs: docs/bottom_sheet_pista.md, docs/lapzy_design_system.html, docs/principios.md, docs/fluxo.md
-
-- [x] TASK-001 · Tela Inicial
-  refs: docs/lapzy_tela_inicial.md, docs/lapzy_design_system.html, docs/principios.md
 
 - [x] TASK-017 · Modo Bolso — Foreground Service Android (US POCKET-003)
   Como piloto, quero que o GPS continue funcionando quando a tela apaga, para que eu possa guardar o celular no bolso sem perder a detecção de voltas.
@@ -445,3 +317,86 @@
   - CA-TRACK-001-08: swipe para esquerda em item da lista revela ação de exclusão; ao confirmar, exibe bottom sheet com texto exato definido acima
   - CA-TRACK-001-09: ao confirmar exclusão, traçado é removido do TrackRepository e da lista com animação; histórico de corridas não é alterado
   - CA-TRACK-001-10: ao cancelar a exclusão, o item retorna à posição original sem nenhuma alteração
+
+- [x] TASK-013 · Histórico de Corridas (US HIST-001)
+  Como piloto, quero acessar o histórico de todas as minhas corridas anteriores e revisar o resumo de cada uma, para que eu possa acompanhar minha evolução ao longo do tempo.
+  refs: docs/lapzy_tela_listagem_corridas.md, docs/telas.md, docs/lapzy_design_system.html, docs/principios.md, docs/identidade.md
+
+- [x] TASK-012 · Persistência Local de Sessões de Corrida (US PERSIST-002)
+  Como piloto, quero que os dados de cada corrida sejam salvos automaticamente no dispositivo, para que eu possa consultar meu histórico mesmo sem conexão com a internet.
+  refs: docs/telas.md, docs/principios.md
+  notas de arquitetura:
+  - Usar shared_preferences + JSON como storage local
+  - Modelo RaceSessionRecord deve ser independente de RaceSessionSnapshot (snapshot é live, record é histórico imutável)
+  - IDs devem ser UUIDs v4 — nunca timestamp — para não colidir em sync multi-dispositivo
+  - Datas em ISO 8601 (string) para portabilidade de sync
+  - Serialização de enums via string (ex: "melhorVolta"), nunca por índice — índice quebra com reordenação futura
+  - createdAt obrigatório em todo record — será usado para resolução de conflitos no sync
+  - LapResult precisa de toJson/fromJson (lapMs: int, sectors: List<int?>)
+    critérios de aceite:
+  - CA-PERSIST-002-01: RaceSessionRecord contém: id (UUID v4), trackId, trackName (desnormalizado), date (ISO 8601), laps (lapMs + sectors por volta), bestLapMs, createdAt
+  - CA-PERSIST-002-02: sessão é salva automaticamente no encerramento da corrida, antes de navegar para RaceSummaryScreen (sem ação do usuário)
+  - CA-PERSIST-002-03: histórico de sessões persiste após reiniciar o app
+  - CA-PERSIST-002-04: RaceSessionRepository expõe save(record), loadAll(), delete(id) — mesmo padrão do TrackRepository
+  - CA-PERSIST-002-05: RaceSummaryScreen pode ser construída a partir de um RaceSessionRecord (entrada alternativa via histórico)
+
+- [x] TASK-011 · Persistência Local de Pistas (US PERSIST-001)
+  Como piloto, quero que as pistas que criei sejam salvas no dispositivo, para que eu não precise reconfigurá-las a cada sessão.
+  refs: docs/lapzy_criacao_pista_setores.md, docs/tech.md, docs/principios.md
+  notas de arquitetura:
+  - Usar shared_preferences + JSON como storage local
+  - IDs devem ser UUIDs v4 — Track.id hoje usa timestamp (DateTime.now().millisecondsSinceEpoch.toString()); migrar para uuid package
+  - GeoPoint serializa como {lat, lng}; TrackLine serializa como {a, b, middlePoints, widthMeters}
+  - TrackRepository deve carregar pistas do storage na inicialização do app (antes de renderizar HomeScreen)
+  - lastSession deve ser atualizado ao salvar uma RaceSessionRecord para esta pista
+  - createdAt e updatedAt obrigatórios em Track para futura reconciliação de sync
+    critérios de aceite:
+  - CA-PERSIST-001-01: pista criada (nome, linha de largada/chegada, setores) persiste após reiniciar o app
+  - CA-PERSIST-001-02: todos os campos geográficos são restaurados com precisão (lat/lng, widthMeters, middlePoints de linhas curvas)
+  - CA-PERSIST-001-03: Track.id é UUID v4 gerado no momento da criação
+  - CA-PERSIST-001-04: TrackRepository inicializa carregando dados do storage (loadAll assíncrono, chamado em main antes do runApp ou via FutureBuilder na HomeScreen)
+  - CA-PERSIST-001-05: pista deletada é removida do storage imediatamente
+
+- [x] TASK-010 · Encerramento de Corrida Anti-Acidental (US END-001)
+  Como piloto, quero um mecanismo de encerramento que evite toques acidentais mas que seja rápido quando intencional, para que eu não encerre a corrida por engano enquanto dirijo.
+  refs: docs/tela_corrida_svg.md, docs/lapzy_design_system.html, docs/principios.md, docs/telas.md
+  critérios de aceite:
+  - CA-END-001-01: swipe a partir da borda direita (> 30px para dentro) → botão FINALIZAR fica visível em destaque (Color(0xFFFF3B30))
+  - CA-END-001-02: botão visível sem toque por 3s → retorna ao estado pequeno/opaco original
+  - CA-END-001-03: toque no botão FINALIZAR → sessão encerrada imediatamente, app navega para ResumoScreen e dados salvos automaticamente (sem ação do usuário)
+  - CA-END-001-04: ao carregar ResumoScreen, dados da sessão (voltas, tempos, setores) estão disponíveis e corretos; NÃO há botão "Descartar" ou opção de cancelar salvamento
+
+- [x] TASK-009 · Feedback Visual de Borda por Estado de Volta (US RACE-004)
+  refs: docs/tela_corrida_svg.md, docs/lapzy_design_system.html, docs/identidade.md, docs/principios.md
+
+- [x] TASK-008 · Tempos Parciais por Setor em Tempo Real (US RACE-003)
+  Como piloto, quero ver o tempo parcial de cada setor enquanto ainda estou na volta, para que eu identifique onde perdi ou ganhei tempo sem esperar o fim da volta.
+  refs: docs/tela_corrida_svg.md, docs/lapzy_criacao_pista_setores.md, docs/lapzy_design_system.html, docs/principios.md, docs/identidade.md
+  critérios de aceite:
+  - CA-RACE-003-01: ao cruzar o início do S1, badge S1 fica ativo (Color(0xFF00B0FF)) e cronômetro de split S1 inicia
+  - CA-RACE-003-02: ao cruzar fim S1/início S2, tempo final do S1 é exibido no badge S1 e badge S2 fica ativo (Color(0xFFFFD600))
+  - CA-RACE-003-03: ao cruzar a linha de chegada, todos os badges exibem os tempos finais dos setores da volta
+  - CA-RACE-003-04: se a pista NÃO possui setores definidos, badges de setor NÃO são exibidos e o layout central mantém apenas o tempo de volta
+
+- [x] TASK-007 · Cronômetro de Volta em Tempo Real (US RACE-002)
+  refs: docs/tela_corrida_svg.md, docs/lapzy_design_system.html, docs/principios.md, docs/telas.md
+
+- [x] TASK-005 · Resumo Pós-Corrida
+  refs: docs/telas.md, docs/lapzy_design_system.html, docs/principios.md
+
+- [x] TASK-006 · Configurar Google Maps API Key para produção
+  Substituir o placeholder `YOUR_MAPS_API_KEY` no AndroidManifest.xml pela chave real.
+  Criar chave restrita (SHA-1 do keystore de release + package com.lapzy.lapzy) no Google Cloud Console.
+  Verificar se Maps SDK for Android está ativado no projeto.
+
+- [x] TASK-004 · Criação de Pista
+  refs: docs/lapzy_criacao_pista_setores.md, docs/tech.md, docs/telas.md
+
+- [x] TASK-003 · Tela de Corrida
+  refs: docs/tela_corrida_svg.md, docs/lapzy_design_system.html, docs/principios.md, docs/telas.md
+
+- [x] TASK-002 · Bottom Sheet Seleção de Pista
+  refs: docs/bottom_sheet_pista.md, docs/lapzy_design_system.html, docs/principios.md, docs/fluxo.md
+
+- [x] TASK-001 · Tela Inicial
+  refs: docs/lapzy_tela_inicial.md, docs/lapzy_design_system.html, docs/principios.md
