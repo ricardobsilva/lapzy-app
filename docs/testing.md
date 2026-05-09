@@ -50,6 +50,55 @@ Nenhuma task transita para Done sem testes cobrindo seus cenários.
 
 ---
 
+## Isolamento de storage em testes de integração
+
+Testes de integração rodam no dispositivo real com SharedPreferences persistente.
+Cada arquivo de teste é instalado como um APK separado — o storage do dispositivo
+**não é limpo entre arquivos**. Dados de um run anterior contaminam o próximo.
+
+**Regra inegociável:** todo arquivo de integração que chama `app.main()` deve
+limpar **storage E memória** de todos os repositórios antes de cada teste.
+
+```dart
+// ✅ CORRETO — setUp limpa storage persistente antes de cada teste
+group('Minha Feature', () {
+  setUp(() async {
+    await TrackRepository().clearStorageForTesting();       // limpa SharedPreferences
+    await RaceSessionRepository().clearStorageForTesting(); // limpa SharedPreferences
+    // clearStorageForTesting() já reseta o cache em memória internamente
+  });
+
+  testWidgets('caso A', (tester) async {
+    TrackRepository().add(const Track(id: '1', name: 'Pista A'));
+    await app.main();
+    // ...
+  });
+
+  testWidgets('caso B', (tester) async {
+    TrackRepository().add(const Track(id: '1', name: 'Pista B'));
+    await app.main();
+    // ...
+  });
+});
+```
+
+```dart
+// ❌ PROIBIDO — clearForTesting() limpa só memória; storage permanece no dispositivo
+testWidgets('caso A', (tester) async {
+  TrackRepository().clearForTesting();      // ← insuficiente
+  TrackRepository().add(Track(...));
+  await app.main();                         // app.main() relê o storage antigo
+  // resultado: pista adicionada é sobrescrita por dados velhos
+});
+```
+
+**Por que isso importa:** `load()` nos repositórios é idempotente por design — se
+o storage tiver dados, ele sobrescreve o cache em memória. Sem limpar o storage
+antes, `app.main()` carrega dados da execução anterior, quebrando a independência
+entre testes.
+
+---
+
 ## O que é proibido
 
 ```dart

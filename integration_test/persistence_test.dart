@@ -5,7 +5,6 @@ import 'package:lapzy/main.dart' as app;
 import 'package:lapzy/models/track.dart';
 import 'package:lapzy/repositories/race_session_repository.dart';
 import 'package:lapzy/repositories/track_repository.dart';
-import 'package:lapzy/screens/race_screen.dart';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -129,14 +128,11 @@ void main() {
         await tester.tap(find.text('Pista Sessão'));
         await tester.pumpAndSettle();
 
-        final screenWidth = tester.getSize(find.byType(RaceScreen)).width;
-        await tester.dragFrom(
-          Offset(screenWidth - 5, 200),
-          const Offset(-50, 0),
+        final gesture = await tester.startGesture(
+          tester.getCenter(find.byKey(const Key('end_button'))),
         );
-        await tester.pump();
-
-        await tester.tap(find.byKey(const Key('end_button')));
+        await tester.pump(const Duration(milliseconds: 2100));
+        await gesture.up();
         await tester.pumpAndSettle();
 
         expect(RaceSessionRepository().sessions.length, equals(1));
@@ -173,14 +169,11 @@ void main() {
         await tester.tap(find.text('Pista Campos'));
         await tester.pumpAndSettle();
 
-        final screenWidth = tester.getSize(find.byType(RaceScreen)).width;
-        await tester.dragFrom(
-          Offset(screenWidth - 5, 200),
-          const Offset(-50, 0),
+        final gesture = await tester.startGesture(
+          tester.getCenter(find.byKey(const Key('end_button'))),
         );
-        await tester.pump();
-
-        await tester.tap(find.byKey(const Key('end_button')));
+        await tester.pump(const Duration(milliseconds: 2100));
+        await gesture.up();
         await tester.pumpAndSettle();
 
         final session = RaceSessionRepository().sessions.first;
@@ -218,14 +211,11 @@ void main() {
         await tester.tap(find.text('Pista Reload'));
         await tester.pumpAndSettle();
 
-        final screenWidth = tester.getSize(find.byType(RaceScreen)).width;
-        await tester.dragFrom(
-          Offset(screenWidth - 5, 200),
-          const Offset(-50, 0),
+        final gesture = await tester.startGesture(
+          tester.getCenter(find.byKey(const Key('end_button'))),
         );
-        await tester.pump();
-
-        await tester.tap(find.byKey(const Key('end_button')));
+        await tester.pump(const Duration(milliseconds: 2100));
+        await gesture.up();
         await tester.pumpAndSettle();
 
         final savedId = RaceSessionRepository().sessions.first.id;
