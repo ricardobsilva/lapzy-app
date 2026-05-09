@@ -1,50 +1,59 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:lapzy/main.dart' as app;
+import 'package:lapzy/repositories/race_session_repository.dart';
+import 'package:lapzy/repositories/track_repository.dart';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('fluxo: home → toque em INICIAR → sheet de seleção de pista abre', (tester) async {
-    await app.main();
-    await tester.pumpAndSettle();
+  group('fluxo: home → toque em INICIAR', () {
+    setUp(() async {
+      await TrackRepository().clearStorageForTesting();
+      await RaceSessionRepository().clearStorageForTesting();
+    });
 
-    expect(find.text('INICIAR'), findsOneWidget);
+    testWidgets('sheet de seleção de pista abre', (tester) async {
+      await app.main();
+      await tester.pumpAndSettle();
 
-    await tester.tap(find.text('INICIAR'));
-    await tester.pumpAndSettle();
+      expect(find.text('INICIAR'), findsOneWidget);
 
-    expect(find.text('SELECIONAR PISTA'), findsOneWidget);
-  });
+      await tester.tap(find.text('INICIAR'));
+      await tester.pumpAndSettle();
 
-  testWidgets('fluxo: home → toque em INICIAR → estado vazio exibido sem pistas', (tester) async {
-    await app.main();
-    await tester.pumpAndSettle();
+      expect(find.text('SELECIONAR PISTA'), findsOneWidget);
+    });
 
-    await tester.tap(find.text('INICIAR'));
-    await tester.pumpAndSettle();
+    testWidgets('estado vazio exibido sem pistas', (tester) async {
+      await app.main();
+      await tester.pumpAndSettle();
 
-    expect(find.text('Nenhuma pista salva'), findsOneWidget);
-    expect(find.text('Crie sua primeira pista para começar'), findsOneWidget);
-  });
+      await tester.tap(find.text('INICIAR'));
+      await tester.pumpAndSettle();
 
-  testWidgets('fluxo: home → toque em INICIAR → botão + NOVA PISTA visível', (tester) async {
-    await app.main();
-    await tester.pumpAndSettle();
+      expect(find.text('Nenhuma pista salva'), findsOneWidget);
+      expect(find.text('Crie sua primeira pista para começar'), findsOneWidget);
+    });
 
-    await tester.tap(find.text('INICIAR'));
-    await tester.pumpAndSettle();
+    testWidgets('botão + NOVA PISTA visível', (tester) async {
+      await app.main();
+      await tester.pumpAndSettle();
 
-    expect(find.text('+ NOVA PISTA'), findsOneWidget);
-  });
+      await tester.tap(find.text('INICIAR'));
+      await tester.pumpAndSettle();
 
-  testWidgets('fluxo: home → toque em INICIAR → campo de busca disponível', (tester) async {
-    await app.main();
-    await tester.pumpAndSettle();
+      expect(find.text('+ NOVA PISTA'), findsOneWidget);
+    });
 
-    await tester.tap(find.text('INICIAR'));
-    await tester.pumpAndSettle();
+    testWidgets('campo de busca disponível', (tester) async {
+      await app.main();
+      await tester.pumpAndSettle();
 
-    expect(find.text('Buscar pista...'), findsOneWidget);
+      await tester.tap(find.text('INICIAR'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Buscar pista...'), findsOneWidget);
+    });
   });
 }

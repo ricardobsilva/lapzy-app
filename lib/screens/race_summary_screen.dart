@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../models/race_session.dart';
 import '../models/track.dart';
+import '../services/lap_filter.dart';
 
 const _kBg = Color(0xFF0A0A0A);
 const _kSurface = Color(0xFF141414);
@@ -60,9 +61,16 @@ class _RaceSummaryScreenState extends State<RaceSummaryScreen> {
 
   int get _totalRaceMs => widget.laps.fold(0, (sum, l) => sum + l.lapMs);
 
+  /// CA-BUG-002-01: melhor volta excluindo warm-up e outliers (> 3× mediana).
+  int? get _computedBestLapMs => LapFilter.bestValidLap(widget.laps);
+
+  /// CA-BUG-002-03: média excluindo outliers (> 2× mediana) e warm-up.
+  int? get _computedAvgLapMs => LapFilter.averageLap(widget.laps);
+
   int get _bestLapIndex {
-    if (widget.bestLapMs == null) return -1;
-    return widget.laps.indexWhere((l) => l.lapMs == widget.bestLapMs);
+    final best = _computedBestLapMs;
+    if (best == null) return -1;
+    return widget.laps.indexWhere((l) => l.lapMs == best);
   }
 
   LapResult? get _bestLap {
@@ -73,6 +81,10 @@ class _RaceSummaryScreenState extends State<RaceSummaryScreen> {
   int _activeSectorCount() {
     return widget.laps.fold(0, (m, l) => l.sectors.length > m ? l.sectors.length : m);
   }
+
+  /// CA-BUG-002-02: verdadeiro somente quando ao menos um setor tem valor não-null.
+  bool get _hasAnySectorData =>
+      widget.laps.any((lap) => lap.sectors.any((s) => s != null));
 
   void _showLapDetail(int lapNumber, LapResult lap) {
     final sectorCount = _activeSectorCount();
@@ -97,6 +109,7 @@ class _RaceSummaryScreenState extends State<RaceSummaryScreen> {
   Widget build(BuildContext context) {
     final sectorCount = _activeSectorCount();
     final bestLapIndex = _bestLapIndex;
+    final computedBestLapMs = _computedBestLapMs;
 
     return Scaffold(
       backgroundColor: _kBg,
@@ -106,16 +119,17 @@ class _RaceSummaryScreenState extends State<RaceSummaryScreen> {
           children: [
             _SummaryHero(
               track: widget.track,
-              bestLapMs: widget.bestLapMs,
+              bestLapMs: computedBestLapMs,
               bestLapNumber: bestLapIndex >= 0 ? bestLapIndex + 1 : null,
               lapCount: widget.laps.length,
               totalRaceMs: _totalRaceMs,
+              avgLapMs: _computedAvgLapMs,
             ),
             const Divider(color: _kDivider, height: 1),
             Expanded(
               child: CustomScrollView(
                 slivers: [
-                  if (sectorCount > 0) ...[
+                  if (_hasAnySectorData) ...[
                     SliverToBoxAdapter(
                       child: _SectorSummary(
                         laps: widget.laps,
@@ -163,8 +177,8 @@ class _RaceSummaryScreenState extends State<RaceSummaryScreen> {
                           const Divider(color: _kDivider, height: 1),
                       itemBuilder: (context, i) {
                         final lap = widget.laps[i];
-                        final isBest = widget.bestLapMs != null &&
-                            lap.lapMs == widget.bestLapMs;
+                        final isBest = computedBestLapMs != null &&
+                            lap.lapMs == computedBestLapMs;
                         final prevLapMs =
                             i > 0 ? widget.laps[i - 1].lapMs : null;
                         return _LapRow(
@@ -195,6 +209,7 @@ class _SummaryHero extends StatelessWidget {
   final int? bestLapNumber;
   final int lapCount;
   final int totalRaceMs;
+  final int? avgLapMs;
 
   const _SummaryHero({
     required this.track,
@@ -202,6 +217,7 @@ class _SummaryHero extends StatelessWidget {
     required this.bestLapNumber,
     required this.lapCount,
     required this.totalRaceMs,
+    required this.avgLapMs,
   });
 
   @override
@@ -260,6 +276,15 @@ class _SummaryHero extends StatelessWidget {
             color: Colors.white.withAlpha(153),
             valueKey: const Key('summary_total_time'),
           ),
+          if (avgLapMs != null) ...[
+            const SizedBox(height: 12),
+            _HeroStat(
+              label: 'MÉDIA VOLTA',
+              value: _formatMs(avgLapMs!),
+              color: Colors.white.withAlpha(153),
+              valueKey: const Key('summary_avg_lap'),
+            ),
+          ],
         ],
       ),
     );
