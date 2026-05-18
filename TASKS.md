@@ -4,6 +4,156 @@
 
 ## Backlog
 
+- [ ] TASK-023 · Feature — Informações do Dispositivo GPS no Resumo de Corrida
+  Como piloto, quero saber qual aparelho foi usado como GPS na minha corrida e qual é a precisão típica desse hardware, para que eu entenda o quão confiáveis são os meus tempos e possa tomar decisões mais informadas sobre meus dados.
+
+  ### Contexto e motivação
+
+  O Lapzy cronometra voltas via GPS interpolado — a precisão do resultado depende diretamente do chipset GPS do dispositivo. Um Samsung A35 entrega ~0.2Hz com erro típico de ±5-10m, o que representa ±300-500ms de imprecisão potencial por volta. Pilotos questionam a precisão dos dados; exibir o dispositivo usado (com contexto de precisão) cria transparência e confiança no produto.
+
+  Essa informação também será exibida no painel web (lapzy-hub) como parte do resumo da sessão, permitindo que o piloto veja, a posteriori, qual hardware gerou aqueles dados.
+
+  ### Dados a coletar
+
+  Usar o pacote `device_info_plus` (já popular no ecossistema Flutter, licença BSD) para obter, ao encerrar a corrida:
+
+  | Campo | Fonte | Exemplo |
+  |---|---|---|
+  | `manufacturer` | `AndroidDeviceInfo.manufacturer` | `"Samsung"` |
+  | `model` | `AndroidDeviceInfo.model` | `"SM-A356B"` |
+  | `androidVersion` | `AndroidDeviceInfo.version.release` | `"14"` |
+
+  **Nota**: não coletar IMEI, serial number, nem nenhum identificador único de dispositivo. Apenas fabricante, modelo e versão do sistema — dados não-pessoais e não-rastreáveis individualmente.
+
+  ### Perfil de precisão (lógica no app)
+
+  Com base no modelo detectado, atribuir um `gpsAccuracyLabel` para exibição:
+
+  | Perfil | Critério (simplificado) | Rótulo exibido |
+  |---|---|---|
+  | `consumer` | Smartphone padrão (padrão) | "GPS de smartphone · Precisão típica: ±300–500ms" |
+  | `premium` | Pixel 8+, Galaxy S24+, iPhone 14+ | "GPS de smartphone premium · Precisão típica: ±100–300ms" |
+  | `external` | Reservado para hardware GPS externo (roadmap) | — |
+
+  **Mapeamento inicial**: usar lista conservadora de modelos premium conhecidos; para qualquer modelo não reconhecido, usar `consumer` como fallback seguro.
+
+  ### Modelo de dados
+
+  Adicionar `GpsDevice` como campo opcional em `RaceSessionRecord`:
+
+  ```dart
+  class GpsDevice {
+    final String manufacturer; // "Samsung"
+    final String model;        // "SM-A356B"
+    final String androidVersion; // "14"
+    final String accuracyLabel;  // rótulo de UI pré-calculado
+
+    // toJson / fromJson
+  }
+  ```
+
+  `RaceSessionRecord` recebe o campo `gpsDevice: GpsDevice?` (nullable para compatibilidade com sessões salvas antes desta task).
+
+  ### Mudanças no app
+
+  1. Adicionar `device_info_plus` ao `pubspec.yaml`
+  2. Criar `GpsDeviceService` — singleton que coleta e cacheia `GpsDevice` na inicialização do app (evitar consulta repetida)
+  3. Atualizar `GpsDevice.fromAndroidInfo()` — mapeia `AndroidDeviceInfo` para `GpsDevice`
+  4. Atualizar `RaceSessionRecord`: adicionar `gpsDevice: GpsDevice?`, atualizar `toJson`/`fromJson`
+  5. Atualizar fluxo de encerramento de corrida (`RaceScreen`) para incluir `gpsDevice` ao criar o `RaceSessionRecord`
+  6. Exibir na `RaceSummaryScreen`: card ou linha de rodapé "Cronometrado com [Fabricante] [Modelo] · [accuracyLabel]"
+  7. Atualizar `RaceSessionRepository` para serializar/deserializar o novo campo
+
+  ### Mudanças no hub
+
+  - `RaceSessionRecord` no schema Prisma: adicionar campo `gpsDevice Json?`
+  - Contrato de API: ver `docs/api-contract.md` (já atualizado)
+  - Dashboard: badge de precisão no resumo de sessão
+
+  ### Critérios de aceite
+
+  - CA-023-01: ao encerrar uma corrida, `RaceSessionRecord.gpsDevice` contém `manufacturer`, `model` e `androidVersion` do dispositivo atual
+  - CA-023-02: `gpsDevice` é serializado em `toJson` e restaurado em `fromJson` corretamente após reiniciar o app
+  - CA-023-03: sessões salvas antes desta task (sem `gpsDevice`) carregam normalmente com `gpsDevice == null` — sem crash
+  - CA-023-04: `RaceSummaryScreen` exibe uma linha com o dispositivo usado e o rótulo de precisão (ex: "GPS de smartphone · Precisão típica: ±300–500ms")
+  - CA-023-05: `GpsDeviceService` consulta `device_info_plus` no máximo uma vez por sessão de app (resultado cacheado)
+  - CA-023-06: em dispositivo não reconhecido no mapeamento de perfil premium, o app usa `consumer` como fallback sem exceção
+
+- [ ] TASK-024 · Feature — Compartilhamento de Traçados entre Pilotos
+  Como piloto (ou professor), quero poder compartilhar um traçado que configurei com outros usuários do Lapzy, para que eles possam usar exatamente as mesmas configurações de largada/chegada e setores — garantindo que os dados sejam comparáveis entre nós.
+
+  **Prioridade**: alta — implementar imediatamente após TASK-023.
+
+  ### Contexto e motivação
+
+  Hoje cada piloto configura seu próprio traçado do zero. Isso cria dois problemas:
+  1. Configurar o traçado é trabalhoso — requer ir até a pista com o app aberto.
+  2. Pilotos diferentes com traçados "do mesmo kartódromo" podem ter configurações ligeiramente diferentes (S/F em posições distintas, setores diferentes), tornando os dados incomparáveis.
+
+  O compartilhamento resolve ambos: um professor ou piloto de referência configura o traçado uma vez com precisão, compartilha um código curto, e todos os alunos/parceiros importam exatamente o mesmo layout. A partir daí, os dados são comparáveis — o hub pode mostrar o delta do aluno em relação à referência usando os mesmos setores.
+
+  **Caso de uso principal**: escolas de pilotagem rental (mas também F4 amador) onde o professor orienta alunos usando melhores pilotos como referência de volta ideal.
+
+  ### Fluxo de compartilhamento (piloto que cria)
+
+  1. Na `TrackListScreen` ou `TrackDetailScreen`, botão/ação "COMPARTILHAR TRAÇADO"
+  2. App faz `POST /api/app/tracks/:id/share` → servidor retorna um `shareCode` (6 caracteres alfanuméricos, ex: `GV7K2M`)
+  3. App exibe bottom sheet com o código e opção de copiar/compartilhar via `Share.share()` do Flutter
+  4. O código expira em 30 dias (renovável). O traçado em si não é público — só acessível via código.
+  5. O traçado do criador permanece intacto; compartilhamento não altera nem expõe sessões.
+
+  ### Fluxo de importação (piloto que recebe)
+
+  1. Na `TrackListScreen`, novo botão "IMPORTAR TRAÇADO" (secundário, ghost)
+  2. Piloto digita ou cola o `shareCode`
+  3. App faz `GET /api/app/tracks/shared/:shareCode` → retorna geometria do traçado (sem sessões, sem dados do criador)
+  4. App exibe preview no mapa (mapa somente-leitura com S/C, setores, nome)
+  5. Piloto confirma → traçado é salvo localmente com **novo UUID** (é uma cópia independente)
+  6. Campo `importedFrom: string?` no `Track` armazena o `shareCode` de origem (para analytics futuros, não exibido ao usuário)
+
+  ### Modelo de dados — mudanças em `Track`
+
+  ```dart
+  class Track {
+    // campos existentes...
+    final String? shareCode;      // código gerado pelo servidor ao compartilhar (null se nunca compartilhado)
+    final String? importedFrom;   // shareCode de origem (null se criado localmente)
+  }
+  ```
+
+  - `shareCode`: preenchido após `POST /share`, sincronizado via API
+  - `importedFrom`: preenchido no momento da importação, nunca alterado
+
+  ### Mudanças no app
+
+  1. `Track`: adicionar `shareCode: String?` e `importedFrom: String?`, atualizar `toJson`/`fromJson`
+  2. `TrackRepository`: atualizar serialização
+  3. `TrackDetailScreen`: botão "COMPARTILHAR" → faz POST → exibe bottom sheet com código + botão de copiar/compartilhar
+  4. `TrackListScreen`: botão "IMPORTAR TRAÇADO" no header ou estado vazio → abre `ImportTrackScreen`
+  5. `ImportTrackScreen` (nova tela): campo de texto para código → botão "BUSCAR" → preview do mapa → botão "IMPORTAR"
+  6. API client: dois novos métodos — `shareTrack(trackId)` e `importTrack(shareCode)`
+
+  ### Mudanças no hub (lapzy-hub)
+
+  - `Track` no schema Prisma: adicionar `shareCode String? @unique`, `isShared Boolean @default(false)`, `sharedAt DateTime?`, `shareExpiresAt DateTime?`
+  - Novos endpoints (ver `docs/api-contract.md`):
+    - `POST /api/app/tracks/:id/share`
+    - `GET /api/app/tracks/shared/:shareCode` (não requer autenticação do dono — apenas token de app válido)
+  - `shareCode`: gerado no servidor, 6 chars `[A-Z0-9]`, verificado como único antes de retornar
+
+  ### Critérios de aceite
+
+  - CA-024-01: botão "COMPARTILHAR TRAÇADO" aparece em `TrackDetailScreen` e `TrackListScreen` (swipe ou menu de contexto)
+  - CA-024-02: ao tocar em "COMPARTILHAR", o app exibe bottom sheet com o `shareCode` formatado (ex: `GV 7K 2M`) e botão "COPIAR CÓDIGO"
+  - CA-024-03: o código pode ser compartilhado via apps externos (WhatsApp, e-mail) usando o `share_plus` nativo do Flutter
+  - CA-024-04: na `TrackListScreen`, o botão "IMPORTAR TRAÇADO" abre tela de importação
+  - CA-024-05: ao informar um código válido, o app exibe preview do traçado no mapa antes de confirmar a importação
+  - CA-024-06: ao confirmar a importação, o traçado é salvo com novo UUID e aparece na `TrackListScreen` com nome original + indicador visual "(importado)"
+  - CA-024-07: o traçado importado funciona normalmente para iniciar corridas — não há restrição de uso
+  - CA-024-08: `importedFrom` é salvo no `Track` local e enviado ao hub no `POST /api/app/tracks`
+  - CA-024-09: código expirado ou inválido exibe mensagem amigável — sem crash, sem tela de erro genérica
+  - CA-024-10: sessões do criador não são expostas em nenhum momento do fluxo — apenas geometria do traçado é compartilhada
+
 - [ ] TASK-022 · Feature — Heatmap de Velocidade no Traçado (bottom sheet detalhe de volta)
   Como piloto, quero visualizar um heatmap de velocidade sobreposto ao traçado da pista no detalhe de uma volta, para que eu identifique visualmente os pontos onde estou mais rápido e mais lento no circuito.
   refs: docs/lapzy_heatmap_velocidade.md, docs/lapzy_criacao_pista_setores.md, docs/tech.md, docs/telas.md

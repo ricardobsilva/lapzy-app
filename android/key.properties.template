@@ -1,0 +1,4 @@
+storePassword=<senha do keystore>
+keyPassword=<senha da key>
+keyAlias=lapzy
+storeFile=<caminho absoluto para o .jks, ex: /home/usuario/lapzy-release.jks>
