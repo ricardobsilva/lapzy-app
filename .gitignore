@@ -46,3 +46,6 @@ app.*.map.json
 
 # Secrets — nunca commitar
 android/secrets.properties
+android/key.properties
+*.jks
+*.keystore

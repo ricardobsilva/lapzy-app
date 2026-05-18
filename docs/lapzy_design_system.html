@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Lapzy — Design System</title>
+<title>Lapzy — Design System v1.0</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&family=Rajdhani:wght@500;700&display=swap" rel="stylesheet">
@@ -16,16 +16,16 @@
     --surface-2: #1C1C1C;
     --border: rgba(255,255,255,0.08);
     --text-primary: #FFFFFF;
-    --text-secondary: rgba(255,255,255,0.5);
-    --text-muted: rgba(255,255,255,0.3);
+    --text-secondary: rgba(255,255,255,0.50);
+    --text-muted: rgba(255,255,255,0.30);
 
-    --color-green: #00E676;
+    --color-green:  #00E676;
     --color-purple: #BF5AF2;
-    --color-red: #FF3B30;
-    --color-s1: #00B0FF;
-    --color-s2: #FFD600;
-    --color-s3: #FF6D00;
-    --color-brand: #FF6D00;
+    --color-red:    #FF3B30;
+    --color-s1:     #00B0FF;
+    --color-s2:     #FFD600;
+    --color-s3:     #FF6D00;
+    --color-brand:  #FF6D00;
 
     --space-1: 4px;
     --space-2: 8px;
@@ -41,22 +41,47 @@
   }
 
   html { background: var(--bg); }
-
   body {
     background: var(--bg);
     color: var(--text-primary);
     font-family: 'Inter', system-ui, sans-serif;
-    font-size: 16px;
+    font-size: 15px;
     line-height: 1.6;
-    padding: 48px 32px;
-    max-width: 960px;
+    padding: 48px 40px;
+    max-width: 1040px;
     margin: 0 auto;
   }
 
-  /* ── HEADER ── */
+  /* NAV */
+  .nav {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: rgba(10,10,10,0.92);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    gap: 0;
+    flex-wrap: wrap;
+    padding: 0 4px;
+    margin: 0 -40px 48px;
+  }
+  .nav a {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    text-decoration: none;
+    padding: 14px 16px;
+    transition: color 0.15s;
+  }
+  .nav a:hover { color: var(--text-primary); }
+
+  /* HEADER */
   .ds-header {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: space-between;
     flex-wrap: wrap;
     gap: 16px;
@@ -66,103 +91,90 @@
   }
   .logo-mark {
     font-family: 'Rajdhani', monospace;
-    font-size: 40px;
+    font-size: 44px;
     font-weight: 700;
     letter-spacing: 0.02em;
     line-height: 1;
   }
   .logo-mark .lap { color: #fff; }
   .logo-mark .zy  { color: #FF6D00; }
-  .ds-meta { font-size: 12px; color: var(--text-muted); font-family: 'Courier New', monospace; text-align: right; }
-  .ds-meta strong { display: block; color: var(--text-secondary); font-size: 14px; }
+  .ds-meta { font-size: 12px; color: var(--text-muted); font-family: 'Courier New', monospace; text-align: right; line-height: 1.8; }
+  .ds-meta strong { display: block; color: var(--text-secondary); font-size: 14px; margin-bottom: 4px; }
 
-  /* ── SECTION ── */
-  .section { margin-bottom: 64px; }
+  /* SECTION */
+  .section { margin-bottom: 72px; scroll-margin-top: 60px; }
   .section-title {
     font-family: 'Rajdhani', system-ui, sans-serif;
     font-size: 11px;
     font-weight: 700;
-    letter-spacing: 0.14em;
+    letter-spacing: 0.16em;
     text-transform: uppercase;
     color: var(--text-muted);
     margin-bottom: 24px;
     padding-bottom: 12px;
     border-bottom: 1px solid var(--border);
   }
-
-  /* ── COLORS ── */
-  .color-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-    gap: 12px;
+  .subsection-title {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 12px;
+    margin-top: 8px;
   }
+
+  /* COLORS */
+  .color-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; }
   .color-card {
     background: var(--surface);
     border-radius: var(--radius-lg);
     border: 1px solid var(--border);
     overflow: hidden;
   }
-  .color-card.brand-only { border: 1px dashed rgba(255,109,0,0.35); }
-  .color-swatch { height: 72px; display: flex; align-items: center; justify-content: center; }
+  .color-card.brand-only { border: 1px dashed rgba(255,109,0,0.4); }
+  .color-swatch { height: 68px; display: flex; align-items: center; justify-content: center; }
   .brand-badge {
-    font-size: 9px;
-    font-weight: 700;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    background: rgba(0,0,0,0.5);
-    color: #fff;
-    padding: 3px 8px;
-    border-radius: 3px;
+    font-size: 9px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+    background: rgba(0,0,0,0.55); color: #fff; padding: 3px 8px; border-radius: 3px;
   }
-  .color-meta { padding: 12px 14px; }
-  .color-name { font-size: 13px; font-weight: 500; color: var(--text-primary); margin-bottom: 3px; }
-  .color-hex  { font-family: 'Courier New', monospace; font-size: 11px; color: var(--text-secondary); margin-bottom: 5px; }
-  .color-use  { font-size: 11px; color: var(--text-muted); line-height: 1.4; margin-bottom: 5px; }
-  .color-var  { font-family: 'Courier New', monospace; font-size: 10px; color: rgba(255,255,255,0.2); }
+  .color-meta { padding: 11px 13px; }
+  .color-name { font-size: 13px; font-weight: 500; color: var(--text-primary); margin-bottom: 2px; }
+  .color-hex  { font-family: 'Courier New', monospace; font-size: 11px; color: var(--text-secondary); margin-bottom: 4px; }
+  .color-use  { font-size: 11px; color: var(--text-muted); line-height: 1.4; margin-bottom: 4px; }
+  .color-var  { font-family: 'Courier New', monospace; font-size: 10px; color: rgba(255,255,255,0.18); }
 
-  /* ── TYPOGRAPHY ── */
+  /* TYPOGRAPHY */
   .type-sample {
     background: var(--surface);
     border-radius: var(--radius-lg);
     border: 1px solid var(--border);
-    padding: 24px 28px;
-    margin-bottom: 10px;
+    padding: 22px 26px;
+    margin-bottom: 8px;
     display: flex;
     align-items: baseline;
-    gap: 32px;
+    gap: 28px;
     flex-wrap: wrap;
   }
   .type-meta { min-width: 110px; flex-shrink: 0; }
   .type-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 4px; }
-  .type-sub   { font-size: 10px; color: rgba(255,255,255,0.2); font-family: 'Courier New', monospace; line-height: 1.6; }
+  .type-sub   { font-size: 10px; color: rgba(255,255,255,0.2); font-family: 'Courier New', monospace; line-height: 1.7; }
   .t-display { font-family: 'Rajdhani', monospace; font-size: 72px; font-weight: 700; color: var(--text-primary); line-height: 1; letter-spacing: -0.01em; }
   .t-mono    { font-family: 'Rajdhani', monospace; font-size: 48px; font-weight: 500; color: var(--text-primary); letter-spacing: 0.04em; line-height: 1; }
   .t-heading { font-family: 'Rajdhani', monospace; font-size: 32px; font-weight: 700; color: var(--text-primary); line-height: 1; }
-  .t-body    { font-family: 'Inter', system-ui, sans-serif; font-size: 16px; font-weight: 400; color: var(--text-primary); }
-  .t-caption { font-family: 'Inter', system-ui, sans-serif; font-size: 12px; font-weight: 400; color: var(--text-secondary); }
+  .t-body    { font-family: 'Inter', sans-serif; font-size: 16px; font-weight: 400; color: var(--text-primary); }
+  .t-caption { font-family: 'Inter', sans-serif; font-size: 12px; font-weight: 400; color: var(--text-secondary); }
 
-  /* ── BUTTONS ── */
-  .row-label {
-    font-size: 11px;
-    color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    margin-bottom: 12px;
-  }
-  .btn-row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin-bottom: 24px; }
+  /* BUTTONS */
+  .btn-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 20px; }
+  .row-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 10px; }
   .btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    font-family: 'Inter', system-ui, sans-serif;
-    font-weight: 700;
-    letter-spacing: 0.07em;
-    text-transform: uppercase;
-    border: none;
-    cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-family: 'Inter', sans-serif; font-weight: 700;
+    letter-spacing: 0.07em; text-transform: uppercase;
+    border: none; cursor: pointer;
     border-radius: var(--radius-md);
     transition: opacity 0.12s, transform 0.08s;
-    text-decoration: none;
   }
   .btn:active { transform: scale(0.97); }
   .btn-lg { height: 56px; padding: 0 36px; font-size: 15px; }
@@ -170,35 +182,24 @@
   .btn-sm { height: 32px; padding: 0 16px; font-size: 11px; }
   .btn-primary     { background: var(--color-green); color: #000; }
   .btn-primary:hover { opacity: 0.88; }
-  .btn-destructive { background: var(--color-red);   color: #fff; }
+  .btn-destructive { background: var(--color-red); color: #fff; }
   .btn-destructive:hover { opacity: 0.88; }
-  .btn-ghost {
-    background: transparent;
-    color: var(--text-primary);
-    border: 1px solid var(--border);
-  }
+  .btn-ghost { background: transparent; color: var(--text-primary); border: 1px solid var(--border); }
   .btn-ghost:hover { background: var(--surface); }
   .btn-disabled  { opacity: 0.3; cursor: not-allowed; pointer-events: none; }
   .btn-pressed   { transform: scale(0.97); opacity: 0.85; }
   .state-group   { display: flex; align-items: center; gap: 10px; }
   .state-lbl     { font-size: 11px; color: var(--text-muted); min-width: 52px; }
 
-  /* ── SECTOR BADGES ── */
-  .badge-block { margin-bottom: 20px; }
-  .badge-row   { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+  /* BADGES */
+  .badge-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
   .badge-row-lbl { font-size: 11px; color: var(--text-muted); min-width: 52px; }
   .sector-badge {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    font-family: 'Rajdhani', monospace;
-    font-weight: 700;
-    font-size: 13px;
-    letter-spacing: 0.06em;
-    width: 44px;
-    height: 44px;
-    border-radius: var(--radius-md);
-    border: 1.5px solid transparent;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-family: 'Rajdhani', monospace; font-weight: 700;
+    font-size: 13px; letter-spacing: 0.06em;
+    width: 44px; height: 44px;
+    border-radius: var(--radius-md); border: 1.5px solid transparent;
   }
   .s-neutral { background: var(--surface-2); color: var(--text-secondary); border-color: var(--border); }
   .s-s1 { background: rgba(0,176,255,0.12); color: #00B0FF; border-color: rgba(0,176,255,0.35); }
@@ -206,22 +207,63 @@
   .s-s3 { background: rgba(255,109,0,0.12); color: #FF6D00; border-color: rgba(255,109,0,0.35); }
   .s-best { background: rgba(191,90,242,0.12); color: #BF5AF2; border-color: rgba(191,90,242,0.35); }
 
-  /* ── DELTA ── */
+  /* DELTA */
   .delta {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    font-family: 'Rajdhani', monospace;
-    font-weight: 700;
-    font-size: 22px;
-    padding: 5px 14px;
-    border-radius: var(--radius-sm);
+    display: inline-flex; align-items: center; gap: 5px;
+    font-family: 'Rajdhani', monospace; font-weight: 700;
+    font-size: 22px; padding: 5px 14px; border-radius: var(--radius-sm);
   }
   .delta-pos { color: var(--color-green); background: rgba(0,230,118,0.08); }
   .delta-neg { color: var(--color-red);   background: rgba(255,59,48,0.08); }
 
-  /* ── LAP CARDS ── */
+  /* LAP CARDS */
   .lap-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius-lg); padding: 14px 20px;
+    display: flex; align-items: center; gap: 18px; margin-bottom: 8px;
+  }
+  .lap-num  { font-size: 12px; color: var(--text-muted); min-width: 22px; text-align: center; }
+  .lap-time { font-family: 'Rajdhani', monospace; font-size: 28px; font-weight: 700; color: var(--text-primary); flex: 1; letter-spacing: 0.04em; }
+  .lap-card.best-lap { border-color: rgba(191,90,242,0.3); background: rgba(191,90,242,0.06); }
+  .lap-card.best-lap .lap-time { color: var(--color-purple); }
+  .lap-card.best-lap .lap-num  { color: var(--color-purple); }
+  .pr-tag {
+    font-size: 11px; font-weight: 700; letter-spacing: 0.1em;
+    color: var(--color-purple); text-transform: uppercase;
+    padding: 3px 10px; background: rgba(191,90,242,0.1); border-radius: var(--radius-sm);
+  }
+
+  /* EVENT BORDERS */
+  .borders-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .border-demo {
+    border-radius: var(--radius-lg); padding: 24px 16px; text-align: center;
+    font-family: 'Rajdhani', monospace; font-size: 13px; font-weight: 700;
+    letter-spacing: 0.08em; text-transform: uppercase; background: var(--surface);
+  }
+  .border-green  { box-shadow: 0 0 0 3px var(--color-green);  color: var(--color-green); }
+  .border-purple { box-shadow: 0 0 0 3px var(--color-purple); color: var(--color-purple); }
+  .border-red    { box-shadow: 0 0 0 3px var(--color-red);    color: var(--color-red); }
+
+  /* SPACING */
+  .spacing-row  { display: flex; align-items: flex-end; gap: 20px; flex-wrap: wrap; }
+  .spacing-item { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .spacing-block { background: rgba(0,176,255,0.18); border: 1px solid rgba(0,176,255,0.35); border-radius: 2px; width: 36px; }
+  .spacing-lbl { font-size: 11px; color: var(--text-muted); font-family: 'Courier New', monospace; text-align: center; line-height: 1.5; }
+
+  /* NEW COMPONENTS */
+
+  /* Loading skeleton */
+  @keyframes shimmer {
+    0%   { background-position: -400px 0; }
+    100% { background-position:  400px 0; }
+  }
+  .skeleton {
+    border-radius: var(--radius-md);
+    background: linear-gradient(90deg, #1C1C1C 25%, #242424 50%, #1C1C1C 75%);
+    background-size: 400px 100%;
+    animation: shimmer 1.4s infinite linear;
+  }
+  .skeleton-card {
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
@@ -231,279 +273,454 @@
     gap: 18px;
     margin-bottom: 8px;
   }
-  .lap-num  { font-size: 12px; color: var(--text-muted); min-width: 22px; text-align: center; }
-  .lap-time { font-family: 'Rajdhani', monospace; font-size: 28px; font-weight: 700; color: var(--text-primary); flex: 1; letter-spacing: 0.04em; }
-  .lap-card.best-lap { border-color: rgba(191,90,242,0.3); background: rgba(191,90,242,0.06); }
-  .lap-card.best-lap .lap-time { color: var(--color-purple); }
-  .lap-card.best-lap .lap-num  { color: var(--color-purple); }
-  .pr-tag {
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.1em;
-    color: var(--color-purple);
-    text-transform: uppercase;
-    padding: 3px 10px;
-    background: rgba(191,90,242,0.1);
-    border-radius: var(--radius-sm);
-  }
 
-  /* ── EVENT BORDERS ── */
-  .borders-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
-  .border-demo {
-    border-radius: var(--radius-lg);
-    padding: 24px 16px;
-    text-align: center;
-    font-family: 'Rajdhani', monospace;
-    font-size: 13px;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
+  /* Empty state */
+  .empty-state {
+    display: flex; flex-direction: column; align-items: center;
+    padding: 48px 24px; text-align: center;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius-xl);
+  }
+  .empty-icon {
+    width: 56px; height: 56px; border-radius: 50%;
+    background: var(--surface-2); border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    margin-bottom: 20px;
+    color: var(--text-muted);
+    font-size: 22px;
+  }
+  .empty-title { font-family: 'Rajdhani', monospace; font-size: 20px; font-weight: 700; margin-bottom: 8px; color: var(--text-secondary); }
+  .empty-body  { font-size: 13px; color: var(--text-muted); max-width: 280px; line-height: 1.5; margin-bottom: 24px; }
+
+  /* Toast */
+  .toast {
+    display: inline-flex; align-items: center; gap: 10px;
+    background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: 100px; padding: 10px 20px;
+    font-size: 13px; color: var(--text-primary);
+    box-shadow: 0 4px 24px rgba(0,0,0,0.6);
+    margin-bottom: 10px;
+  }
+  .toast-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+  /* Bottom sheet */
+  .bottom-sheet-demo {
     background: var(--surface);
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+    border: 1px solid var(--border);
+    border-bottom: none;
+    padding: 20px 20px 28px;
   }
-  .border-green  { box-shadow: 0 0 0 3px var(--color-green);  color: var(--color-green); }
-  .border-purple { box-shadow: 0 0 0 3px var(--color-purple); color: var(--color-purple); }
-  .border-red    { box-shadow: 0 0 0 3px var(--color-red);    color: var(--color-red); }
-
-  /* ── SPACING ── */
-  .spacing-row  { display: flex; align-items: flex-end; gap: 20px; flex-wrap: wrap; }
-  .spacing-item { display: flex; flex-direction: column; align-items: center; gap: 10px; }
-  .spacing-block {
-    background: rgba(0,176,255,0.18);
-    border: 1px solid rgba(0,176,255,0.35);
-    border-radius: 2px;
-    width: 36px;
+  .sheet-handle {
+    width: 36px; height: 4px; border-radius: 2px;
+    background: rgba(255,255,255,0.15);
+    margin: 0 auto 20px;
   }
-  .spacing-lbl { font-size: 11px; color: var(--text-muted); font-family: 'Courier New', monospace; text-align: center; line-height: 1.5; }
+  .sheet-label {
+    font-size: 10px; font-weight: 700; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--text-muted); margin-bottom: 16px;
+  }
 
-  /* ── RESPONSIVE ── */
-  @media (max-width: 600px) {
-    body { padding: 32px 16px; }
+  /* Dark overlay */
+  .overlay-demo {
+    position: relative; border-radius: var(--radius-lg); overflow: hidden;
+    border: 1px solid var(--border);
+  }
+  .overlay-bg { background: var(--surface); padding: 24px; height: 80px; display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .overlay-layer { position: absolute; inset: 0; background: rgba(0,0,0,0.55); display: flex; align-items: center; justify-content: center; }
+
+  /* Icon nav */
+  .icon-nav {
+    display: flex; gap: 0;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xl);
+    overflow: hidden;
+  }
+  .icon-nav-item {
+    flex: 1; display: flex; flex-direction: column; align-items: center;
+    gap: 5px; padding: 12px 8px;
+    border-right: 1px solid var(--border);
+    cursor: pointer;
+  }
+  .icon-nav-item:last-child { border-right: none; }
+  .icon-nav-item.active .nav-label { color: var(--color-green); }
+  .icon-nav-item .nav-label { font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted); }
+  .icon-nav-icon { font-size: 18px; }
+
+  /* Map overlay rows */
+  .map-controls { display: flex; flex-direction: column; gap: 8px; }
+  .map-toggle {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: var(--radius-md); padding: 8px 14px; font-size: 12px;
+    color: var(--text-secondary); cursor: pointer; width: fit-content;
+  }
+  .map-toggle.active { border-color: rgba(0,230,118,0.4); color: var(--color-green); }
+  .toggle-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+
+  /* Input field */
+  .input-field {
+    width: 100%; background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: var(--radius-md); padding: 12px 14px;
+    font-family: 'Inter', sans-serif; font-size: 14px; color: var(--text-primary);
+    outline: none;
+  }
+  .input-field:focus { border-color: rgba(0,230,118,0.45); }
+  .input-field::placeholder { color: var(--text-muted); }
+  .input-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; }
+
+  /* Divider */
+  .divider { height: 1px; background: var(--border); margin: 20px 0; }
+
+  /* Grids */
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .three-col { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+
+  /* Sector time comparison */
+  .sector-row {
+    display: flex; align-items: center; padding: 12px 0;
+    border-bottom: 1px solid var(--border); gap: 12px;
+  }
+  .sector-row:last-child { border-bottom: none; }
+  .sector-row-badge { width: 36px; }
+  .sector-row-time { font-family: 'Rajdhani', monospace; font-size: 20px; font-weight: 700; flex: 1; }
+  .sector-row-ref  { font-family: 'Rajdhani', monospace; font-size: 14px; color: var(--text-muted); flex: 1; text-align: right; }
+
+  /* Spec table */
+  .spec-table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+  .spec-table th {
+    text-align: left; font-size: 10px; font-weight: 700;
+    letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--text-muted); padding: 8px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  .spec-table td {
+    padding: 10px 14px; font-size: 13px; vertical-align: top;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+  }
+  .spec-table td:first-child { color: var(--text-secondary); font-weight: 500; white-space: nowrap; }
+  .spec-table td:last-child  { font-family: 'Courier New', monospace; font-size: 12px; color: var(--text-muted); }
+  .spec-table tr:last-child td { border-bottom: none; }
+
+  /* Code span */
+  code { font-family: 'Courier New', monospace; font-size: 11px; background: rgba(255,255,255,0.05); padding: 2px 6px; border-radius: 3px; color: var(--text-secondary); }
+
+  @media (max-width: 640px) {
+    body { padding: 32px 20px; }
     .color-grid  { grid-template-columns: repeat(2, 1fr); }
-    .borders-grid { grid-template-columns: 1fr; }
+    .borders-grid, .two-col, .three-col { grid-template-columns: 1fr; }
     .type-sample { flex-direction: column; gap: 12px; }
     .t-display { font-size: 52px; }
     .t-mono    { font-size: 36px; }
+    .nav { margin: 0 -20px 32px; }
   }
 </style>
 </head>
 <body>
 
-  <header class="ds-header">
-    <div>
-      <div class="logo-mark"><span class="lap">LAP</span><span class="zy">ZY</span></div>
-      <div style="font-size:12px; color:var(--text-muted); margin-top:6px; letter-spacing:0.08em; text-transform:uppercase;">Design System</div>
-    </div>
-    <div class="ds-meta">
-      <strong>v0.9</strong>
-      Dark mode · Landscape first
-    </div>
-  </header>
+<nav class="nav">
+  <a href="#cores">Cores</a>
+  <a href="#tipografia">Tipografia</a>
+  <a href="#botoes">Botões</a>
+  <a href="#componentes">Componentes</a>
+  <a href="#estados">Estados</a>
+  <a href="#navegacao">Navegação</a>
+  <a href="#espaçamento">Espaçamento</a>
+  <a href="#tokens">Tokens Flutter</a>
+</nav>
 
-  <!-- COLORS -->
-  <section class="section">
-    <div class="section-title">Cores</div>
-    <div class="color-grid">
+<header class="ds-header">
+  <div>
+    <div class="logo-mark"><span class="lap">LAP</span><span class="zy">ZY</span></div>
+    <div style="font-size:12px; color:var(--text-muted); margin-top:6px; letter-spacing:0.08em; text-transform:uppercase;">Design System</div>
+  </div>
+  <div class="ds-meta">
+    <strong>v1.0</strong>
+    Dark mode · Android · Flutter<br>
+    Landscape first (race screen)
+  </div>
+</header>
 
-      <div class="color-card">
-        <div class="color-swatch" style="background:#00E676;"></div>
-        <div class="color-meta">
-          <div class="color-name">Green</div>
-          <div class="color-hex">#00E676</div>
-          <div class="color-use">INICIAR · delta positivo · PR</div>
-          <div class="color-var">--color-green</div>
-        </div>
-      </div>
 
-      <div class="color-card">
-        <div class="color-swatch" style="background:#BF5AF2;"></div>
-        <div class="color-meta">
-          <div class="color-name">Purple</div>
-          <div class="color-hex">#BF5AF2</div>
-          <div class="color-use">Melhor volta · destaque PR</div>
-          <div class="color-var">--color-purple</div>
-        </div>
-      </div>
+<!-- ═══════════════════════════════════════
+     CORES
+════════════════════════════════════════ -->
+<section class="section" id="cores">
+  <div class="section-title">Cores</div>
 
-      <div class="color-card">
-        <div class="color-swatch" style="background:#FF3B30;"></div>
-        <div class="color-meta">
-          <div class="color-name">Red</div>
-          <div class="color-hex">#FF3B30</div>
-          <div class="color-use">FINALIZAR · delta negativo · alerta</div>
-          <div class="color-var">--color-red</div>
-        </div>
-      </div>
-
-      <div class="color-card">
-        <div class="color-swatch" style="background:#00B0FF;"></div>
-        <div class="color-meta">
-          <div class="color-name">S1 — Setor 1</div>
-          <div class="color-hex">#00B0FF</div>
-          <div class="color-use">Badge de setor 1</div>
-          <div class="color-var">--color-s1</div>
-        </div>
-      </div>
-
-      <div class="color-card">
-        <div class="color-swatch" style="background:#FFD600;"></div>
-        <div class="color-meta">
-          <div class="color-name">S2 — Setor 2</div>
-          <div class="color-hex">#FFD600</div>
-          <div class="color-use">Badge de setor 2</div>
-          <div class="color-var">--color-s2</div>
-        </div>
-      </div>
-
-      <div class="color-card">
-        <div class="color-swatch" style="background:#FF6D00;"></div>
-        <div class="color-meta">
-          <div class="color-name">S3 — Setor 3</div>
-          <div class="color-hex">#FF6D00</div>
-          <div class="color-use">Badge de setor 3 (dado, não marca)</div>
-          <div class="color-var">--color-s3</div>
-        </div>
-      </div>
-
-      <div class="color-card">
-        <div class="color-swatch" style="background:linear-gradient(135deg,#0A0A0A 50%,#141414 50%);"></div>
-        <div class="color-meta">
-          <div class="color-name">Background · Surface</div>
-          <div class="color-hex">#0A0A0A · #141414</div>
-          <div class="color-use">App bg · cards e superfícies</div>
-          <div class="color-var">--bg · --surface</div>
-        </div>
-      </div>
-
-      <div class="color-card brand-only">
-        <div class="color-swatch" style="background:#FF6D00;">
-          <span class="brand-badge">BRAND ONLY</span>
-        </div>
-        <div class="color-meta">
-          <div class="color-name">Orange — Marca</div>
-          <div class="color-hex">#FF6D00</div>
-          <div class="color-use">Logo · ícone · splash — nunca em UI</div>
-          <div class="color-var">--color-brand</div>
-        </div>
-      </div>
-
-    </div>
-  </section>
-
-  <!-- TYPOGRAPHY -->
-  <section class="section">
-    <div class="section-title">Tipografia</div>
-
-    <div class="type-sample">
-      <div class="type-meta">
-        <div class="type-label">Display</div>
-        <div class="type-sub">Rajdhani 700<br>72px<br>Tempo atual</div>
-      </div>
-      <div class="t-display">1:23.456</div>
-    </div>
-
-    <div class="type-sample">
-      <div class="type-meta">
-        <div class="type-label">Lap Time</div>
-        <div class="type-sub">Rajdhani 500<br>48px<br>Melhor volta</div>
-      </div>
-      <div class="t-mono">1:24.120</div>
-    </div>
-
-    <div class="type-sample">
-      <div class="type-meta">
-        <div class="type-label">Heading</div>
-        <div class="type-sub">Rajdhani 700<br>32px<br>Títulos de seção</div>
-      </div>
-      <div class="t-heading">Melhor volta</div>
-    </div>
-
-    <div class="type-sample">
-      <div class="type-meta">
-        <div class="type-label">Body</div>
-        <div class="type-sub">Inter 400<br>16px<br>Texto geral</div>
-      </div>
-      <div class="t-body">Volta 7 · Pista do Jacaré</div>
-    </div>
-
-    <div class="type-sample">
-      <div class="type-meta">
-        <div class="type-label">Caption</div>
-        <div class="type-sub">Inter 400<br>12px<br>Metadados</div>
-      </div>
-      <div class="t-caption">Sessão encerrada às 14:32 · 12 voltas completadas</div>
-    </div>
-
-  </section>
-
-  <!-- BUTTONS -->
-  <section class="section">
-    <div class="section-title">Botões</div>
-
-    <div class="row-label" style="margin-bottom:12px;">Large — 56px</div>
-    <div class="btn-row">
-      <button class="btn btn-primary btn-lg">Iniciar</button>
-      <button class="btn btn-destructive btn-lg">Finalizar</button>
-      <button class="btn btn-ghost btn-lg">Histórico</button>
-    </div>
-
-    <div class="row-label" style="margin-bottom:12px;">Medium — 44px</div>
-    <div class="btn-row">
-      <button class="btn btn-primary btn-md">Iniciar</button>
-      <button class="btn btn-destructive btn-md">Finalizar</button>
-      <button class="btn btn-ghost btn-md">Histórico</button>
-    </div>
-
-    <div class="row-label" style="margin-bottom:12px;">Small — 32px</div>
-    <div class="btn-row">
-      <button class="btn btn-primary btn-sm">Iniciar</button>
-      <button class="btn btn-destructive btn-sm">Finalizar</button>
-      <button class="btn btn-ghost btn-sm">Histórico</button>
-    </div>
-
-    <div class="row-label" style="margin-bottom:12px;">Estados</div>
-    <div class="btn-row">
-      <div class="state-group"><span class="state-lbl">Default</span><button class="btn btn-primary btn-md">Iniciar</button></div>
-      <div class="state-group"><span class="state-lbl">Pressed</span><button class="btn btn-primary btn-md btn-pressed">Iniciar</button></div>
-      <div class="state-group"><span class="state-lbl">Disabled</span><button class="btn btn-primary btn-md btn-disabled" disabled>Iniciar</button></div>
-    </div>
-  </section>
-
-  <!-- COMPONENTS -->
-  <section class="section">
-    <div class="section-title">Componentes</div>
-
-    <!-- Sector Badges -->
-    <div class="row-label" style="margin-bottom:14px;">Badges de Setor</div>
-    <div class="badge-block">
-      <div class="badge-row">
-        <span class="badge-row-lbl">Neutro</span>
-        <div class="sector-badge s-neutral">S1</div>
-        <div class="sector-badge s-neutral">S2</div>
-        <div class="sector-badge s-neutral">S3</div>
-      </div>
-      <div class="badge-row">
-        <span class="badge-row-lbl">Ativo</span>
-        <div class="sector-badge s-s1">S1</div>
-        <div class="sector-badge s-s2">S2</div>
-        <div class="sector-badge s-s3">S3</div>
-      </div>
-      <div class="badge-row">
-        <span class="badge-row-lbl">Melhor</span>
-        <div class="sector-badge s-best">S1</div>
-        <div class="sector-badge s-best">S2</div>
-        <div class="sector-badge s-best">S3</div>
+  <div class="subsection-title" style="margin-bottom:14px;">Superfícies</div>
+  <div class="color-grid" style="margin-bottom:24px;">
+    <div class="color-card">
+      <div class="color-swatch" style="background:#0A0A0A; border-bottom:1px solid rgba(255,255,255,0.06);"></div>
+      <div class="color-meta">
+        <div class="color-name">Background</div>
+        <div class="color-hex">#0A0A0A</div>
+        <div class="color-use">Fundo principal do app</div>
+        <div class="color-var">--bg</div>
       </div>
     </div>
-
-    <!-- Delta -->
-    <div class="row-label" style="margin-bottom:14px; margin-top:8px;">Indicador de Delta</div>
-    <div style="display:flex; gap:14px; flex-wrap:wrap; margin-bottom:32px;">
-      <div class="delta delta-pos">▲ +0.234</div>
-      <div class="delta delta-neg">▼ −0.887</div>
+    <div class="color-card">
+      <div class="color-swatch" style="background:#141414;"></div>
+      <div class="color-meta">
+        <div class="color-name">Surface</div>
+        <div class="color-hex">#141414</div>
+        <div class="color-use">Cards, painéis, bottom sheets</div>
+        <div class="color-var">--surface</div>
+      </div>
     </div>
+    <div class="color-card">
+      <div class="color-swatch" style="background:#1C1C1C;"></div>
+      <div class="color-meta">
+        <div class="color-name">Surface-2</div>
+        <div class="color-hex">#1C1C1C</div>
+        <div class="color-use">Inputs, elementos elevados sobre surface</div>
+        <div class="color-var">--surface-2</div>
+      </div>
+    </div>
+    <div class="color-card">
+      <div class="color-swatch" style="background:rgba(255,255,255,0.08); border-bottom:1px solid rgba(255,255,255,0.08);"></div>
+      <div class="color-meta">
+        <div class="color-name">Border</div>
+        <div class="color-hex">rgba(255,255,255,0.08)</div>
+        <div class="color-use">Bordas padrão de cards e painéis</div>
+        <div class="color-var">--border</div>
+      </div>
+    </div>
+  </div>
 
-    <!-- Lap Cards -->
-    <div class="row-label" style="margin-bottom:14px;">Card de Volta</div>
+  <div class="subsection-title" style="margin-bottom:14px;">Cores funcionais</div>
+  <div class="color-grid" style="margin-bottom:24px;">
+    <div class="color-card">
+      <div class="color-swatch" style="background:#00E676;"></div>
+      <div class="color-meta">
+        <div class="color-name">Green</div>
+        <div class="color-hex">#00E676</div>
+        <div class="color-use">INICIAR · delta positivo · melhor setor · PR</div>
+        <div class="color-var">--color-green</div>
+      </div>
+    </div>
+    <div class="color-card">
+      <div class="color-swatch" style="background:#BF5AF2;"></div>
+      <div class="color-meta">
+        <div class="color-name">Purple</div>
+        <div class="color-hex">#BF5AF2</div>
+        <div class="color-use">Melhor volta (personal record)</div>
+        <div class="color-var">--color-purple</div>
+      </div>
+    </div>
+    <div class="color-card">
+      <div class="color-swatch" style="background:#FF3B30;"></div>
+      <div class="color-meta">
+        <div class="color-name">Red</div>
+        <div class="color-hex">#FF3B30</div>
+        <div class="color-use">FINALIZAR · delta negativo · alerta · pior setor</div>
+        <div class="color-var">--color-red</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="subsection-title" style="margin-bottom:14px;">Cores de setor</div>
+  <div class="color-grid" style="margin-bottom:24px;">
+    <div class="color-card">
+      <div class="color-swatch" style="background:#00B0FF;"></div>
+      <div class="color-meta">
+        <div class="color-name">S1</div>
+        <div class="color-hex">#00B0FF</div>
+        <div class="color-use">Setor 1 — fixo</div>
+        <div class="color-var">--color-s1</div>
+      </div>
+    </div>
+    <div class="color-card">
+      <div class="color-swatch" style="background:#FFD600;"></div>
+      <div class="color-meta">
+        <div class="color-name">S2</div>
+        <div class="color-hex">#FFD600</div>
+        <div class="color-use">Setor 2 — fixo</div>
+        <div class="color-var">--color-s2</div>
+      </div>
+    </div>
+    <div class="color-card">
+      <div class="color-swatch" style="background:#FF6D00;"></div>
+      <div class="color-meta">
+        <div class="color-name">S3</div>
+        <div class="color-hex">#FF6D00</div>
+        <div class="color-use">Setor 3 — fixo (único uso de laranja em UI)</div>
+        <div class="color-var">--color-s3</div>
+      </div>
+    </div>
+    <div class="color-card" style="border-style:dashed;">
+      <div class="color-swatch" style="background:linear-gradient(135deg,#6C52E3 0%,#1A8FE3 50%,#12B886 100%);"></div>
+      <div class="color-meta">
+        <div class="color-name">S4+</div>
+        <div class="color-hex">Gerado dinamicamente</div>
+        <div class="color-use">Criado na criação da pista, persistido. Legível sobre #0A0A0A. Não colide com verde/roxo/vermelho.</div>
+      </div>
+    </div>
+    <div class="color-card brand-only">
+      <div class="color-swatch" style="background:#FF6D00;">
+        <span class="brand-badge">BRAND ONLY</span>
+      </div>
+      <div class="color-meta">
+        <div class="color-name">Orange — Marca</div>
+        <div class="color-hex">#FF6D00</div>
+        <div class="color-use">Logo · ícone · splash — nunca em UI (exceto S3)</div>
+        <div class="color-var">--color-brand</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="subsection-title" style="margin-bottom:14px;">Texto</div>
+  <div style="display:flex; flex-direction:column; gap:8px;">
+    <div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-md); padding:12px 16px; display:flex; gap:24px; align-items:center;">
+      <span style="font-size:22px; font-weight:700; color:#FFFFFF;">Aa</span>
+      <div>
+        <div style="font-size:13px; font-weight:500; color:#FFFFFF;">Text Primary</div>
+        <div style="font-family:'Courier New',monospace; font-size:11px; color:var(--text-muted);">#FFFFFF · --text-primary</div>
+      </div>
+    </div>
+    <div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-md); padding:12px 16px; display:flex; gap:24px; align-items:center;">
+      <span style="font-size:22px; font-weight:700; color:rgba(255,255,255,0.5);">Aa</span>
+      <div>
+        <div style="font-size:13px; font-weight:500; color:rgba(255,255,255,0.7);">Text Secondary</div>
+        <div style="font-family:'Courier New',monospace; font-size:11px; color:var(--text-muted);">rgba(255,255,255,0.50) · --text-secondary</div>
+      </div>
+    </div>
+    <div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-md); padding:12px 16px; display:flex; gap:24px; align-items:center;">
+      <span style="font-size:22px; font-weight:700; color:rgba(255,255,255,0.3);">Aa</span>
+      <div>
+        <div style="font-size:13px; font-weight:500; color:rgba(255,255,255,0.5);">Text Muted</div>
+        <div style="font-family:'Courier New',monospace; font-size:11px; color:var(--text-muted);">rgba(255,255,255,0.30) · --text-muted</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ═══════════════════════════════════════
+     TIPOGRAFIA
+════════════════════════════════════════ -->
+<section class="section" id="tipografia">
+  <div class="section-title">Tipografia</div>
+
+  <div class="type-sample">
+    <div class="type-meta">
+      <div class="type-label">Display</div>
+      <div class="type-sub">Rajdhani 700<br>72px<br>ls: -0.01em<br>Tempo atual de volta</div>
+    </div>
+    <div class="t-display">1:23.456</div>
+  </div>
+
+  <div class="type-sample">
+    <div class="type-meta">
+      <div class="type-label">Mono</div>
+      <div class="type-sub">Rajdhani 500<br>48px<br>ls: +0.04em<br>Melhor volta, splits</div>
+    </div>
+    <div class="t-mono">1:24.120</div>
+  </div>
+
+  <div class="type-sample">
+    <div class="type-meta">
+      <div class="type-label">Heading</div>
+      <div class="type-sub">Rajdhani 700<br>32px<br>Títulos de seção</div>
+    </div>
+    <div class="t-heading">Melhor volta</div>
+  </div>
+
+  <div class="type-sample">
+    <div class="type-meta">
+      <div class="type-label">Body</div>
+      <div class="type-sub">Inter 400<br>16px<br>Texto corrido</div>
+    </div>
+    <div class="t-body">Volta 7 · Pista do Jacaré</div>
+  </div>
+
+  <div class="type-sample">
+    <div class="type-meta">
+      <div class="type-label">Caption</div>
+      <div class="type-sub">Inter 400<br>12px<br>Metadados, labels</div>
+    </div>
+    <div class="t-caption">Sessão encerrada às 14:32 · 12 voltas · Melhor: volta 7</div>
+  </div>
+</section>
+
+
+<!-- ═══════════════════════════════════════
+     BOTÕES
+════════════════════════════════════════ -->
+<section class="section" id="botoes">
+  <div class="section-title">Botões</div>
+
+  <div class="row-label">Large — 56px · Ações primárias de tela</div>
+  <div class="btn-row">
+    <button class="btn btn-primary btn-lg">Iniciar</button>
+    <button class="btn btn-destructive btn-lg">Finalizar</button>
+    <button class="btn btn-ghost btn-lg">Histórico</button>
+  </div>
+
+  <div class="row-label">Medium — 44px · Ações secundárias</div>
+  <div class="btn-row">
+    <button class="btn btn-primary btn-md">Nova pista</button>
+    <button class="btn btn-destructive btn-md">Encerrar</button>
+    <button class="btn btn-ghost btn-md">Cancelar</button>
+  </div>
+
+  <div class="row-label">Small — 32px · Ações terciárias, chips</div>
+  <div class="btn-row">
+    <button class="btn btn-primary btn-sm">Salvar</button>
+    <button class="btn btn-destructive btn-sm">Excluir</button>
+    <button class="btn btn-ghost btn-sm">Editar</button>
+  </div>
+
+  <div class="row-label">Estados</div>
+  <div class="btn-row">
+    <div class="state-group"><span class="state-lbl">Default</span><button class="btn btn-primary btn-md">Iniciar</button></div>
+    <div class="state-group"><span class="state-lbl">Pressed</span><button class="btn btn-primary btn-md btn-pressed">Iniciar</button></div>
+    <div class="state-group"><span class="state-lbl">Disabled</span><button class="btn btn-primary btn-md btn-disabled" disabled>Iniciar</button></div>
+  </div>
+</section>
+
+
+<!-- ═══════════════════════════════════════
+     COMPONENTES
+════════════════════════════════════════ -->
+<section class="section" id="componentes">
+  <div class="section-title">Componentes</div>
+
+  <!-- Sector Badges -->
+  <div class="subsection-title">Badges de Setor — 44×44px, border-radius 8px</div>
+  <div style="margin-bottom:28px;">
+    <div class="badge-row">
+      <span class="badge-row-lbl">Neutro</span>
+      <div class="sector-badge s-neutral">S1</div>
+      <div class="sector-badge s-neutral">S2</div>
+      <div class="sector-badge s-neutral">S3</div>
+    </div>
+    <div class="badge-row">
+      <span class="badge-row-lbl">Ativo</span>
+      <div class="sector-badge s-s1">S1</div>
+      <div class="sector-badge s-s2">S2</div>
+      <div class="sector-badge s-s3">S3</div>
+    </div>
+    <div class="badge-row">
+      <span class="badge-row-lbl">Melhor</span>
+      <div class="sector-badge s-best">S1</div>
+      <div class="sector-badge s-best">S2</div>
+      <div class="sector-badge s-best">S3</div>
+    </div>
+  </div>
+
+  <!-- Delta -->
+  <div class="subsection-title">Indicador de Delta — Rajdhani 700 22px</div>
+  <div style="display:flex; gap:14px; flex-wrap:wrap; margin-bottom:28px;">
+    <div class="delta delta-pos">▲ +0.234</div>
+    <div class="delta delta-neg">▼ −0.887</div>
+    <div style="display:inline-flex; align-items:center; gap:5px; font-family:'Rajdhani',monospace; font-weight:700; font-size:22px; padding:5px 14px; border-radius:4px; color:var(--text-muted); background:rgba(255,255,255,0.04);">— 0.000</div>
+  </div>
+
+  <!-- Lap Cards -->
+  <div class="subsection-title">Cards de Volta</div>
+  <div style="margin-bottom:28px;">
     <div class="lap-card">
       <div class="lap-num">6</div>
       <div class="lap-time">1:24.889</div>
@@ -514,51 +731,280 @@
       <div class="lap-time">1:24.120</div>
       <span class="pr-tag">PR</span>
     </div>
-    <div class="lap-card" style="margin-bottom:32px;">
+    <div class="lap-card">
       <div class="lap-num">8</div>
       <div class="lap-time">1:25.230</div>
       <div class="delta delta-neg" style="font-size:16px; padding:3px 12px;">▼ −1.110</div>
     </div>
-
-    <!-- Event Borders -->
-    <div class="row-label" style="margin-bottom:14px;">Borda de Evento — Tela de Corrida</div>
-    <div class="borders-grid">
-      <div class="border-demo border-green">PR · Delta+</div>
-      <div class="border-demo border-purple">Melhor Volta</div>
-      <div class="border-demo border-red">Finalizar</div>
+    <div class="lap-card">
+      <div class="lap-num">1</div>
+      <div class="lap-time">1:26.003</div>
+      <div style="font-size:13px; color:var(--text-muted);">—</div>
     </div>
-  </section>
+  </div>
 
-  <!-- SPACING -->
-  <section class="section">
-    <div class="section-title">Espaçamento</div>
-    <div class="spacing-row">
-      <div class="spacing-item">
-        <div class="spacing-block" style="height:4px;"></div>
-        <div class="spacing-lbl">4px<br>--space-1</div>
-      </div>
-      <div class="spacing-item">
-        <div class="spacing-block" style="height:8px;"></div>
-        <div class="spacing-lbl">8px<br>--space-2</div>
-      </div>
-      <div class="spacing-item">
-        <div class="spacing-block" style="height:16px;"></div>
-        <div class="spacing-lbl">16px<br>--space-3</div>
-      </div>
-      <div class="spacing-item">
-        <div class="spacing-block" style="height:24px;"></div>
-        <div class="spacing-lbl">24px<br>--space-4</div>
-      </div>
-      <div class="spacing-item">
-        <div class="spacing-block" style="height:32px;"></div>
-        <div class="spacing-lbl">32px<br>--space-5</div>
-      </div>
-      <div class="spacing-item">
-        <div class="spacing-block" style="height:48px;"></div>
-        <div class="spacing-lbl">48px<br>--space-6</div>
+  <!-- Sector time comparison (bottom sheet) -->
+  <div class="subsection-title">Bottom Sheet — Detalhe de Volta (comparação por setor)</div>
+  <div class="bottom-sheet-demo" style="margin-bottom:28px; max-width:380px;">
+    <div class="sheet-handle"></div>
+    <div class="sheet-label">Volta 7 · Setor vs. melhor volta</div>
+    <div class="sector-row">
+      <div class="sector-row-badge"><div class="sector-badge s-s1" style="width:32px;height:32px;font-size:11px;">S1</div></div>
+      <div class="sector-row-time">28.441</div>
+      <div class="delta delta-pos" style="font-size:14px; padding:2px 10px;">▲ +0.112</div>
+      <div class="sector-row-ref">28.553</div>
+    </div>
+    <div class="sector-row">
+      <div class="sector-row-badge"><div class="sector-badge s-s2" style="width:32px;height:32px;font-size:11px;">S2</div></div>
+      <div class="sector-row-time">31.203</div>
+      <div class="delta delta-neg" style="font-size:14px; padding:2px 10px;">▼ −0.341</div>
+      <div class="sector-row-ref">30.862</div>
+    </div>
+    <div class="sector-row">
+      <div class="sector-row-badge"><div class="sector-badge s-s3" style="width:32px;height:32px;font-size:11px;">S3</div></div>
+      <div class="sector-row-time">24.243</div>
+      <div class="delta delta-pos" style="font-size:14px; padding:2px 10px;">▲ +0.227</div>
+      <div class="sector-row-ref">24.470</div>
+    </div>
+  </div>
+
+  <!-- Event Borders -->
+  <div class="subsection-title">Borda de Evento — Tela de Corrida (box-shadow 3px)</div>
+  <div class="borders-grid" style="margin-bottom:28px;">
+    <div class="border-demo border-green">Delta+ / PR</div>
+    <div class="border-demo border-purple">Melhor Volta</div>
+    <div class="border-demo border-red">Finalizar</div>
+  </div>
+
+  <!-- Input field -->
+  <div class="subsection-title">Campo de Texto</div>
+  <div style="max-width:360px; margin-bottom:28px;">
+    <div class="input-label">Nome da pista</div>
+    <input class="input-field" type="text" placeholder="Ex: Kartódromo Granja Viana" value="">
+    <div style="margin-top:10px;">
+      <div class="input-label">Com valor</div>
+      <input class="input-field" type="text" value="Kartódromo Granja Viana">
+    </div>
+  </div>
+
+  <!-- Dark overlay -->
+  <div class="subsection-title">Dark Overlay — Modais e Bottom Sheets</div>
+  <div class="overlay-demo" style="margin-bottom:28px; max-width:360px;">
+    <div class="overlay-bg">Conteúdo por baixo</div>
+    <div class="overlay-layer">
+      <div style="background:var(--surface); border-radius:var(--radius-lg); padding:16px 20px; font-size:13px; border:1px solid var(--border);">
+        Modal / Bottom Sheet
       </div>
     </div>
-  </section>
+  </div>
+  <div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-md); padding:12px 16px; margin-bottom:28px; max-width:400px;">
+    <code>rgba(0, 0, 0, 0.55)</code>
+    <span style="font-size:12px; color:var(--text-muted); margin-left:12px;">Overlay padrão sobre toda a tela</span>
+  </div>
+
+  <!-- Map layer toggles -->
+  <div class="subsection-title">Controles de Mapa (Track Creation)</div>
+  <div class="map-controls" style="margin-bottom:8px; max-width:240px;">
+    <div class="map-toggle active"><div class="toggle-dot"></div>Modo Satélite</div>
+    <div class="map-toggle"><div class="toggle-dot"></div>Modo Vetorial</div>
+  </div>
+</section>
+
+
+<!-- ═══════════════════════════════════════
+     ESTADOS
+════════════════════════════════════════ -->
+<section class="section" id="estados">
+  <div class="section-title">Estados</div>
+
+  <!-- Loading skeleton -->
+  <div class="subsection-title">Loading — Skeleton shimmer</div>
+  <div style="margin-bottom:28px;">
+    <div class="skeleton-card">
+      <div class="skeleton" style="width:22px; height:14px;"></div>
+      <div class="skeleton" style="width:120px; height:28px;"></div>
+      <div style="flex:1;"></div>
+      <div class="skeleton" style="width:70px; height:22px;"></div>
+    </div>
+    <div class="skeleton-card">
+      <div class="skeleton" style="width:22px; height:14px;"></div>
+      <div class="skeleton" style="width:100px; height:28px;"></div>
+      <div style="flex:1;"></div>
+      <div class="skeleton" style="width:80px; height:22px;"></div>
+    </div>
+    <div style="font-size:11px; color:var(--text-muted); margin-top:10px;">
+      Gradiente: <code>#1C1C1C → #242424 → #1C1C1C</code>, animação 1.4s linear infinita
+    </div>
+  </div>
+
+  <!-- Empty states -->
+  <div class="subsection-title">Empty State — Sem corridas</div>
+  <div class="empty-state" style="margin-bottom:16px; max-width:380px;">
+    <div class="empty-icon">⏱</div>
+    <div class="empty-title">Nenhuma corrida ainda</div>
+    <div class="empty-body">Sua primeira corrida vai aparecer aqui. Que tal aquecer o motor?</div>
+    <button class="btn btn-ghost btn-md" style="border-color:rgba(0,230,118,0.3); color:var(--color-green);">Iniciar corrida</button>
+  </div>
+
+  <div class="subsection-title">Empty State — Sem pistas salvas</div>
+  <div class="empty-state" style="margin-bottom:28px; max-width:380px;">
+    <div class="empty-icon" style="font-size:20px;">🏁</div>
+    <div class="empty-title">Nenhuma pista salva</div>
+    <div class="empty-body">Crie sua primeira pista para começar a cronometrar.</div>
+    <button class="btn btn-primary btn-md">+ Nova pista</button>
+  </div>
+
+  <!-- Toasts -->
+  <div class="subsection-title">Toast — Feedback rápido</div>
+  <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:28px; max-width:360px;">
+    <div class="toast">
+      <div class="toast-dot" style="background:var(--color-green);"></div>
+      Sessão salva com sucesso
+    </div>
+    <div class="toast">
+      <div class="toast-dot" style="background:var(--color-red);"></div>
+      GPS sem sinal — aguarde
+    </div>
+    <div class="toast">
+      <div class="toast-dot" style="background:var(--text-muted);"></div>
+      Pista carregada
+    </div>
+  </div>
+</section>
+
+
+<!-- ═══════════════════════════════════════
+     NAVEGAÇÃO
+════════════════════════════════════════ -->
+<section class="section" id="navegacao">
+  <div class="section-title">Navegação</div>
+
+  <div class="subsection-title">Top Bar — Portrait screens</div>
+  <div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-lg); padding:14px 20px; display:flex; align-items:center; justify-content:space-between; margin-bottom:24px; max-width:390px;">
+    <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+      <circle cx="14" cy="14" r="13" stroke="rgba(255,255,255,0.2)" stroke-width="1.2"/>
+      <circle cx="14" cy="14" r="7" stroke="rgba(255,255,255,0.5)" stroke-width="1.2" fill="none"/>
+      <line x1="14" y1="9" x2="14" y2="14" stroke="rgba(255,255,255,0.5)" stroke-width="1.2" stroke-linecap="round"/>
+      <line x1="14" y1="14" x2="17" y2="16" stroke="rgba(255,255,255,0.5)" stroke-width="1.2" stroke-linecap="round"/>
+    </svg>
+    <span style="font-family:'Rajdhani',monospace; font-size:22px; font-weight:700; letter-spacing:0.02em;"><span style="color:#fff;">LAP</span><span style="color:#FF6D00;">ZY</span></span>
+    <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+      <circle cx="14" cy="14" r="13" stroke="rgba(255,255,255,0.2)" stroke-width="1.2"/>
+      <circle cx="14" cy="12" r="4.5" stroke="rgba(255,255,255,0.5)" stroke-width="1.2" fill="none"/>
+      <path d="M6,22 Q6,17 14,17 Q22,17 22,22" stroke="rgba(255,255,255,0.5)" stroke-width="1.2" fill="none" stroke-linecap="round"/>
+    </svg>
+  </div>
+
+  <div class="subsection-title">Top Bar — Tela interna (com voltar)</div>
+  <div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-lg); padding:14px 20px; display:flex; align-items:center; gap:16px; margin-bottom:24px; max-width:390px;">
+    <span style="font-size:22px; color:rgba(255,255,255,0.5); line-height:1;">‹</span>
+    <span style="font-family:'Rajdhani',monospace; font-size:16px; font-weight:700; letter-spacing:0.14em; color:rgba(255,255,255,0.9); text-transform:uppercase;">Corridas</span>
+  </div>
+
+  <div class="subsection-title">Progresso wizard — Criação de pista (barra clicável)</div>
+  <div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-lg); padding:20px 20px; margin-bottom:24px; max-width:390px;">
+    <div style="display:flex; gap:6px; margin-bottom:14px;">
+      <div style="flex:1; height:3px; border-radius:2px; background:var(--color-green); cursor:pointer;"></div>
+      <div style="flex:1; height:3px; border-radius:2px; background:var(--color-green); cursor:pointer;"></div>
+      <div style="flex:1; height:3px; border-radius:2px; background:var(--surface-2); cursor:pointer;"></div>
+      <div style="flex:1; height:3px; border-radius:2px; background:var(--surface-2); cursor:pointer;"></div>
+    </div>
+    <div style="display:flex; justify-content:space-between;">
+      <span style="font-size:10px; color:var(--color-green); text-transform:uppercase; letter-spacing:0.08em;">Largada</span>
+      <span style="font-size:10px; color:var(--color-green); text-transform:uppercase; letter-spacing:0.08em;">Setores</span>
+      <span style="font-size:10px; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.08em;">Nome</span>
+      <span style="font-size:10px; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.08em;">Salvar</span>
+    </div>
+  </div>
+</section>
+
+
+<!-- ═══════════════════════════════════════
+     ESPAÇAMENTO
+════════════════════════════════════════ -->
+<section class="section" id="espaçamento">
+  <div class="section-title">Espaçamento</div>
+  <div class="spacing-row">
+    <div class="spacing-item"><div class="spacing-block" style="height:4px;"></div><div class="spacing-lbl">4px<br>--space-1</div></div>
+    <div class="spacing-item"><div class="spacing-block" style="height:8px;"></div><div class="spacing-lbl">8px<br>--space-2</div></div>
+    <div class="spacing-item"><div class="spacing-block" style="height:16px;"></div><div class="spacing-lbl">16px<br>--space-3</div></div>
+    <div class="spacing-item"><div class="spacing-block" style="height:24px;"></div><div class="spacing-lbl">24px<br>--space-4</div></div>
+    <div class="spacing-item"><div class="spacing-block" style="height:32px;"></div><div class="spacing-lbl">32px<br>--space-5</div></div>
+    <div class="spacing-item"><div class="spacing-block" style="height:48px;"></div><div class="spacing-lbl">48px<br>--space-6</div></div>
+  </div>
+
+  <div style="margin-top:28px;">
+    <div class="subsection-title">Border Radius</div>
+    <div style="display:flex; gap:16px; flex-wrap:wrap; margin-top:12px;">
+      <div style="background:var(--surface); border:1px solid var(--border); border-radius:4px; width:64px; height:64px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px;">
+        <span style="font-size:10px; color:var(--text-muted);">sm</span>
+        <span style="font-size:11px; font-family:'Courier New',monospace; color:var(--text-secondary);">4px</span>
+      </div>
+      <div style="background:var(--surface); border:1px solid var(--border); border-radius:8px; width:64px; height:64px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px;">
+        <span style="font-size:10px; color:var(--text-muted);">md</span>
+        <span style="font-size:11px; font-family:'Courier New',monospace; color:var(--text-secondary);">8px</span>
+      </div>
+      <div style="background:var(--surface); border:1px solid var(--border); border-radius:12px; width:64px; height:64px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px;">
+        <span style="font-size:10px; color:var(--text-muted);">lg</span>
+        <span style="font-size:11px; font-family:'Courier New',monospace; color:var(--text-secondary);">12px</span>
+      </div>
+      <div style="background:var(--surface); border:1px solid var(--border); border-radius:16px; width:64px; height:64px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px;">
+        <span style="font-size:10px; color:var(--text-muted);">xl</span>
+        <span style="font-size:11px; font-family:'Courier New',monospace; color:var(--text-secondary);">16px</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ═══════════════════════════════════════
+     TOKENS FLUTTER
+════════════════════════════════════════ -->
+<section class="section" id="tokens">
+  <div class="section-title">Tokens Flutter / Dart</div>
+  <div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-lg); overflow:hidden;">
+    <table class="spec-table">
+      <thead>
+        <tr>
+          <th>Token</th>
+          <th>Descrição</th>
+          <th>Valor Dart</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>AppColors.background</td><td>Fundo principal</td><td>Color(0xFF0A0A0A)</td></tr>
+        <tr><td>AppColors.surface</td><td>Cards e painéis</td><td>Color(0xFF141414)</td></tr>
+        <tr><td>AppColors.surface2</td><td>Inputs e elementos elevados</td><td>Color(0xFF1C1C1C)</td></tr>
+        <tr><td>AppColors.border</td><td>Bordas padrão</td><td>Color(0x14FFFFFF)</td></tr>
+        <tr><td>AppColors.textPrimary</td><td>Texto principal</td><td>Color(0xFFFFFFFF)</td></tr>
+        <tr><td>AppColors.textSecondary</td><td>Texto secundário</td><td>Color(0x80FFFFFF)</td></tr>
+        <tr><td>AppColors.textMuted</td><td>Texto muted / labels</td><td>Color(0x4DFFFFFF)</td></tr>
+        <tr><td>AppColors.green</td><td>Ação principal, delta+</td><td>Color(0xFF00E676)</td></tr>
+        <tr><td>AppColors.purple</td><td>Melhor volta, PR</td><td>Color(0xFFBF5AF2)</td></tr>
+        <tr><td>AppColors.red</td><td>Destrutivo, delta-</td><td>Color(0xFFFF3B30)</td></tr>
+        <tr><td>AppColors.s1</td><td>Setor 1</td><td>Color(0xFF00B0FF)</td></tr>
+        <tr><td>AppColors.s2</td><td>Setor 2</td><td>Color(0xFFFFD600)</td></tr>
+        <tr><td>AppColors.s3</td><td>Setor 3</td><td>Color(0xFFFF6D00)</td></tr>
+        <tr><td>AppColors.brand</td><td>Marca — só logo/splash</td><td>Color(0xFFFF6D00)</td></tr>
+        <tr><td>AppSpacing.s1</td><td>4px</td><td>4.0</td></tr>
+        <tr><td>AppSpacing.s2</td><td>8px</td><td>8.0</td></tr>
+        <tr><td>AppSpacing.s3</td><td>16px</td><td>16.0</td></tr>
+        <tr><td>AppSpacing.s4</td><td>24px</td><td>24.0</td></tr>
+        <tr><td>AppSpacing.s5</td><td>32px</td><td>32.0</td></tr>
+        <tr><td>AppSpacing.s6</td><td>48px</td><td>48.0</td></tr>
+        <tr><td>AppRadius.sm</td><td>4px — chips, tags</td><td>4.0</td></tr>
+        <tr><td>AppRadius.md</td><td>8px — botões, badges</td><td>8.0</td></tr>
+        <tr><td>AppRadius.lg</td><td>12px — cards, sheets</td><td>12.0</td></tr>
+        <tr><td>AppRadius.xl</td><td>16px — modais</td><td>16.0</td></tr>
+        <tr><td>AppFonts.display</td><td>Rajdhani 700 72px ls:-0.01</td><td>TextStyle(fontFamily:'Rajdhani', fontSize:72, fontWeight:FontWeight.w700, letterSpacing:-0.72)</td></tr>
+        <tr><td>AppFonts.mono</td><td>Rajdhani 500 48px ls:+0.04</td><td>TextStyle(fontFamily:'Rajdhani', fontSize:48, fontWeight:FontWeight.w500, letterSpacing:1.92)</td></tr>
+        <tr><td>AppFonts.heading</td><td>Rajdhani 700 32px</td><td>TextStyle(fontFamily:'Rajdhani', fontSize:32, fontWeight:FontWeight.w700)</td></tr>
+        <tr><td>AppFonts.body</td><td>Inter 400 16px</td><td>TextStyle(fontFamily:'Inter', fontSize:16, fontWeight:FontWeight.w400)</td></tr>
+        <tr><td>AppFonts.caption</td><td>Inter 400 12px</td><td>TextStyle(fontFamily:'Inter', fontSize:12, fontWeight:FontWeight.w400)</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
 
 </body>
 </html>

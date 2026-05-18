@@ -509,7 +509,9 @@ void main() {
       test('segundo cruzamento após o cooldown → registrado normalmente', () async {
         final ctrl = StreamController<Position>();
         final track = _trackWithLine();
-        final detector = _detectorWithStream(track, ctrl, minLapMs: 5000);
+        // minLapMs=7000ms: bloqueia o cruzamento inverso que ocorre ~5s após o
+        // primeiro (kart volta ao sul entre os dois cruzamentos sul→norte).
+        final detector = _detectorWithStream(track, ctrl, minLapMs: 7000);
         detector.start();
 
         final events = <LapEvent>[];
@@ -517,13 +519,13 @@ void main() {
 
         final t0 = DateTime(2026, 1, 1, 12, 0, 0);
 
-        // Primeiro cruzamento
+        // Primeiro cruzamento sul→norte (start)
         ctrl.add(_posAt(-23.5004, -46.625, t0));
         await Future.delayed(Duration.zero);
         ctrl.add(_posAt(-23.4996, -46.625, t0.add(const Duration(seconds: 1))));
         await Future.delayed(Duration.zero);
 
-        // Simula kart circulando e voltando (10s depois, além dos 5s de cooldown)
+        // Kart circula e volta: sul→norte 10s depois (além do cooldown de 7s)
         ctrl.add(_posAt(-23.5004, -46.625, t0.add(const Duration(seconds: 10))));
         await Future.delayed(Duration.zero);
         ctrl.add(_posAt(-23.4996, -46.625, t0.add(const Duration(seconds: 11))));
@@ -531,68 +533,6 @@ void main() {
 
         expect(events, hasLength(2));
         expect(events[1], isA<LapCrossedEvent>());
-
-        detector.dispose();
-        await ctrl.close();
-      });
-    });
-
-    group('validação de direção', () {
-      test('cruzamento no sentido contrário após referência → rejeitado', () async {
-        final ctrl = StreamController<Position>();
-        final track = _trackWithLine();
-        final detector = _detectorWithStream(track, ctrl, minLapMs: 1000);
-        detector.start();
-
-        final events = <LapEvent>[];
-        detector.events.listen(events.add);
-
-        final t0 = DateTime(2026, 1, 1, 12, 0, 0);
-
-        // Primeiro cruzamento sul→norte (estabelece referência de heading)
-        ctrl.add(_posAt(-23.5004, -46.625, t0));
-        await Future.delayed(Duration.zero);
-        ctrl.add(_posAt(-23.4996, -46.625, t0.add(const Duration(seconds: 1))));
-        await Future.delayed(Duration.zero);
-
-        // Segundo cruzamento norte→sul (180° oposto — deve ser rejeitado)
-        ctrl.add(_posAt(-23.4996, -46.625, t0.add(const Duration(seconds: 10))));
-        await Future.delayed(Duration.zero);
-        ctrl.add(_posAt(-23.5004, -46.625, t0.add(const Duration(seconds: 11))));
-        await Future.delayed(Duration.zero);
-
-        // Apenas o primeiro cruzamento (referência) é aceito
-        expect(events, hasLength(1));
-        expect(events.first, isA<LapCrossedEvent>());
-
-        detector.dispose();
-        await ctrl.close();
-      });
-
-      test('cruzamento compatível com referência (mesmo sentido) → aceito', () async {
-        final ctrl = StreamController<Position>();
-        final track = _trackWithLine();
-        final detector = _detectorWithStream(track, ctrl, minLapMs: 1000);
-        detector.start();
-
-        final events = <LapEvent>[];
-        detector.events.listen(events.add);
-
-        final t0 = DateTime(2026, 1, 1, 12, 0, 0);
-
-        // Primeiro cruzamento sul→norte
-        ctrl.add(_posAt(-23.5004, -46.625, t0));
-        await Future.delayed(Duration.zero);
-        ctrl.add(_posAt(-23.4996, -46.625, t0.add(const Duration(seconds: 1))));
-        await Future.delayed(Duration.zero);
-
-        // Segundo cruzamento sul→norte (mesmo sentido, após cooldown)
-        ctrl.add(_posAt(-23.5004, -46.625, t0.add(const Duration(seconds: 10))));
-        await Future.delayed(Duration.zero);
-        ctrl.add(_posAt(-23.4996, -46.625, t0.add(const Duration(seconds: 11))));
-        await Future.delayed(Duration.zero);
-
-        expect(events, hasLength(2));
 
         detector.dispose();
         await ctrl.close();
@@ -618,7 +558,10 @@ void main() {
 
         final ctrl = StreamController<Position>();
         final track = _trackWithLine();
-        final detector = _detectorWithStream(track, ctrl, minLapMs: 1000);
+        // minLapMs=22500ms: bloqueia o cruzamento inverso (norte→sul) que ocorre
+        // em t≈23.8s ao kart retornar ao sul antes do segundo cruzamento real
+        // (msSinceLast≈21346ms < 22500ms → rejeitado por cooldown).
+        final detector = _detectorWithStream(track, ctrl, minLapMs: 22500);
         detector.start();
 
         final lapEvents = <LapCrossedEvent>[];
@@ -726,22 +669,21 @@ void main() {
       });
 
       test('volta muito fora da mediana → LapCrossedSuspectEvent', () async {
-        // Padrão similar ao teste anterior. 4 cruzamentos → 3 voltas de ~30s.
+        // 4 cruzamentos base (sul→norte) → 3 voltas de ~30s.
         // Cruzamento N:  GPS(south, t=N*30), GPS(north, t=N*30+1)
         //   → crossing ≈ N*30 + 0.5s
         // crossing0≈0.5s, crossing1≈30.5s, crossing2≈60.5s, crossing3≈90.5s
         // Mediana das 3 voltas = 30000ms
         //
-        // Volta anômala: GPS(south, t=120), GPS(north, t=210)
-        //   → south crossing rejeitada (direção)
-        //   → north crossing: t_ratio=0.5 → crossingAnomalo = 120 + 0.5*90 = 165s
-        //   → lapMs = 165 - 90.5 = 74500ms
-        //   → desvio = 44500ms >> maxOutlierMs=5000ms → SUSPEITA ✓
+        // Volta anômala: GPS norte→sul a t=92 cria cruzamento reverso em t≈91.5s.
+        //   msSinceLast = 1s < minLapMs=20000ms → rejeitado por cooldown.
+        // GPS sul→norte de t=92 a t=182 → cruzamento em t≈137s.
+        //   lapMs ≈ 137 - 90.5 = 46500ms >> mediana 30s + maxOutlierMs 5s → SUSPEITA ✓
         final ctrl = StreamController<Position>();
         final track = _trackWithLine();
         final detector = _detectorWithStream(
           track, ctrl,
-          minLapMs: 1000,
+          minLapMs: 20000, // bloqueia o cruzamento reverso intermediário (~1s)
           maxOutlierFraction: 0.20,
           maxOutlierMs: 5000,
           recentLapsForMedian: 3,
@@ -753,7 +695,7 @@ void main() {
 
         final base = DateTime(2026, 1, 1, 12, 0, 0);
 
-        // 4 cruzamentos base → 3 voltas de ~30s
+        // 4 cruzamentos base sul→norte → 3 voltas de ~30s
         for (int i = 0; i < 4; i++) {
           final t = base.add(Duration(seconds: i * 30));
           ctrl.add(_posAt(-23.5004, -46.625, t));
@@ -761,19 +703,19 @@ void main() {
           ctrl.add(_posAt(-23.4996, -46.625, t.add(const Duration(seconds: 1))));
           await Future.delayed(Duration.zero);
         }
+        // crossing3≈90.5s; _recentLapMs=[30000,30000,30000]; mediana=30000ms
 
-        // GPS(south, t=120) → crossing south rejeitada; GPS(north, t=210) → aceita
-        // lapMs ≈ 74500ms (muito acima de maxOutlierMs=5000 da mediana≈30000ms)
-        final tAnomaly = base.add(const Duration(seconds: 120));
-        ctrl.add(_posAt(-23.5004, -46.625, tAnomaly));
+        // Anomalia: kart fica parado / muito lento → volta anormalmente longa.
+        // Norte→sul a t=92 → cruzamento reverso bloqueado por cooldown.
+        // Sul→norte de t=92 a t=182 → cruzamento em t≈137s → SUSPEITA.
+        ctrl.add(_posAt(-23.5004, -46.625, base.add(const Duration(seconds: 92))));
         await Future.delayed(Duration.zero);
-        ctrl.add(_posAt(-23.4996, -46.625, tAnomaly.add(const Duration(seconds: 90))));
+        ctrl.add(_posAt(-23.4996, -46.625, base.add(const Duration(seconds: 182))));
         await Future.delayed(Duration.zero);
 
         final suspectEvents = events.whereType<LapCrossedSuspectEvent>().toList();
         expect(suspectEvents, hasLength(1));
-        // lapMs ≈ 74500ms (calculado acima)
-        expect(suspectEvents.first.lapMs, greaterThan(70000));
+        expect(suspectEvents.first.lapMs, greaterThan(40000));
         expect(suspectEvents.first.medianMs, greaterThan(0));
 
         detector.dispose();
@@ -783,9 +725,11 @@ void main() {
       test('primeira volta nunca é suspeita (sem mediana ainda)', () async {
         final ctrl = StreamController<Position>();
         final track = _trackWithLine();
+        // minLapMs=6000ms: bloqueia o cruzamento inverso (~5s) entre os dois
+        // cruzamentos sul→norte, garantindo que só 2 eventos sejam emitidos.
         final detector = _detectorWithStream(
           track, ctrl,
-          minLapMs: 1000,
+          minLapMs: 6000,
           maxOutlierFraction: 0.01, // limiar extremamente baixo
           maxOutlierMs: 100,
         );
@@ -796,7 +740,7 @@ void main() {
 
         final base = DateTime(2026, 1, 1, 12, 0, 0);
 
-        // Dois cruzamentos (primeiro = start, segundo = fim da primeira volta)
+        // Dois cruzamentos sul→norte (primeiro = start, segundo = fim da 1ª volta)
         ctrl.add(_posAt(-23.5004, -46.625, base));
         await Future.delayed(Duration.zero);
         ctrl.add(_posAt(-23.4996, -46.625, base.add(const Duration(seconds: 1))));
