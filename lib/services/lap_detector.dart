@@ -109,9 +109,6 @@ class LapDetector {
   /// Timestamp do último cruzamento válido da S/C.
   DateTime? _lastCrossingTime;
 
-  /// Heading de referência (radianos) estabelecido no primeiro cruzamento S/C.
-  double? _referenceHeading;
-
   /// Últimas N durações de volta válidas, em ms, para cálculo de mediana.
   final List<int> _recentLapMs = [];
 
@@ -128,7 +125,6 @@ class LapDetector {
     _previousPosition = null;
     _previousTimestamp = null;
     _lastCrossingTime = null;
-    _referenceHeading = null;
     _recentLapMs.clear();
     _sectorLastSign
       ..clear()
@@ -150,7 +146,6 @@ class LapDetector {
     _previousPosition = null;
     _previousTimestamp = null;
     _lastCrossingTime = null;
-    _referenceHeading = null;
     _recentLapMs.clear();
     _sectorLastSign.clear();
     _sectorLastCrossing.clear();
@@ -311,8 +306,7 @@ class LapDetector {
     return crossingTime;
   }
 
-  /// Avalia o cruzamento da linha S/C com todas as validações:
-  /// cooldown, direção e outlier.
+  /// Avalia o cruzamento da linha S/C com cooldown e outlier.
   void _checkStartFinish(
     GeoPoint prev,
     GeoPoint curr,
@@ -326,8 +320,6 @@ class LapDetector {
 
     if (crossingTime == null) return;
 
-    final heading = _bearing(prev, curr);
-
     // ── 1. COOLDOWN ──────────────────────────────────────────────────────────
     if (_lastCrossingTime != null) {
       final msSinceLast =
@@ -335,25 +327,13 @@ class LapDetector {
       if (msSinceLast < minLapMs) {
         debugPrint(
           '[LapDetector] S/C rejeitado (cooldown) — '
-          'msSinceLast=$msSinceLast < minLapMs=$minLapMs | '
-          'heading=${heading.toStringAsFixed(3)} rad',
+          'msSinceLast=$msSinceLast < minLapMs=$minLapMs',
         );
         return;
       }
     }
 
-    // ── 2. DIREÇÃO ───────────────────────────────────────────────────────────
-    if (_referenceHeading != null &&
-        !_isCompatibleHeading(heading, _referenceHeading!)) {
-      debugPrint(
-        '[LapDetector] S/C rejeitado (direção) — '
-        'heading=${heading.toStringAsFixed(3)} rad | '
-        'referência=${_referenceHeading!.toStringAsFixed(3)} rad',
-      );
-      return;
-    }
-
-    // ── 3. OUTLIER ───────────────────────────────────────────────────────────
+    // ── 2. OUTLIER ───────────────────────────────────────────────────────────
     LapEvent event;
     if (_lastCrossingTime != null) {
       final lapMs =
@@ -377,17 +357,14 @@ class LapDetector {
           );
         } else {
           debugPrint(
-            '[LapDetector] S/C válido — '
-            'lapMs=$lapMs | mediana=$median | '
-            'heading=${heading.toStringAsFixed(3)} rad',
+            '[LapDetector] S/C válido — lapMs=$lapMs | mediana=$median',
           );
           _updateRecentLaps(lapMs);
           event = LapCrossedEvent(crossingTime);
         }
       } else {
         debugPrint(
-          '[LapDetector] S/C válido (sem mediana ainda) — '
-          'lapMs=$lapMs | heading=${heading.toStringAsFixed(3)} rad',
+          '[LapDetector] S/C válido (sem mediana ainda) — lapMs=$lapMs',
         );
         _updateRecentLaps(lapMs);
         event = LapCrossedEvent(crossingTime);
@@ -395,14 +372,12 @@ class LapDetector {
     } else {
       debugPrint(
         '[LapDetector] S/C inicial — '
-        'timestamp=${crossingTime.toIso8601String()} | '
-        'heading=${heading.toStringAsFixed(3)} rad',
+        'timestamp=${crossingTime.toIso8601String()}',
       );
       event = LapCrossedEvent(crossingTime);
     }
 
     _lastCrossingTime = crossingTime;
-    _referenceHeading ??= heading;
     _controller.add(event);
   }
 
@@ -516,26 +491,6 @@ class LapDetector {
     final ay = (p.lat - a.lat) * lat2m;
 
     return (lx * ay - ly * ax) / len;
-  }
-
-  /// Bearing do vetor [from]→[to] em radianos no intervalo [-π, π].
-  static double _bearing(GeoPoint from, GeoPoint to) {
-    const toRad = math.pi / 180;
-    final dLng = (to.lng - from.lng) * toRad;
-    final lat1 = from.lat * toRad;
-    final lat2 = to.lat * toRad;
-    return math.atan2(
-      math.sin(dLng) * math.cos(lat2),
-      math.cos(lat1) * math.sin(lat2) -
-          math.sin(lat1) * math.cos(lat2) * math.cos(dLng),
-    );
-  }
-
-  /// Retorna true se [heading] é compatível com [reference] (diferença ≤ 90°).
-  static bool _isCompatibleHeading(double heading, double reference) {
-    var diff = (heading - reference).abs();
-    if (diff > math.pi) diff = 2 * math.pi - diff;
-    return diff <= math.pi / 2;
   }
 
   /// Mediana de uma lista de inteiros (sem modificar o original).
