@@ -208,7 +208,13 @@ class _TopBar extends StatelessWidget {
             ],
           ),
           _Logo(),
-          _CircleIconButton(icon: Icons.person_outline),
+          _CircleIconButton(
+            key: const Key('home_gps_settings_button'),
+            icon: Icons.satellite_alt_outlined,
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const GpsSourceScreen()),
+            ),
+          ),
         ],
       ),
     );
