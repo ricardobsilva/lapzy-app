@@ -1,7 +1,10 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../services/gps_source.dart';
+import '../services/gps_source_manager.dart';
 import '../widgets/track_selection_sheet.dart';
+import 'gps_source_screen.dart';
 import 'race_history_screen.dart';
 import 'track_list_screen.dart';
 
@@ -16,8 +19,154 @@ class HomeScreen extends StatelessWidget {
         child: Column(
           children: [
             _TopBar(),
+            _GpsBannerSlot(),
             Expanded(child: _Body()),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── GPS BANNER ────────────────────────────────────────────────────────────────
+
+/// Slot que escuta o [GpsSourceManager] e exibe o banner quando um GPS externo
+/// está ativo. Quando a fonte é interna, não ocupa espaço algum.
+class _GpsBannerSlot extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<GpsSourceChangedEvent>(
+      stream: GpsSourceManager.instance.events,
+      builder: (context, snapshot) {
+        final source =
+            snapshot.data?.source ?? GpsSourceManager.instance.activeSource;
+        if (!source.info.isExternal) return const SizedBox.shrink();
+        return _GpsBanner(
+          info: source.info,
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(builder: (_) => const GpsSourceScreen()),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _GpsBanner extends StatefulWidget {
+  final GpsSourceInfo info;
+  final VoidCallback onTap;
+
+  const _GpsBanner({required this.info, required this.onTap});
+
+  @override
+  State<_GpsBanner> createState() => _GpsBannerState();
+}
+
+class _GpsBannerState extends State<_GpsBanner>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _pulseCtrl;
+  late final Animation<double> _pulseAnim;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulseCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1400),
+    );
+    _pulseAnim = Tween<double>(begin: 0.55, end: 1.0).animate(
+      CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut),
+    );
+    _pulseCtrl.repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _pulseCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final badgeColor = Color(widget.info.badgeArgb);
+
+    return GestureDetector(
+      key: const Key('home_gps_banner'),
+      onTap: widget.onTap,
+      child: AnimatedBuilder(
+        animation: _pulseAnim,
+        builder: (_, child) => Opacity(
+          opacity: _pulseAnim.value,
+          child: child,
+        ),
+        child: Container(
+          margin: const EdgeInsets.fromLTRB(20, 0, 20, 10),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: badgeColor.withAlpha(20),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: badgeColor.withAlpha(60), width: 1),
+          ),
+          child: Row(
+            children: [
+              _Badge(label: widget.info.badgeLabel, color: badgeColor),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      widget.info.name,
+                      style: GoogleFonts.rajdhani(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                      ),
+                    ),
+                    Text(
+                      'GPS externo ativo',
+                      style: GoogleFonts.rajdhani(
+                        fontSize: 11,
+                        color: Colors.white.withAlpha(115),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                Icons.chevron_right,
+                size: 18,
+                color: Colors.white.withAlpha(89),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _Badge extends StatelessWidget {
+  final String label;
+  final Color color;
+
+  const _Badge({required this.label, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withAlpha(38),
+        borderRadius: BorderRadius.circular(5),
+        border: Border.all(color: color.withAlpha(100), width: 1),
+      ),
+      child: Text(
+        label,
+        style: GoogleFonts.spaceMono(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          color: color,
         ),
       ),
     );

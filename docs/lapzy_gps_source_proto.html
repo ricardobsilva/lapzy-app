@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lapzy — GPS Source Prototype</title>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;700&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0A0A0A;
+    --surface: #141414;
+    --surface-2: #1C1C1C;
+    --border: rgba(255,255,255,0.07);
+    --text-primary: #FFFFFF;
+    --text-secondary: rgba(255,255,255,0.5);
+    --text-muted: rgba(255,255,255,0.28);
+    --green: #00E676;
+    --blue: #00B0FF;
+    --yellow: #FFD600;
+    --red: #FF3B30;
+    --purple: #BF5AF2;
+    --orange: #FF6D00;
+  }
+
+  body {
+    background: #111;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    min-height: 100vh;
+    padding: 32px 16px;
+    font-family: 'Inter', sans-serif;
+    gap: 40px;
+    flex-wrap: wrap;
+  }
+
+  /* ── PHONE FRAME ── */
+  .device {
+    width: 375px;
+    background: var(--bg);
+    border-radius: 44px;
+    border: 1.5px solid rgba(255,255,255,0.1);
+    overflow: hidden;
+    position: relative;
+    box-shadow: 0 40px 80px rgba(0,0,0,0.6);
+    flex-shrink: 0;
+  }
+
+  .notch-bar {
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 22px;
+  }
+  .notch-bar .time {
+    font-family: 'Rajdhani', monospace;
+    font-size: 13px;
+    font-weight: 700;
+    color: rgba(255,255,255,0.45);
+    letter-spacing: 0.5px;
+  }
+  .notch-bar .signals {
+    font-size: 11px;
+    color: rgba(255,255,255,0.35);
+    letter-spacing: 2px;
+  }
+
+  /* ── SCREEN SWITCHER ── */
+  .screen { display: none; }
+  .screen.active { display: block; }
+
+  /* ── HOME SCREEN ── */
+  .home-wrap {
+    min-height: 720px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .home-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 4px 24px 16px;
+  }
+  .icon-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 1.2px solid rgba(255,255,255,0.18);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    background: transparent;
+    flex-shrink: 0;
+  }
+  .icon-btn svg { opacity: 0.55; }
+
+  .wordmark {
+    font-family: 'Rajdhani', monospace;
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: 2px;
+  }
+  .wordmark .lap { color: #fff; }
+  .wordmark .zy  { color: var(--orange); }
+
+  /* GPS Banner */
+  .gps-banner {
+    margin: 0 16px 0;
+    padding: 11px 14px;
+    border-radius: 12px;
+    border: 1px solid rgba(0,176,255,0.22);
+    background: rgba(0,176,255,0.06);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .gps-banner:hover { background: rgba(0,176,255,0.1); }
+  .gps-banner.gps-internal {
+    border-color: rgba(0,230,118,0.22);
+    background: rgba(0,230,118,0.05);
+  }
+  .gps-banner.gps-internal:hover { background: rgba(0,230,118,0.1); }
+
+  .banner-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--blue);
+    flex-shrink: 0;
+    animation: pulse 2s ease-in-out infinite;
+  }
+  .gps-internal .banner-dot { background: var(--green); animation: none; }
+
+  @keyframes pulse {
+    0%,100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.85); }
+  }
+
+  .banner-text {
+    flex: 1;
+    font-size: 12px;
+    color: rgba(255,255,255,0.65);
+    letter-spacing: 0.3px;
+  }
+  .banner-text strong { color: rgba(255,255,255,0.9); font-weight: 500; }
+  .banner-conn {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1.2px;
+    color: var(--blue);
+    padding: 3px 8px;
+    border-radius: 4px;
+    background: rgba(0,176,255,0.12);
+  }
+  .gps-internal .banner-conn {
+    color: var(--green);
+    background: rgba(0,230,118,0.1);
+  }
+  .banner-chevron {
+    font-size: 14px;
+    color: rgba(255,255,255,0.2);
+    margin-left: 2px;
+  }
+
+  .home-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    padding: 40px 24px;
+  }
+  .tagline {
+    font-family: 'Rajdhani', monospace;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 3.5px;
+    color: rgba(255,255,255,0.3);
+  }
+
+  .btn-iniciar {
+    width: 240px;
+    height: 64px;
+    border-radius: 14px;
+    background: var(--green);
+    border: none;
+    font-family: 'Rajdhani', monospace;
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: 5px;
+    color: #000;
+    cursor: pointer;
+    transition: opacity 0.1s;
+  }
+  .btn-iniciar:active { opacity: 0.85; }
+
+  .hint {
+    font-size: 10px;
+    color: rgba(255,255,255,0.25);
+    letter-spacing: 1px;
+  }
+
+  .home-footer {
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .home-indicator {
+    width: 100px;
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(255,255,255,0.12);
+  }
+
+  /* ── GPS SETTINGS SCREEN ── */
+  .settings-wrap { min-height: 720px; }
+
+  .settings-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 22px 14px;
+  }
+  .back-btn {
+    font-family: 'Rajdhani', monospace;
+    font-size: 22px;
+    color: rgba(255,255,255,0.5);
+    background: none;
+    border: none;
+    cursor: pointer;
+    line-height: 1;
+    padding: 0;
+  }
+  .settings-title {
+    font-family: 'Rajdhani', monospace;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 2.5px;
+    color: rgba(255,255,255,0.9);
+  }
+  .spacer { width: 28px; }
+
+  .divider { height: 1px; background: var(--border); margin: 0 22px; }
+
+  .section-lbl {
+    font-family: 'Rajdhani', monospace;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    color: rgba(255,255,255,0.28);
+    padding: 16px 22px 8px;
+  }
+
+  .gps-card {
+    margin: 5px 14px;
+    padding: 14px 16px;
+    border-radius: 12px;
+    border: 1.5px solid var(--border);
+    background: var(--surface);
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    cursor: pointer;
+    transition: all 0.12s;
+    position: relative;
+  }
+  .gps-card:hover { border-color: rgba(255,255,255,0.13); }
+  .gps-card.sel-green {
+    border-color: rgba(0,230,118,0.4);
+    background: rgba(0,230,118,0.06);
+  }
+  .gps-card.sel-blue {
+    border-color: rgba(0,176,255,0.4);
+    background: rgba(0,176,255,0.05);
+  }
+  .gps-card.disabled {
+    opacity: 0.32;
+    pointer-events: none;
+  }
+
+  .card-icon {
+    width: 42px;
+    height: 42px;
+    border-radius: 10px;
+    background: var(--surface-2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: 20px;
+  }
+  .sel-green .card-icon { background: rgba(0,230,118,0.1); }
+  .sel-blue  .card-icon { background: rgba(0,176,255,0.1); }
+
+  .card-info { flex: 1; min-width: 0; }
+  .card-name {
+    font-family: 'Rajdhani', monospace;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: 0.3px;
+    margin-bottom: 2px;
+  }
+  .card-sub {
+    font-size: 11px;
+    color: var(--text-muted);
+    letter-spacing: 0.3px;
+  }
+  .sel-green .card-sub { color: rgba(0,230,118,0.65); }
+  .sel-blue  .card-sub { color: rgba(0,176,255,0.65); }
+
+  .radio {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    border: 1.5px solid rgba(255,255,255,0.18);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: border-color 0.12s;
+  }
+  .radio .dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: transparent;
+    transition: background 0.12s;
+  }
+  .sel-green .radio { border-color: var(--green); }
+  .sel-green .radio .dot { background: var(--green); }
+  .sel-blue  .radio { border-color: var(--blue); }
+  .sel-blue  .radio .dot { background: var(--blue); }
+
+  .conn-pill {
+    position: absolute;
+    top: 10px;
+    right: 12px;
+    font-family: 'Rajdhani', monospace;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 1.2px;
+    padding: 3px 8px;
+    border-radius: 4px;
+  }
+  .pill-bt   { background: rgba(0,176,255,0.12); color: var(--blue); }
+  .pill-usb  { background: rgba(255,214,0,0.12);  color: var(--yellow); }
+  .pill-ok   { background: rgba(0,230,118,0.1);   color: var(--green); }
+  .pill-off  { background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.25); }
+
+  .scan-row {
+    margin: 8px 14px 4px;
+    padding: 10px 14px;
+    border-radius: 8px;
+    background: rgba(0,176,255,0.04);
+    border: 1px solid rgba(0,176,255,0.1);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .scan-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--blue);
+    animation: pulse 1.2s ease-in-out infinite;
+    flex-shrink: 0;
+  }
+  .scan-label {
+    font-size: 11px;
+    color: rgba(0,176,255,0.7);
+    letter-spacing: 0.3px;
+  }
+
+  .save-row {
+    padding: 20px 14px 32px;
+  }
+  .btn-save {
+    width: 100%;
+    height: 52px;
+    border-radius: 12px;
+    background: var(--green);
+    border: none;
+    font-family: 'Rajdhani', monospace;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 3px;
+    color: #000;
+    cursor: pointer;
+    transition: opacity 0.1s;
+  }
+  .btn-save:active { opacity: 0.85; }
+
+  /* ── LEGEND ── */
+  .legend {
+    width: 260px;
+    flex-shrink: 0;
+    align-self: flex-start;
+    margin-top: 60px;
+  }
+  .legend-title {
+    font-family: 'Rajdhani', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    color: rgba(255,255,255,0.3);
+    margin-bottom: 20px;
+    text-transform: uppercase;
+  }
+  .legend-item {
+    margin-bottom: 20px;
+  }
+  .legend-label {
+    font-family: 'Rajdhani', monospace;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    color: rgba(255,255,255,0.6);
+    margin-bottom: 5px;
+  }
+  .legend-desc {
+    font-size: 12px;
+    color: rgba(255,255,255,0.3);
+    line-height: 1.6;
+  }
+  .legend-sep {
+    height: 1px;
+    background: rgba(255,255,255,0.06);
+    margin: 20px 0;
+  }
+
+  /* ── USB CONNECTED STATE ── */
+  .usb-card-active {
+    margin: 5px 14px;
+    padding: 14px 16px;
+    border-radius: 12px;
+    border: 1.5px solid rgba(255,214,0,0.35);
+    background: rgba(255,214,0,0.04);
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    cursor: pointer;
+    transition: all 0.12s;
+    position: relative;
+  }
+  .usb-card-active .card-name { color: var(--text-primary); }
+  .usb-card-active .card-sub { color: rgba(255,214,0,0.65); }
+</style>
+</head>
+<body>
+
+<!-- PHONE -->
+<div class="device">
+
+  <!-- HOME SCREEN -->
+  <div class="screen active" id="screen-home">
+    <div class="notch-bar">
+      <span class="time">9:41</span>
+      <span class="signals">●●●</span>
+    </div>
+
+    <div class="home-wrap">
+      <div class="home-topbar">
+        <!-- History icon -->
+        <div class="icon-btn">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+            <circle cx="8" cy="8" r="6.5" stroke="white" stroke-width="1.2"/>
+            <path d="M8 5v3l2 2" stroke="white" stroke-width="1.2" stroke-linecap="round"/>
+          </svg>
+        </div>
+
+        <div class="wordmark"><span class="lap">LAP</span><span class="zy">ZY</span></div>
+
+        <!-- Profile icon -->
+        <div class="icon-btn">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+            <circle cx="8" cy="6" r="3" stroke="white" stroke-width="1.2"/>
+            <path d="M2.5 14c0-3 2.5-5 5.5-5s5.5 2 5.5 5" stroke="white" stroke-width="1.2" stroke-linecap="round"/>
+          </svg>
+        </div>
+      </div>
+
+      <!-- GPS Banner — clicável, troca para settings -->
+      <div class="gps-banner" id="gps-banner" onclick="goToSettings()">
+        <div class="banner-dot"></div>
+        <div class="banner-text">
+          <strong id="banner-device-name">Garmin Catalyst</strong>
+          <span id="banner-conn-text"> via Bluetooth</span>
+        </div>
+        <div class="banner-conn" id="banner-conn-badge">BT</div>
+        <div class="banner-chevron">›</div>
+      </div>
+
+      <div class="home-body">
+        <div class="tagline">CRONOMETRAGEM DE KART</div>
+        <button class="btn-iniciar">INICIAR</button>
+        <div class="hint">selecione a pista após iniciar</div>
+      </div>
+
+      <div class="home-footer">
+        <div class="home-indicator"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SETTINGS SCREEN -->
+  <div class="screen" id="screen-settings">
+    <div class="notch-bar">
+      <span class="time">9:41</span>
+      <span class="signals">●●●</span>
+    </div>
+
+    <div class="settings-wrap">
+      <div class="settings-topbar">
+        <button class="back-btn" onclick="goHome()">‹</button>
+        <span class="settings-title">FONTE GPS</span>
+        <span class="spacer"></span>
+      </div>
+      <div class="divider"></div>
+
+      <div class="section-lbl">ATIVO</div>
+
+      <!-- Active device indicator -->
+      <div class="gps-card sel-blue" id="active-card" style="pointer-events:none;">
+        <div class="card-icon" id="active-icon">📡</div>
+        <div class="card-info">
+          <div class="card-name" id="active-name">Garmin Catalyst</div>
+          <div class="card-sub" id="active-sub">Bluetooth · em uso</div>
+        </div>
+        <div class="radio sel-blue" style="border-color:var(--blue)">
+          <div class="dot" style="background:var(--blue)"></div>
+        </div>
+        <div class="conn-pill pill-bt" id="active-pill">BT</div>
+      </div>
+
+      <div class="divider" style="margin-top:12px;"></div>
+      <div class="section-lbl">DISPOSITIVOS DISPONÍVEIS</div>
+
+      <!-- Internal GPS -->
+      <div class="gps-card" id="card-internal" onclick="selectDevice('internal')">
+        <div class="card-icon">📱</div>
+        <div class="card-info">
+          <div class="card-name">Este celular</div>
+          <div class="card-sub">GPS interno · Samsung A35</div>
+        </div>
+        <div class="radio"><div class="dot"></div></div>
+        <div class="conn-pill pill-ok">OK</div>
+      </div>
+
+      <!-- Garmin BT -->
+      <div class="gps-card sel-blue" id="card-garmin" onclick="selectDevice('garmin')">
+        <div class="card-icon">📡</div>
+        <div class="card-info">
+          <div class="card-name">Garmin Catalyst</div>
+          <div class="card-sub">Analisador de saída</div>
+        </div>
+        <div class="radio"><div class="dot"></div></div>
+        <div class="conn-pill pill-bt">BT</div>
+      </div>
+
+      <!-- USB-C (disabled — nothing connected) -->
+      <div class="gps-card disabled" id="card-usb">
+        <div class="card-icon">🔌</div>
+        <div class="card-info">
+          <div class="card-name">Dispositivo USB-C</div>
+          <div class="card-sub">Nenhum conectado</div>
+        </div>
+        <div class="radio"><div class="dot"></div></div>
+        <div class="conn-pill pill-off">OFFLINE</div>
+      </div>
+
+      <!-- BT scan -->
+      <div class="scan-row">
+        <div class="scan-dot"></div>
+        <div class="scan-label">Buscando dispositivos Bluetooth…</div>
+      </div>
+
+      <div class="save-row">
+        <button class="btn-save" id="btn-save" onclick="saveAndReturn()">USAR ESTE GPS</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- LEGEND -->
+<div class="legend">
+  <div class="legend-title">LAPZY — GPS Source</div>
+
+  <div class="legend-item">
+    <div class="legend-label">BANNER PASSIVO</div>
+    <div class="legend-desc">Aparece na home quando um GPS externo está ativo. Pulsa suavemente para indicar conexão viva. Toque abre settings.</div>
+  </div>
+
+  <div class="legend-sep"></div>
+
+  <div class="legend-item">
+    <div class="legend-label">SEÇÃO ATIVO</div>
+    <div class="legend-desc">Sempre mostra o dispositivo em uso. Não é clicável — é status, não seletor.</div>
+  </div>
+
+  <div class="legend-item">
+    <div class="legend-label">TROCA DE DISPOSITIVO</div>
+    <div class="legend-desc">Selecione qualquer card disponível e confirme com "USAR ESTE GPS". A escolha persiste para as sessões seguintes.</div>
+  </div>
+
+  <div class="legend-item">
+    <div class="legend-label">USB-C</div>
+    <div class="legend-desc">Aparece desabilitado quando nada está conectado. Ativa automaticamente ao plugar o dispositivo.</div>
+  </div>
+
+  <div class="legend-sep"></div>
+
+  <div class="legend-item">
+    <div class="legend-label">BT = Bluetooth</div>
+    <div class="legend-desc">Conexão sem fio. Indicador azul pulsando na home.</div>
+  </div>
+  <div class="legend-item">
+    <div class="legend-label">USB = USB-C</div>
+    <div class="legend-desc">Conexão cabeada. Badge amarelo quando ativo.</div>
+  </div>
+  <div class="legend-item">
+    <div class="legend-label">OK = GPS interno</div>
+    <div class="legend-desc">Sempre disponível como fallback. Badge verde estático.</div>
+  </div>
+</div>
+
+<script>
+  let currentDevice = 'garmin';
+
+  const devices = {
+    garmin:   { name: 'Garmin Catalyst', sub: 'Bluetooth · em uso', icon: '📡', conn: 'BT', pillClass: 'pill-bt', bannerConn: 'BT', bannerText: ' via Bluetooth', selClass: 'sel-blue', bannerClass: '' },
+    internal: { name: 'Este celular',    sub: 'GPS interno · em uso', icon: '📱', conn: 'OK', pillClass: 'pill-ok', bannerConn: 'INTERNO', bannerText: ' GPS do celular', selClass: 'sel-green', bannerClass: 'gps-internal' },
+  };
+
+  function selectDevice(id) {
+    if (!devices[id]) return;
+    currentDevice = id;
+
+    document.querySelectorAll('.gps-card:not(#active-card)').forEach(c => {
+      c.classList.remove('sel-green', 'sel-blue');
+    });
+
+    const card = document.getElementById('card-' + id);
+    if (card) card.classList.add(devices[id].selClass);
+  }
+
+  function saveAndReturn() {
+    const d = devices[currentDevice];
+
+    // Update active section
+    document.getElementById('active-icon').textContent = d.icon;
+    document.getElementById('active-name').textContent = d.name;
+    document.getElementById('active-sub').textContent = d.sub;
+
+    const activePill = document.getElementById('active-pill');
+    activePill.textContent = d.conn;
+    activePill.className = 'conn-pill ' + d.pillClass;
+
+    const activeCard = document.getElementById('active-card');
+    activeCard.className = 'gps-card ' + d.selClass;
+
+    // Update banner on home
+    document.getElementById('banner-device-name').textContent = d.name;
+    document.getElementById('banner-conn-text').textContent = d.bannerText;
+    document.getElementById('banner-conn-badge').textContent = d.bannerConn;
+
+    const banner = document.getElementById('gps-banner');
+    banner.className = 'gps-banner ' + d.bannerClass;
+
+    goHome();
+  }
+
+  function goToSettings() {
+    document.getElementById('screen-home').classList.remove('active');
+    document.getElementById('screen-settings').classList.add('active');
+  }
+
+  function goHome() {
+    document.getElementById('screen-settings').classList.remove('active');
+    document.getElementById('screen-home').classList.add('active');
+  }
+</script>
+
+</body>
+</html>

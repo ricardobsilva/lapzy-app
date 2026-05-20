@@ -1,8 +1,96 @@
 # Lapzy — Tasks
 
-## Doing
+## Done
 
-## Backlog
+- [x] TASK-025 · Feature — Seleção de Fonte GPS e Suporte a GPS Externo (US GPS-001)
+  Como piloto de kart amador, quero que o app detecte automaticamente o GPS externo que eu já pareei e me permita escolher qual fonte usar, para que eu não precise configurar nada antes de cada corrida e possa usar hardware dedicado quando quiser.
+  refs: docs/lapzy_us_gps_source.md, docs/lapzy_tela_inicial.md, docs/fluxo.md, docs/lapzy_design_system.html, docs/principios.md
+
+  ### Contexto
+
+  O Lapzy passará a suportar dispositivos GPS externos (dedicados), conectáveis via Bluetooth ou USB-C, além do GPS interno do celular. O piloto configura o dispositivo uma vez e o app lembra a preferência para sessões futuras. **Nenhum passo é adicionado ao fluxo crítico INICIAR → pista → corrida.**
+
+  ### Princípio fundamental de arquitetura
+
+  GPS interno e GPS externo são tratados por services **completamente separados e independentes**:
+
+  - `InternalGpsService` — encapsula toda a lógica de suavização, correção de drift e otimização que já existe para o GPS do celular. Nenhuma dessas regras vaza para o externo.
+  - `ExternalGpsService` — usa os dados do dispositivo externo **como eles chegam**, sem nenhuma otimização ou correção adicional. A única intervenção permitida é forçar a melhor configuração de precisão disponível na API do dispositivo (se o protocolo suportar). O dispositivo externo é tratado como fonte de verdade — não cabe ao app "melhorar" seus dados.
+
+  Os dois services expõem a mesma interface (`GpsSourceStream`) para que o `LapDetector` e o resto do app sejam agnósticos à fonte ativa.
+
+  ### Comportamento UX
+
+  - Quando um GPS externo está ativo: banner passivo aparece na tela inicial com nome do dispositivo e tipo de conexão (BT / USB); pulsa suavemente para indicar conexão viva
+  - Toque no banner abre `GpsSourceScreen`
+  - Quando o GPS interno é a fonte ativa: banner não aparece — home permanece limpa (estado padrão silencioso)
+  - A escolha persiste localmente (SharedPreferences) e é reutilizada em todas as sessões seguintes
+
+  ### Tela de configuração — `GpsSourceScreen`
+
+  - Seção "ATIVO": read-only, exibe o dispositivo em uso no momento
+  - Seção "DISPOSITIVOS DISPONÍVEIS": lista de GPS detectados via BT + USB-C + GPS interno sempre presente
+  - GPS interno nunca desabilitado — é sempre o fallback final
+  - USB-C: exibido como desabilitado quando nada conectado; ativa automaticamente ao plugar
+  - Scan Bluetooth roda em background enquanto a tela está aberta; para ao sair
+  - Confirmação explícita via botão "USAR ESTE GPS" para aplicar a troca
+
+  ### Exibição no pós-corrida (`RaceSummaryScreen`)
+
+  Linha de rodapé mostrando qual fonte GPS foi usada na sessão:
+  - GPS interno: "Cronometrado com [Fabricante] [Modelo] · Precisão típica: ±300–500ms"
+  - GPS externo: "Cronometrado com [Nome do dispositivo] via [BT/USB-C]"
+
+  O campo `gpsSource` é adicionado a `RaceSessionRecord` (nullable para compatibilidade com sessões anteriores).
+
+  ### Conexões suportadas
+
+  | Tipo | Badge | Cor |
+  |------|-------|-----|
+  | Bluetooth | BT | `#00B0FF` |
+  | USB-C | USB | `#FFD600` |
+  | GPS interno | OK | `#00E676` |
+
+  ### Subtasks
+
+  - [x] 1. Definir interface `GpsSourceStream` — contrato comum entre internal e external services
+  - [x] 2. Refatorar lógica atual de GPS em `InternalGpsService` — toda suavização e correção fica encapsulada aqui, sem exposição externa
+  - [x] 3. Criar `ExternalGpsService` — recebe stream bruto do dispositivo externo via BT ou USB-C; força melhor precisão disponível na API do protocolo; sem nenhuma otimização de dados
+  - [x] 4. Criar `GpsSourceManager` — singleton que mantém qual source está ativa, persiste preferência (SharedPreferences) e expõe o `GpsSourceStream` correto para o restante do app
+  - [x] 5. Adicionar banner passivo na `HomeScreen` — exibido somente quando GPS externo está ativo
+  - [x] 6. Criar `GpsSourceScreen` — seção Ativo (read-only) + lista de disponíveis + botão "USAR ESTE GPS"
+  - [x] 7. Adicionar campo `gpsSource` em `RaceSessionRecord` + atualizar `toJson`/`fromJson`
+  - [x] 8. Exibir linha de fonte GPS na `RaceSummaryScreen`
+  - [x] 9. Testes unitários: `InternalGpsService`, `ExternalGpsService`, `GpsSourceManager` (detecção, persistência, fallback, isolamento entre services)
+  - [x] 10. Testes de widget: banner (exibido/oculto por estado), `GpsSourceScreen` (seleção, confirmação, USB-C desabilitado)
+  - [x] 11. Testes de integração: `GpsSourceManager` → `LapDetector` usando fonte interna e fonte externa — verificar que o `LapDetector` se comporta corretamente com ambas
+
+  ### Critérios de aceite
+
+  **UX / Fluxo**
+  - CA-GPS-001-01: banner aparece na `HomeScreen` quando um GPS externo Bluetooth está conectado e ativo
+  - CA-GPS-001-02: banner aparece na `HomeScreen` quando um GPS externo USB-C está conectado e ativo
+  - CA-GPS-001-03: banner **não aparece** quando o GPS interno é a fonte ativa
+  - CA-GPS-001-04: toque no banner navega para `GpsSourceScreen`
+  - CA-GPS-001-05: `GpsSourceScreen` exibe seção Ativo (read-only) + lista de disponíveis corretamente
+  - CA-GPS-001-06: GPS interno sempre visível e selecionável — nunca desabilitado
+  - CA-GPS-001-07: USB-C aparece desabilitado quando nenhum cabo está conectado; ativa automaticamente ao plugar sem reiniciar a tela
+  - CA-GPS-001-08: confirmação via "USAR ESTE GPS" persiste a escolha — preferência sobrevive a reinicialização do app
+  - CA-GPS-001-09: scan BT ativo enquanto `GpsSourceScreen` está aberta; para ao sair da tela
+
+  **Funcionamento da corrida**
+  - CA-GPS-001-10: durante a corrida, o `LapDetector` usa exclusivamente a fonte GPS persistida — não recorre ao interno sem que o usuário tenha configurado assim
+  - CA-GPS-001-11: ao perder conexão com GPS externo durante a corrida, o app exibe aviso discreto e faz fallback automático para o GPS interno sem encerrar a sessão
+  - CA-GPS-001-12: `RaceSessionRecord.gpsSource` registra qual fonte foi usada ao encerrar a corrida
+
+  **Arquitetura / Isolamento**
+  - CA-GPS-001-13: nenhuma lógica de suavização ou correção de drift do `InternalGpsService` é aplicada quando a fonte ativa é o `ExternalGpsService` — verificável por teste unitário com stream simulado
+  - CA-GPS-001-14: `ExternalGpsService` não modifica os valores de velocidade, posição ou timestamp recebidos do dispositivo externo — apenas os repassa pela interface `GpsSourceStream`
+  - CA-GPS-001-15: `InternalGpsService` e `ExternalGpsService` podem ser instanciados e testados em isolamento, sem dependência entre si
+
+  **Pós-corrida**
+  - CA-GPS-001-16: `RaceSummaryScreen` exibe linha de rodapé com nome do dispositivo e tipo de conexão usados na sessão
+  - CA-GPS-001-17: sessões salvas antes desta task (sem `gpsSource`) carregam normalmente com `gpsSource == null` — sem crash, sem dado exibido na tela
 
 - [ ] TASK-023 · Feature — Informações do Dispositivo GPS no Resumo de Corrida
   Como piloto, quero saber qual aparelho foi usado como GPS na minha corrida e qual é a precisão típica desse hardware, para que eu entenda o quão confiáveis são os meus tempos e possa tomar decisões mais informadas sobre meus dados.

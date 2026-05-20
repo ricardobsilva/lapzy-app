@@ -11,6 +11,7 @@ import '../models/track.dart';
 import '../repositories/race_session_repository.dart';
 import '../services/delta_calculator.dart';
 import '../services/foreground_location_service.dart';
+import '../services/gps_source_manager.dart';
 import '../services/lap_detector.dart';
 import 'race_summary_screen.dart';
 
@@ -109,7 +110,11 @@ class _RaceScreenState extends State<RaceScreen> {
     unawaited(ForegroundLocationService.start());
     _detector = widget.detectorFactory != null
         ? widget.detectorFactory!(widget.track)
-        : LapDetector(track: widget.track);
+        : LapDetector(
+            track: widget.track,
+            positionStreamFactory: () =>
+                GpsSourceManager.instance.positionStream,
+          );
     _startLapTimer();
     _startDetector();
   }
@@ -296,6 +301,7 @@ class _RaceScreenState extends State<RaceScreen> {
 
   Future<void> _saveAndNavigate() async {
     final now = DateTime.now();
+    final gpsSource = GpsSourceManager.instance.activeSource.info;
     final record = RaceSessionRecord(
       id: const Uuid().v4(),
       trackId: widget.track.id,
@@ -304,6 +310,7 @@ class _RaceScreenState extends State<RaceScreen> {
       laps: List.unmodifiable(_completedLaps),
       bestLapMs: _bestLapMs,
       createdAt: now,
+      gpsSource: gpsSource,
     );
     await RaceSessionRepository().save(record);
     if (!mounted) return;
@@ -313,6 +320,7 @@ class _RaceScreenState extends State<RaceScreen> {
           laps: List.unmodifiable(_completedLaps),
           bestLapMs: _bestLapMs,
           track: widget.track,
+          gpsSource: gpsSource,
         ),
       ),
     );
