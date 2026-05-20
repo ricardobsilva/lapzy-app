@@ -1,8 +1,8 @@
 # Lapzy — Tasks
 
-## Doing
+## Done
 
-- [ ] TASK-025 · Feature — Seleção de Fonte GPS e Suporte a GPS Externo (US GPS-001)
+- [x] TASK-025 · Feature — Seleção de Fonte GPS e Suporte a GPS Externo (US GPS-001)
   Como piloto de kart amador, quero que o app detecte automaticamente o GPS externo que eu já pareei e me permita escolher qual fonte usar, para que eu não precise configurar nada antes de cada corrida e possa usar hardware dedicado quando quiser.
   refs: docs/lapzy_us_gps_source.md, docs/lapzy_tela_inicial.md, docs/fluxo.md, docs/lapzy_design_system.html, docs/principios.md
 
@@ -53,17 +53,17 @@
 
   ### Subtasks
 
-  - [ ] 1. Definir interface `GpsSourceStream` — contrato comum entre internal e external services
-  - [ ] 2. Refatorar lógica atual de GPS em `InternalGpsService` — toda suavização e correção fica encapsulada aqui, sem exposição externa
-  - [ ] 3. Criar `ExternalGpsService` — recebe stream bruto do dispositivo externo via BT ou USB-C; força melhor precisão disponível na API do protocolo; sem nenhuma otimização de dados
-  - [ ] 4. Criar `GpsSourceManager` — singleton que mantém qual source está ativa, persiste preferência (SharedPreferences) e expõe o `GpsSourceStream` correto para o restante do app
-  - [ ] 5. Adicionar banner passivo na `HomeScreen` — exibido somente quando GPS externo está ativo
-  - [ ] 6. Criar `GpsSourceScreen` — seção Ativo (read-only) + lista de disponíveis + botão "USAR ESTE GPS"
-  - [ ] 7. Adicionar campo `gpsSource` em `RaceSessionRecord` + atualizar `toJson`/`fromJson`
-  - [ ] 8. Exibir linha de fonte GPS na `RaceSummaryScreen`
-  - [ ] 9. Testes unitários: `InternalGpsService`, `ExternalGpsService`, `GpsSourceManager` (detecção, persistência, fallback, isolamento entre services)
-  - [ ] 10. Testes de widget: banner (exibido/oculto por estado), `GpsSourceScreen` (seleção, confirmação, USB-C desabilitado)
-  - [ ] 11. Testes de integração: `GpsSourceManager` → `LapDetector` usando fonte interna e fonte externa — verificar que o `LapDetector` se comporta corretamente com ambas
+  - [x] 1. Definir interface `GpsSourceStream` — contrato comum entre internal e external services
+  - [x] 2. Refatorar lógica atual de GPS em `InternalGpsService` — toda suavização e correção fica encapsulada aqui, sem exposição externa
+  - [x] 3. Criar `ExternalGpsService` — recebe stream bruto do dispositivo externo via BT ou USB-C; força melhor precisão disponível na API do protocolo; sem nenhuma otimização de dados
+  - [x] 4. Criar `GpsSourceManager` — singleton que mantém qual source está ativa, persiste preferência (SharedPreferences) e expõe o `GpsSourceStream` correto para o restante do app
+  - [x] 5. Adicionar banner passivo na `HomeScreen` — exibido somente quando GPS externo está ativo
+  - [x] 6. Criar `GpsSourceScreen` — seção Ativo (read-only) + lista de disponíveis + botão "USAR ESTE GPS"
+  - [x] 7. Adicionar campo `gpsSource` em `RaceSessionRecord` + atualizar `toJson`/`fromJson`
+  - [x] 8. Exibir linha de fonte GPS na `RaceSummaryScreen`
+  - [x] 9. Testes unitários: `InternalGpsService`, `ExternalGpsService`, `GpsSourceManager` (detecção, persistência, fallback, isolamento entre services)
+  - [x] 10. Testes de widget: banner (exibido/oculto por estado), `GpsSourceScreen` (seleção, confirmação, USB-C desabilitado)
+  - [x] 11. Testes de integração: `GpsSourceManager` → `LapDetector` usando fonte interna e fonte externa — verificar que o `LapDetector` se comporta corretamente com ambas
 
   ### Critérios de aceite
 
