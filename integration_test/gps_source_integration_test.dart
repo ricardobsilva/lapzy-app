@@ -70,7 +70,7 @@ void main() {
       GpsSourceManager.resetForTesting(
         GpsSourceManager.forTesting(activeSource: internal),
       );
-      GpsSourceManager.instance.init();
+      await GpsSourceManager.instance.init();
 
       final track = _testTrack();
       final detector = LapDetector(
@@ -103,9 +103,12 @@ void main() {
         streamFactory: () => posStream,
       );
       GpsSourceManager.resetForTesting(
-        GpsSourceManager.forTesting(activeSource: external),
+        GpsSourceManager.forTesting(
+          activeSource: external,
+          internalFallback: InternalGpsService(streamFactory: () => const Stream.empty()),
+        ),
       );
-      GpsSourceManager.instance.init();
+      await GpsSourceManager.instance.init();
 
       final track = _testTrack();
       final detector = LapDetector(
@@ -147,9 +150,14 @@ void main() {
             : InternalGpsService(streamFactory: () => stream1);
 
         GpsSourceManager.resetForTesting(
-          GpsSourceManager.forTesting(activeSource: source),
+          GpsSourceManager.forTesting(
+            activeSource: source,
+            internalFallback: useExternal
+                ? InternalGpsService(streamFactory: () => const Stream.empty())
+                : null,
+          ),
         );
-        GpsSourceManager.instance.init();
+        await GpsSourceManager.instance.init();
 
         final detector = LapDetector(
           track: _testTrack(),
@@ -200,7 +208,7 @@ void main() {
         ),
       );
       final manager = GpsSourceManager.instance;
-      manager.init();
+      await manager.init();
 
       final positions = <Position>[];
       final sub = manager.positionStream.listen(positions.add);
