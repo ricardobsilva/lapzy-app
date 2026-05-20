@@ -1,4 +1,5 @@
 import 'race_session.dart';
+import '../services/gps_source.dart';
 
 /// Registro histórico imutável de uma sessão de corrida encerrada.
 ///
@@ -29,6 +30,12 @@ class RaceSessionRecord {
   /// Timestamp de criação do record — usado para resolução de conflitos de sync.
   final DateTime createdAt;
 
+  /// Fonte GPS usada na sessão.
+  ///
+  /// Nullable para compatibilidade com sessões salvas antes de TASK-025 —
+  /// sessões antigas carregam normalmente com [gpsSource] == null.
+  final GpsSourceInfo? gpsSource;
+
   const RaceSessionRecord({
     required this.id,
     required this.trackId,
@@ -37,6 +44,7 @@ class RaceSessionRecord {
     required this.laps,
     required this.bestLapMs,
     required this.createdAt,
+    this.gpsSource,
   });
 
   Map<String, dynamic> toJson() => {
@@ -47,6 +55,7 @@ class RaceSessionRecord {
         'laps': laps.map((l) => l.toJson()).toList(),
         'bestLapMs': bestLapMs,
         'createdAt': createdAt.toIso8601String(),
+        if (gpsSource != null) 'gpsSource': gpsSource!.toJson(),
       };
 
   factory RaceSessionRecord.fromJson(Map<String, dynamic> json) =>
@@ -60,5 +69,10 @@ class RaceSessionRecord {
             .toList(),
         bestLapMs: json['bestLapMs'] as int?,
         createdAt: DateTime.parse(json['createdAt'] as String),
+        gpsSource: json['gpsSource'] != null
+            ? GpsSourceInfo.fromJson(
+                json['gpsSource'] as Map<String, dynamic>,
+              )
+            : null,
       );
 }

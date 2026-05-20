@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../models/race_session.dart';
 import '../models/track.dart';
+import '../services/gps_source.dart';
 import '../services/lap_filter.dart';
 
 const _kBg = Color(0xFF0A0A0A);
@@ -41,10 +42,15 @@ class RaceSummaryScreen extends StatefulWidget {
   final int? bestLapMs;
   final Track track;
 
+  /// Fonte GPS usada na sessão — exibida no rodapé.
+  /// Nullable para compatibilidade com sessões salvas antes de TASK-025.
+  final GpsSourceInfo? gpsSource;
+
   const RaceSummaryScreen({
     required this.laps,
     required this.bestLapMs,
     required this.track,
+    this.gpsSource,
     super.key,
   });
 
@@ -195,6 +201,8 @@ class _RaceSummaryScreenState extends State<RaceSummaryScreen> {
               ),
             ),
             const Divider(color: _kDivider, height: 1),
+            if (widget.gpsSource != null)
+              _GpsSourceFooter(info: widget.gpsSource!),
             const _ShareButton(),
           ],
         ),
@@ -656,6 +664,51 @@ class _DeltaText extends StatelessWidget {
         fontSize: 13,
         fontWeight: FontWeight.w700,
         color: color,
+      ),
+    );
+  }
+}
+
+class _GpsSourceFooter extends StatelessWidget {
+  final GpsSourceInfo info;
+
+  const _GpsSourceFooter({required this.info});
+
+  @override
+  Widget build(BuildContext context) {
+    final badgeColor = Color(info.badgeArgb);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 10, 24, 4),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: badgeColor.withAlpha(30),
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(color: badgeColor.withAlpha(80), width: 1),
+            ),
+            child: Text(
+              info.badgeLabel,
+              style: GoogleFonts.spaceMono(
+                fontSize: 9,
+                fontWeight: FontWeight.w700,
+                color: badgeColor,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              info.summaryLabel,
+              key: const Key('summary_gps_source'),
+              style: GoogleFonts.rajdhani(
+                fontSize: 11,
+                color: Colors.white.withAlpha(71),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

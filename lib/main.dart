@@ -4,12 +4,14 @@ import 'debug/seed_data.dart';
 import 'repositories/race_session_repository.dart';
 import 'repositories/track_repository.dart';
 import 'screens/home_screen.dart';
+import 'services/gps_source_manager.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   await TrackRepository().load();
   await RaceSessionRepository().load();
+  await GpsSourceManager.instance.init();
   await seedDebugDataIfNeeded();
   runApp(const LapzyApp());
 }
