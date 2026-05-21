@@ -2,8 +2,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
+
+import '../widgets/pressable.dart';
 
 import '../models/race_session.dart';
 import '../models/race_session_record.dart';
@@ -15,7 +18,6 @@ import '../services/gps_source_manager.dart';
 import '../services/lap_detector.dart';
 import 'race_summary_screen.dart';
 
-const _kBg = Color(0xFF0A0A0A);
 const _kGreen = Color(0xFF00E676);
 const _kPurple = Color(0xFFBF5AF2);
 const _kRed = Color(0xFFFF3B30);
@@ -25,6 +27,72 @@ const _kS3 = Color(0xFFFF6D00);
 
 const _kBorderWidth = 10.0;
 const _kFixedSectorColors = [_kS1, _kS2, _kS3];
+
+// ── TEMAS DE COR ──────────────────────────────────────────────────────────────
+
+class _RaceThemeData {
+  final Color bg;
+  final Color textPrimary;
+  final Color textDim;      // valores secundários (total, melhor volta)
+  final Color textVeryDim;  // labels de seção (VOLTA, TOTAL, TEMPO DA VOLTA)
+  final String name;
+
+  const _RaceThemeData({
+    required this.bg,
+    required this.textPrimary,
+    required this.textDim,
+    required this.textVeryDim,
+    required this.name,
+  });
+}
+
+const _kThemeDark = _RaceThemeData(
+  bg: Color(0xFF0A0A0A),
+  textPrimary: Colors.white,
+  textDim: Color(0x99FFFFFF),
+  textVeryDim: Color(0x47FFFFFF),
+  name: 'ESCURO',
+);
+
+/// Fundo azul cobalto saturado — chamativo em condições variadas.
+const _kThemeBlue = _RaceThemeData(
+  bg: Color(0xFF0E2BA8),
+  textPrimary: Colors.white,
+  textDim: Color(0xB3FFFFFF),
+  textVeryDim: Color(0x80FFFFFF),
+  name: 'AZUL',
+);
+
+/// Tema claro para sol forte — máximo contraste em pista a céu aberto.
+const _kThemeDay = _RaceThemeData(
+  bg: Color(0xFFF0F0F0),
+  textPrimary: Color(0xFF0D0D0D),
+  textDim: Color(0x990D0D0D),
+  textVeryDim: Color(0x720D0D0D),
+  name: 'DIA',
+);
+
+const _kRaceThemes = [_kThemeDark, _kThemeBlue, _kThemeDay];
+
+/// Propaga o tema de cor ativo para todos os sub-widgets sem passagem
+/// explícita de parâmetro por toda a árvore.
+class _RaceThemeScope extends InheritedWidget {
+  final _RaceThemeData theme;
+
+  const _RaceThemeScope({
+    required this.theme,
+    required super.child,
+  });
+
+  static _RaceThemeData of(BuildContext context) {
+    return context
+        .dependOnInheritedWidgetOfExactType<_RaceThemeScope>()!
+        .theme;
+  }
+
+  @override
+  bool updateShouldNotify(_RaceThemeScope old) => old.theme.name != theme.name;
+}
 const _kExtraSectorColors = [
   Color(0xFF1DE9B6), // teal
   Color(0xFFE040FB), // magenta
@@ -83,6 +151,12 @@ class _RaceScreenState extends State<RaceScreen> {
   /// Melhor tempo de cada setor na corrida — base para detecção de roxo (novo recorde de setor).
   List<int?> _bestSectorTimes = [];
 
+  int _themeIndex = 0;
+  bool _showThemeHint = false;
+  Timer? _hintShowTimer;
+  Timer? _hintDismissTimer;
+  static const _kHintPrefKey = 'race_theme_hint_dismissed';
+
   /// Tempo decorrido na volta atual em ms, baseado no relógio injetado.
   /// Resolução de ~1ms, sem deriva do timer periódico.
   int get _lapMs =>
@@ -117,10 +191,13 @@ class _RaceScreenState extends State<RaceScreen> {
           );
     _startLapTimer();
     _startDetector();
+    unawaited(_checkThemeHint());
   }
 
   @override
   void dispose() {
+    _hintShowTimer?.cancel();
+    _hintDismissTimer?.cancel();
     _lapTimer?.cancel();
     _resetBorderTimer?.cancel();
     for (final t in _sectorFeedbackTimers) {
@@ -295,6 +372,34 @@ class _RaceScreenState extends State<RaceScreen> {
     }
   }
 
+  void _cycleTheme() {
+    setState(() {
+      _themeIndex = (_themeIndex + 1) % _kRaceThemes.length;
+    });
+  }
+
+  Future<void> _checkThemeHint() async {
+    final prefs = await SharedPreferences.getInstance();
+    final dismissed = prefs.getBool(_kHintPrefKey) ?? false;
+    if (!dismissed && mounted) {
+      _hintShowTimer = Timer(const Duration(milliseconds: 1800), () {
+        if (mounted) {
+          setState(() => _showThemeHint = true);
+          _hintDismissTimer = Timer(const Duration(seconds: 10), () {
+            if (mounted) setState(() => _showThemeHint = false);
+          });
+        }
+      });
+    }
+  }
+
+  Future<void> _dismissThemeHint() async {
+    setState(() => _showThemeHint = false);
+    _hintDismissTimer?.cancel();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_kHintPrefKey, true);
+  }
+
   void _endRaceImmediately() {
     unawaited(_saveAndNavigate());
   }
@@ -328,37 +433,52 @@ class _RaceScreenState extends State<RaceScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: _kBg,
-      body: Stack(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(18),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _LeftColumn(lapNumber: _lapNumber),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _CenterColumn(
-                    lapMs: _lapMs,
-                    eventState: _eventState,
-                    deltaMs: _deltaMs,
-                    sectors: List.unmodifiable(_currentSectors),
-                    hasSectors: widget.track.sectorBoundaries.isNotEmpty,
-                    sectorFeedbackColors: List.unmodifiable(_sectorFeedbackColors),
-                    totalRaceMs: _totalRaceMs,
-                    hasStarted: _hasStarted,
-                    bestLapMs: _bestLapMs,
+    final theme = _kRaceThemes[_themeIndex];
+    return _RaceThemeScope(
+      theme: theme,
+      child: Scaffold(
+        backgroundColor: theme.bg,
+        body: Stack(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(18),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _LeftColumn(lapNumber: _lapNumber),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _CenterColumn(
+                      lapMs: _lapMs,
+                      eventState: _eventState,
+                      deltaMs: _deltaMs,
+                      sectors: List.unmodifiable(_currentSectors),
+                      hasSectors: widget.track.sectorBoundaries.isNotEmpty,
+                      sectorFeedbackColors: List.unmodifiable(_sectorFeedbackColors),
+                      totalRaceMs: _totalRaceMs,
+                      hasStarted: _hasStarted,
+                      bestLapMs: _bestLapMs,
+                    ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                _RightColumn(onEnd: _endRaceImmediately),
-              ],
+                  const SizedBox(width: 12),
+                  _RightColumn(onEnd: _endRaceImmediately),
+                ],
+              ),
             ),
-          ),
-          _EventBorder(eventState: _eventState),
-        ],
+            _EventBorder(eventState: _eventState),
+            Positioned(
+              top: 8,
+              right: 8,
+              child: _ThemeToggleButton(onTap: _cycleTheme),
+            ),
+            if (_showThemeHint)
+              Positioned(
+                top: 44,
+                right: 8,
+                child: _ThemeHint(onDismiss: _dismissThemeHint),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -479,6 +599,7 @@ class _LapCounter extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = _RaceThemeScope.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -488,7 +609,7 @@ class _LapCounter extends StatelessWidget {
             fontSize: 10,
             fontWeight: FontWeight.w700,
             letterSpacing: 2,
-            color: Colors.white.withAlpha(71),
+            color: theme.textVeryDim,
           ),
         ),
         Text(
@@ -496,7 +617,7 @@ class _LapCounter extends StatelessWidget {
           style: GoogleFonts.rajdhani(
             fontSize: 60,
             fontWeight: FontWeight.w700,
-            color: Colors.white,
+            color: theme.textPrimary,
             height: 1,
           ),
         ),
@@ -645,7 +766,7 @@ class _CenterColumn extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             mainAxisSize: MainAxisSize.min,
             children: [
-              _buildContent(),
+              _buildContent(context),
             ],
           ),
         ),
@@ -653,7 +774,8 @@ class _CenterColumn extends StatelessWidget {
     );
   }
 
-  Widget _buildContent() {
+  Widget _buildContent(BuildContext context) {
+    final theme = _RaceThemeScope.of(context);
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -680,7 +802,7 @@ class _CenterColumn extends StatelessWidget {
             fontSize: 11,
             fontWeight: FontWeight.w700,
             letterSpacing: 1.5,
-            color: Colors.white.withAlpha(71),
+            color: theme.textVeryDim,
           ),
         ),
         const SizedBox(height: 4),
@@ -690,7 +812,7 @@ class _CenterColumn extends StatelessWidget {
           style: GoogleFonts.rajdhani(
             fontSize: 96,
             fontWeight: FontWeight.w700,
-            color: Colors.white,
+            color: theme.textPrimary,
             height: 1,
             letterSpacing: -1,
           ),
@@ -810,6 +932,7 @@ class _TotalTime extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = _RaceThemeScope.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
@@ -819,7 +942,7 @@ class _TotalTime extends StatelessWidget {
             fontSize: 10,
             fontWeight: FontWeight.w700,
             letterSpacing: 2,
-            color: Colors.white.withAlpha(71),
+            color: theme.textVeryDim,
           ),
         ),
         Text(
@@ -828,7 +951,7 @@ class _TotalTime extends StatelessWidget {
           style: GoogleFonts.rajdhani(
             fontSize: 20,
             fontWeight: FontWeight.w700,
-            color: Colors.white.withAlpha(153),
+            color: theme.textDim,
           ),
         ),
       ],
@@ -843,6 +966,7 @@ class _BestLap extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = _RaceThemeScope.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
@@ -852,7 +976,7 @@ class _BestLap extends StatelessWidget {
             fontSize: 10,
             fontWeight: FontWeight.w700,
             letterSpacing: 2,
-            color: Colors.white.withAlpha(71),
+            color: theme.textVeryDim,
           ),
         ),
         Text(
@@ -968,6 +1092,193 @@ class _EndButtonState extends State<_EndButton>
   }
 }
 
+
+// ── THEME TOGGLE ─────────────────────────────────────────────────────────────
+
+class _ThemeToggleButton extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _ThemeToggleButton({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = _RaceThemeScope.of(context);
+    return Pressable(
+      onTap: onTap,
+      child: Container(
+        key: const Key('race_theme_toggle'),
+        width: 28,
+        height: 28,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: theme.textPrimary.withAlpha(51),
+            width: 1.2,
+          ),
+        ),
+        child: Icon(
+          Icons.palette_outlined,
+          size: 14,
+          color: theme.textPrimary.withAlpha(128),
+        ),
+      ),
+    );
+  }
+}
+
+class _ThemeHint extends StatefulWidget {
+  final VoidCallback onDismiss;
+
+  const _ThemeHint({required this.onDismiss});
+
+  @override
+  State<_ThemeHint> createState() => _ThemeHintState();
+}
+
+class _ThemeHintState extends State<_ThemeHint>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _fadeCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _fadeCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 350),
+    );
+    _fadeCtrl.forward();
+  }
+
+  @override
+  void dispose() {
+    _fadeCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _fadeCtrl,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () {},
+        child: Container(
+          key: const Key('race_theme_hint'),
+          width: 244,
+          padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+          decoration: BoxDecoration(
+            color: const Color(0xF0111111),
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(10),
+              topRight: Radius.circular(4),
+              bottomLeft: Radius.circular(10),
+              bottomRight: Radius.circular(10),
+            ),
+            border: Border.all(color: Colors.white.withAlpha(35), width: 1),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'TOQUE PARA MUDAR O TEMA',
+                style: GoogleFonts.rajdhani(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.5,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _ThemeSwatch(
+                    name: _kThemeDark.name,
+                    color: _kThemeDark.bg,
+                    isLight: false,
+                  ),
+                  const SizedBox(width: 10),
+                  _ThemeSwatch(
+                    name: _kThemeBlue.name,
+                    color: _kThemeBlue.bg,
+                    isLight: false,
+                  ),
+                  const SizedBox(width: 10),
+                  _ThemeSwatch(
+                    name: _kThemeDay.name,
+                    color: _kThemeDay.bg,
+                    isLight: true,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              GestureDetector(
+                onTap: widget.onDismiss,
+                child: Text(
+                  'NÃO MOSTRAR NOVAMENTE',
+                  style: GoogleFonts.rajdhani(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1,
+                    color: Colors.white.withAlpha(128),
+                    decoration: TextDecoration.underline,
+                    decorationColor: Colors.white.withAlpha(60),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ThemeSwatch extends StatelessWidget {
+  final String name;
+  final Color color;
+  final bool isLight;
+
+  const _ThemeSwatch({
+    required this.name,
+    required this.color,
+    required this.isLight,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 12,
+          height: 12,
+          decoration: BoxDecoration(
+            color: color,
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: isLight
+                  ? Colors.black.withAlpha(80)
+                  : Colors.white.withAlpha(80),
+              width: 1,
+            ),
+          ),
+        ),
+        const SizedBox(width: 4),
+        Text(
+          name,
+          style: GoogleFonts.rajdhani(
+            fontSize: 10,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 1,
+            color: Colors.white.withAlpha(153),
+          ),
+        ),
+      ],
+    );
+  }
+}
 
 String _formatMs(int ms) {
   final m = ms ~/ 60000;

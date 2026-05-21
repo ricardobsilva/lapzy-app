@@ -110,6 +110,10 @@ void main() {
     // precisam inspecionar suas chamadas.
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(_foregroundChannel, (_) async => null);
+    // Por padrão, hint já foi dispensado para não interferir em outros testes.
+    SharedPreferences.setMockInitialValues({
+      'race_theme_hint_dismissed': true,
+    });
   });
 
   tearDown(() {
@@ -1323,7 +1327,6 @@ void main() {
       });
 
       testWidgets('soltar antes de 3s não encerra a corrida', (tester) async {
-        SharedPreferences.setMockInitialValues({});
         RaceSessionRepository().clearForTesting();
 
         await tester.pumpWidget(_buildScreen());
@@ -1595,6 +1598,78 @@ void main() {
         expect(borderColor, isNot(const Color(0xFFFF3B30)));
         expect(borderColor, isNot(const Color(0xFFBF5AF2)));
       });
+    });
+  });
+
+  group('temas de cor', () {
+    testWidgets('ícone de tema está presente na tela', (tester) async {
+      await tester.pumpWidget(_buildScreen());
+
+      expect(find.byKey(const Key('race_theme_toggle')), findsOneWidget);
+    });
+
+    testWidgets('toque no ícone de tema cicla para tema AZUL', (tester) async {
+      await tester.pumpWidget(_buildScreen());
+
+      // Fundo inicial é escuro
+      final scaffoldBefore = tester.widget<Scaffold>(find.byType(Scaffold));
+      expect(scaffoldBefore.backgroundColor, equals(const Color(0xFF0A0A0A)));
+
+      await tester.tap(find.byKey(const Key('race_theme_toggle')));
+      await tester.pump();
+
+      final scaffoldAfter = tester.widget<Scaffold>(find.byType(Scaffold));
+      expect(scaffoldAfter.backgroundColor, equals(const Color(0xFF0E2BA8)));
+    });
+
+    testWidgets('segundo toque no ícone cicla para tema DIA', (tester) async {
+      await tester.pumpWidget(_buildScreen());
+
+      await tester.tap(find.byKey(const Key('race_theme_toggle')));
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('race_theme_toggle')));
+      await tester.pump();
+
+      final scaffold = tester.widget<Scaffold>(find.byType(Scaffold));
+      expect(scaffold.backgroundColor, equals(const Color(0xFFF0F0F0)));
+    });
+
+    testWidgets('terceiro toque volta para tema ESCURO', (tester) async {
+      await tester.pumpWidget(_buildScreen());
+
+      for (var i = 0; i < 3; i++) {
+        await tester.tap(find.byKey(const Key('race_theme_toggle')));
+        await tester.pump();
+      }
+
+      final scaffold = tester.widget<Scaffold>(find.byType(Scaffold));
+      expect(scaffold.backgroundColor, equals(const Color(0xFF0A0A0A)));
+    });
+
+    testWidgets('hint de tema aparece após delay quando prefs não foi dispensado',
+        (tester) async {
+      SharedPreferences.setMockInitialValues({});
+
+      await tester.pumpWidget(_buildScreen());
+
+      // Hint ainda não apareceu (delay de 1800ms)
+      expect(find.byKey(const Key('race_theme_hint')), findsNothing);
+
+      await tester.pump(const Duration(milliseconds: 2000));
+
+      expect(find.byKey(const Key('race_theme_hint')), findsOneWidget);
+    });
+
+    testWidgets('hint não aparece quando já foi dispensado nas prefs',
+        (tester) async {
+      SharedPreferences.setMockInitialValues({
+        'race_theme_hint_dismissed': true,
+      });
+
+      await tester.pumpWidget(_buildScreen());
+      await tester.pump(const Duration(milliseconds: 2000));
+
+      expect(find.byKey(const Key('race_theme_hint')), findsNothing);
     });
   });
 }
