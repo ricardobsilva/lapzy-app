@@ -1,6 +1,7 @@
 import 'package:geolocator/geolocator.dart';
 
 import 'external_gps_service.dart';
+import 'gps_diagnostics_service.dart';
 import 'gps_source.dart';
 import 'nmea_parser.dart';
 import 'usb_gps_channel.dart';
@@ -66,6 +67,20 @@ class UsbGpsDetector {
   Stream<Position> _streamFromUsb() async* {
     final lines = _channel.nmeaLines();
     final parser = NmeaParser();
-    yield* parser.transformLines(lines);
+    await for (final line in lines) {
+      final trimmed = line.trim();
+      if (trimmed.isEmpty) continue;
+      final now = DateTime.now();
+      final result = parser.parseLineWithReason(trimmed);
+      GpsDiagnosticsService.instance.onNmeaLine(
+        raw: trimmed,
+        receivedAt: now,
+        parsedPosition: result.position,
+        discardReason: result.discardReason,
+        gga: result.gga,
+        rmcStatus: result.rmcStatus,
+      );
+      if (result.position != null) yield result.position!;
+    }
   }
 }

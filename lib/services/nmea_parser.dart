@@ -1,4 +1,27 @@
 import 'package:geolocator/geolocator.dart';
+import 'gps_diagnostics.dart';
+
+/// Resultado diagnóstico do parse de uma linha NMEA.
+class NmeaParseResult {
+  final Position? position;
+
+  /// Motivo de descarte — não-nulo apenas quando a sentença era RMC/GGA
+  /// com dados inválidos. Null para sentenças não-posição (GSV, GSA, etc.).
+  final String? discardReason;
+
+  /// Status da sentença RMC: 'A' (fix) ou 'V' (void). Null se não era RMC.
+  final String? rmcStatus;
+
+  /// Dados GGA: fix quality, satellites, HDOP. Null se não era GGA.
+  final GgaData? gga;
+
+  const NmeaParseResult({
+    this.position,
+    this.discardReason,
+    this.rmcStatus,
+    this.gga,
+  });
+}
 
 /// Parser de sentenças NMEA 0183.
 ///
@@ -114,6 +137,93 @@ class NmeaParser {
       ms = int.tryParse(frac) ?? 0;
     }
     return DateTime.utc(2000 + year, month, day, h, m, s, ms);
+  }
+
+  /// Parseia com diagnóstico completo — retorna motivo de descarte e dados GGA.
+  NmeaParseResult parseLineWithReason(String line) {
+    if (line.isEmpty || !line.startsWith('\$')) {
+      return const NmeaParseResult(discardReason: 'formato inválido (sem \$)');
+    }
+    if (!validateChecksum(line)) {
+      return const NmeaParseResult(discardReason: 'checksum inválido');
+    }
+
+    final withoutChecksum =
+        line.contains('*') ? line.substring(0, line.lastIndexOf('*')) : line;
+    final fields = withoutChecksum.split(',');
+    if (fields.isEmpty) {
+      return const NmeaParseResult(discardReason: 'linha vazia');
+    }
+
+    final type = fields[0].substring(1);
+
+    if (type == 'GPRMC' || type == 'GNRMC') {
+      if (fields.length < 10) {
+        return const NmeaParseResult(
+            discardReason: 'RMC: campos insuficientes');
+      }
+      final status = fields[2];
+      if (status != 'A') {
+        return NmeaParseResult(
+          discardReason: 'RMC: status=$status (sem fix)',
+          rmcStatus: status,
+        );
+      }
+      if (fields[3].isEmpty || fields[5].isEmpty) {
+        return NmeaParseResult(
+          discardReason: 'RMC: coordenadas vazias',
+          rmcStatus: 'A',
+        );
+      }
+      final lat = parseLatitude(fields[3], fields[4]);
+      final lon = parseLongitude(fields[5], fields[6]);
+      if (lat == null || lon == null) {
+        return NmeaParseResult(
+          discardReason: 'RMC: coordenadas inválidas',
+          rmcStatus: 'A',
+        );
+      }
+      final timestamp = parseDateTime(fields[1], fields[9]);
+      if (timestamp == null) {
+        return NmeaParseResult(
+          discardReason: 'RMC: timestamp inválido',
+          rmcStatus: 'A',
+        );
+      }
+      final speedKnots = double.tryParse(fields[7]) ?? 0.0;
+      final heading = double.tryParse(fields[8]) ?? 0.0;
+      final pos = Position(
+        latitude: lat,
+        longitude: lon,
+        timestamp: timestamp,
+        speed: speedKnots * 0.514444,
+        heading: heading,
+        altitude: _lastAltitude,
+        accuracy: 5.0,
+        altitudeAccuracy: 1.0,
+        headingAccuracy: 1.0,
+        speedAccuracy: 0.1,
+      );
+      return NmeaParseResult(position: pos, rmcStatus: 'A');
+    }
+
+    if (type == 'GPGGA' || type == 'GNGGA') {
+      _updateAltitude(fields);
+      final gga = _parseGga(fields);
+      return NmeaParseResult(gga: gga);
+    }
+
+    // GSV, GSA, GLL, VTG, etc — não produzem posição, não é erro
+    return const NmeaParseResult();
+  }
+
+  GgaData? _parseGga(List<String> fields) {
+    // $GPGGA: field[6]=fix, field[7]=sats, field[8]=hdop
+    if (fields.length < 9) return null;
+    final fixQuality = int.tryParse(fields[6]) ?? 0;
+    final satellites = int.tryParse(fields[7]) ?? 0;
+    final hdop = double.tryParse(fields[8]);
+    return GgaData(fixQuality: fixQuality, satellites: satellites, hdop: hdop);
   }
 
   /// Valida o checksum XOR de uma sentença NMEA.

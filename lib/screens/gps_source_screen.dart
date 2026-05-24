@@ -9,6 +9,7 @@ import '../services/internal_gps_service.dart';
 import '../services/external_gps_service.dart';
 import '../services/usb_gps_detector.dart';
 import '../widgets/pressable.dart';
+import 'gps_diagnostics_screen.dart';
 
 const _kBg = Color(0xFF0A0A0A);
 const _kSurface = Color(0xFF141414);
@@ -219,13 +220,32 @@ class _TopBar extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 12),
-          Text(
-            'FONTE GPS',
-            style: GoogleFonts.rajdhani(
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 2,
-              color: Colors.white,
+          Expanded(
+            child: Text(
+              'FONTE GPS',
+              style: GoogleFonts.rajdhani(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 2,
+                color: Colors.white,
+              ),
+            ),
+          ),
+          Pressable(
+            key: const Key('gps_diagnostics_button'),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const GpsDiagnosticsScreen(),
+              ),
+            ),
+            child: Text(
+              'DIAGNÓSTICO',
+              style: GoogleFonts.rajdhani(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 1.5,
+                color: Colors.white.withAlpha(115),
+              ),
             ),
           ),
         ],

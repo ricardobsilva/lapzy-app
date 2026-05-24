@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'gps_diagnostics_service.dart';
 import 'gps_source.dart';
 import 'internal_gps_service.dart';
 import 'telemetry_service.dart';
@@ -141,10 +142,14 @@ class GpsSourceManager {
   // ── internos ───────────────────────────────────────────────────────────────
 
   void _subscribeToSource(GpsSource source) {
+    if (_sourceSub != null) {
+      GpsDiagnosticsService.instance.onSubscriptionCancelled(_activeSource);
+    }
     _sourceSub?.cancel();
     _lastPositionTime = null;
     _positionCount = 0;
     _log('Assinando fonte: ${source.info.name} (${source.info.connectionType.name})');
+    GpsDiagnosticsService.instance.onSubscriptionStarted(source);
     _sourceSub = source.positionStream.listen(
       _onPositionReceived,
       onError: (Object err) {
@@ -188,10 +193,17 @@ class GpsSourceManager {
     _lastGpsTime = pos.timestamp;
     _lastPosition = pos;
     _positionController.add(pos);
+
+    // Diagnostics: external USB GPS is already reported via onNmeaLine in
+    // UsbGpsDetector. For internal and BT sources, report here.
+    if (_activeSource.info.connectionType != GpsConnectionType.usb) {
+      GpsDiagnosticsService.instance.onPositionReceived(pos, now);
+    }
   }
 
   /// Chamado quando a stream emite um erro (ex.: permissão negada).
   void _handleSourceError() {
+    GpsDiagnosticsService.instance.onSourceError(_activeSource, 'stream_error');
     if (_activeSource.info.isExternal) {
       _log('GPS externo com erro — fallback para GPS interno');
       TelemetryService.instance.logEvent('gps_fallback',
@@ -213,6 +225,7 @@ class GpsSourceManager {
 
   /// Chamado quando a stream termina (GPS externo desconectado ou stream vazia).
   void _handleSourceDone() {
+    GpsDiagnosticsService.instance.onSourceDone(_activeSource);
     if (_activeSource.info.isExternal) {
       _log('GPS externo desconectado — fallback para GPS interno');
       TelemetryService.instance.logEvent('gps_fallback',
