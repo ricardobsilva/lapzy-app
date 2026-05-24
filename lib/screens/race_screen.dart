@@ -222,7 +222,6 @@ class _RaceScreenState extends State<RaceScreen> {
 
   @override
   void dispose() {
-    TelemetryService.instance.endSession(note: 'screen_disposed');
     _hintShowTimer?.cancel();
     _hintDismissTimer?.cancel();
     _lapTimer?.cancel();
@@ -233,6 +232,7 @@ class _RaceScreenState extends State<RaceScreen> {
     _speedSub?.cancel();
     _detectorSub?.cancel();
     _detector.dispose();
+    TelemetryService.instance.endSession(note: 'screen_disposed');
     WakelockPlus.disable();
     unawaited(ForegroundLocationService.stop());
     SystemChrome.setEnabledSystemUIMode(
