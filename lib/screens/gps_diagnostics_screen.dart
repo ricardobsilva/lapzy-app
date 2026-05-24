@@ -231,7 +231,12 @@ class _PositionSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _SectionHeader(label: 'POSIÇÃO'),
+        _SectionHeader(
+          label: 'POSIÇÃO',
+          trailing: snap.isLastPositionCached
+              ? _CachedBadge()
+              : null,
+        ),
         _DiagRow(
           label: 'Latitude',
           value: snap.lastLat != null
@@ -494,20 +499,52 @@ class _EventsSection extends StatelessWidget {
 
 class _SectionHeader extends StatelessWidget {
   final String label;
+  final Widget? trailing;
 
-  const _SectionHeader({required this.label});
+  const _SectionHeader({required this.label, this.trailing});
 
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+      child: Row(
+        children: [
+          Text(
+            label,
+            style: GoogleFonts.rajdhani(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 2,
+              color: Colors.white.withAlpha(71),
+            ),
+          ),
+          if (trailing != null) ...[
+            const SizedBox(width: 8),
+            trailing!,
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _CachedBadge extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFD600).withAlpha(30),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: const Color(0xFFFFD600).withAlpha(100)),
+      ),
       child: Text(
-        label,
-        style: GoogleFonts.rajdhani(
-          fontSize: 11,
+        'CACHE · aguardando fix',
+        style: GoogleFonts.spaceMono(
+          fontSize: 8,
           fontWeight: FontWeight.w700,
-          letterSpacing: 2,
-          color: Colors.white.withAlpha(71),
+          color: const Color(0xFFFFD600),
+          letterSpacing: 0.5,
         ),
       ),
     );

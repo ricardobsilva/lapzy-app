@@ -63,6 +63,10 @@ class GpsDiagnosticsSnapshot {
   final double? hzInstantaneous;
   final double? hzRollingAvg;
 
+  /// True enquanto a posição exibida é o cache do Android (getLastKnownPosition).
+  /// Vira false quando chega a primeira posição fresca do provider.
+  final bool isLastPositionCached;
+
   // NMEA (GPS externo)
   final List<NmeaLineDiag> recentNmea; // últimas 15 linhas (todos os tipos)
   final String? lastRmcStatus;          // 'A' (fix) ou 'V' (void)
@@ -93,6 +97,7 @@ class GpsDiagnosticsSnapshot {
     this.nmeaReceived = 0,
     this.nmeaDiscarded = 0,
     this.nmeaLinesPerSec,
+    this.isLastPositionCached = false,
   });
 
   GpsDiagnosticsSnapshot copyWith({
@@ -117,6 +122,7 @@ class GpsDiagnosticsSnapshot {
     int? nmeaReceived,
     int? nmeaDiscarded,
     double? nmeaLinesPerSec,
+    bool? isLastPositionCached,
     // sentinel values for clearing nullable fields
     bool clearHzInstantaneous = false,
     bool clearHzRollingAvg = false,
@@ -159,6 +165,7 @@ class GpsDiagnosticsSnapshot {
       nmeaLinesPerSec: clearNmeaLinesPerSec
           ? null
           : (nmeaLinesPerSec ?? this.nmeaLinesPerSec),
+      isLastPositionCached: isLastPositionCached ?? this.isLastPositionCached,
     );
   }
 }

@@ -85,7 +85,9 @@ class GpsDiagnosticsService {
   }
 
   /// Chamado por [GpsSourceManager] quando uma posição válida é recebida.
-  void onPositionReceived(Position pos, DateTime wallTime) {
+  /// [isCached] = true indica posição do cache do Android (getLastKnownPosition),
+  /// false indica posição fresca do provider.
+  void onPositionReceived(Position pos, DateTime wallTime, {bool isCached = false}) {
     final isFirst = _snap.firstRawDataAt == null;
     final isFirstValid = _snap.firstValidPositionAt == null;
 
@@ -128,7 +130,7 @@ class GpsDiagnosticsService {
     _snap = _snap.copyWith(
       fixState: GpsFixState.fixAcquired,
       firstRawDataAt: isFirst ? wallTime : null,
-      firstValidPositionAt: isFirstValid ? wallTime : null,
+      firstValidPositionAt: isFirstValid && !isCached ? wallTime : null,
       lastLat: pos.latitude,
       lastLng: pos.longitude,
       lastAccuracyM: pos.accuracy,
@@ -136,9 +138,10 @@ class GpsDiagnosticsService {
       lastBearing: pos.heading,
       lastPositionGpsTime: pos.timestamp,
       lastPositionWallTime: wallTime,
-      hzInstantaneous: hzInstant,
-      hzRollingAvg: hzAvg,
-      clearHzInstantaneous: hzInstant == null,
+      hzInstantaneous: isCached ? null : hzInstant,
+      hzRollingAvg: isCached ? null : hzAvg,
+      clearHzInstantaneous: isCached || hzInstant == null,
+      isLastPositionCached: isCached,
     );
     _emit();
   }

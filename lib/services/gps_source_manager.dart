@@ -182,14 +182,14 @@ class GpsSourceManager {
         'acc=${cached.accuracy.toStringAsFixed(0)}m '
         'idade=${age.inSeconds}s',
       );
-      _onPositionReceived(cached);
+      _onPositionReceived(cached, isCached: true);
     } catch (_) {
       // Falha silenciosa — getLastKnownPosition pode falhar em emuladores
       // ou quando a permissão foi revogada entre inicializações.
     }
   }
 
-  void _onPositionReceived(Position pos) {
+  void _onPositionReceived(Position pos, {bool isCached = false}) {
     final now = DateTime.now();
     final last = _lastPositionTime;
     final deltaMs = last != null ? now.difference(last).inMilliseconds : null;
@@ -223,7 +223,7 @@ class GpsSourceManager {
     // Diagnostics: external USB GPS is already reported via onNmeaLine in
     // UsbGpsDetector. For internal and BT sources, report here.
     if (_activeSource.info.connectionType != GpsConnectionType.usb) {
-      GpsDiagnosticsService.instance.onPositionReceived(pos, now);
+      GpsDiagnosticsService.instance.onPositionReceived(pos, now, isCached: isCached);
     }
   }
 
