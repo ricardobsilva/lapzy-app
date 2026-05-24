@@ -212,10 +212,22 @@ class _RaceScreenState extends State<RaceScreen> {
 
   void _startSpeedListener() {
     debugPrint('[LAPZY/UI] _startSpeedListener iniciado');
+    DateTime? lastSpeedUpdate;
     _speedSub = GpsSourceManager.instance.positionStream.listen((pos) {
+      final now = DateTime.now();
+      final deltaMs = lastSpeedUpdate != null
+          ? now.difference(lastSpeedUpdate!).inMilliseconds
+          : null;
+      lastSpeedUpdate = now;
+      final hz = deltaMs != null && deltaMs > 0
+          ? (1000 / deltaMs).toStringAsFixed(2)
+          : '?';
       final raw = pos.speed * 3.6;
       final kmh = raw < 0 ? 0.0 : raw;
-      debugPrint('[LAPZY/UI] velocidade recebida: ${kmh.toStringAsFixed(1)} km/h (raw=${pos.speed.toStringAsFixed(3)} m/s)');
+      debugPrint(
+        '[LAPZY/UI] velocidade=${kmh.toStringAsFixed(1)}km/h '
+        'Δ=${deltaMs ?? '?'}ms hz=$hz',
+      );
       if (mounted) setState(() => _speedKmh = kmh);
     });
   }

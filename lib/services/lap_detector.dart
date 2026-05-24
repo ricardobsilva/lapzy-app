@@ -176,18 +176,16 @@ class LapDetector {
     final last = _lastPositionWallTime;
     final deltaMs = last != null ? now.difference(last).inMilliseconds : null;
     _positionCount++;
-    if (_positionCount <= 3 || _positionCount % 10 == 0) {
-      final hz = deltaMs != null && deltaMs > 0
-          ? (1000 / deltaMs).toStringAsFixed(2)
-          : '?';
-      debugPrint(
-        '[LAPZY/DET] POS #$_positionCount '
-        'speed=${(pos.speed * 3.6).toStringAsFixed(1)}km/h '
-        'acc=${pos.accuracy.toStringAsFixed(0)}m '
-        'Δ=${deltaMs ?? '?'}ms hz=$hz '
-        'hasPrev=${_previousPosition != null}',
-      );
-    }
+    final hz = deltaMs != null && deltaMs > 0
+        ? (1000 / deltaMs).toStringAsFixed(2)
+        : '?';
+    debugPrint(
+      '[LAPZY/DET] POS #$_positionCount '
+      'speed=${(pos.speed * 3.6).toStringAsFixed(1)}km/h '
+      'acc=${pos.accuracy.toStringAsFixed(0)}m '
+      'Δ=${deltaMs ?? '?'}ms hz=$hz '
+      'hasPrev=${_previousPosition != null}',
+    );
     _lastPositionWallTime = now;
 
     final current = GeoPoint(pos.latitude, pos.longitude);
