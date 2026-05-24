@@ -161,6 +161,32 @@ class GpsSourceManager {
         _handleSourceDone();
       },
     );
+    if (source.info.connectionType == GpsConnectionType.internal) {
+      unawaited(_emitLastKnownPosition());
+    }
+  }
+
+  /// Emite a última posição em cache do Android imediatamente após assinar
+  /// a fonte interna. Evita ficar em estado "conectando" durante o cold start
+  /// do GPS — a tela de diagnóstico e o pré-corrida mostram dados ao instante.
+  /// O stream fresco vai sobrescrevendo conforme chega.
+  Future<void> _emitLastKnownPosition() async {
+    try {
+      final cached = await Geolocator.getLastKnownPosition();
+      if (cached == null) return;
+      final age = DateTime.now().difference(cached.timestamp);
+      _log(
+        'Posição cached disponível: '
+        'lat=${cached.latitude.toStringAsFixed(6)} '
+        'lng=${cached.longitude.toStringAsFixed(6)} '
+        'acc=${cached.accuracy.toStringAsFixed(0)}m '
+        'idade=${age.inSeconds}s',
+      );
+      _onPositionReceived(cached);
+    } catch (_) {
+      // Falha silenciosa — getLastKnownPosition pode falhar em emuladores
+      // ou quando a permissão foi revogada entre inicializações.
+    }
   }
 
   void _onPositionReceived(Position pos) {
