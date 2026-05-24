@@ -203,7 +203,9 @@ void main() {
   });
 
   group('persistência', () {
-    test('loadPersistedSource restaura GPS externo bluetooth', () async {
+    test('loadPersistedSource com GPS externo persistido reseta para GPS interno', () async {
+      // GPS externo não pode ser restaurado automaticamente (conexão física perdida).
+      // O app deve iniciar com GPS interno e o usuário reconecta via GpsSourceScreen.
       SharedPreferences.setMockInitialValues({
         'lapzy_gps_source_v1': '{"name":"Garmin GLO 2","connectionType":"bluetooth"}',
       });
@@ -215,10 +217,9 @@ void main() {
       );
       await manager.init();
 
-      expect(manager.activeSource, isA<ExternalGpsService>());
-      expect(manager.activeSource.info.name, equals('Garmin GLO 2'));
+      expect(manager.activeSource, isA<InternalGpsService>());
       expect(manager.activeSource.info.connectionType,
-          equals(GpsConnectionType.bluetooth));
+          equals(GpsConnectionType.internal));
     });
 
     test('loadPersistedSource com JSON inválido mantém GPS interno', () async {
@@ -249,7 +250,9 @@ void main() {
       expect(manager.activeSource, isA<InternalGpsService>());
     });
 
-    test('CA-GPS-001-08: preferência sobrevive ao resetar o manager', () async {
+    test('CA-GPS-001-08: após selecionar GPS externo e reiniciar, app inicia com GPS interno', () async {
+      // GPS externo é selecionado na sessão anterior → preferência persistida.
+      // No próximo startup, app reinicia com GPS interno (conexão física não persiste).
       SharedPreferences.setMockInitialValues({});
       final prefs = await SharedPreferences.getInstance();
       final btController = StreamController<Position>();
@@ -274,9 +277,10 @@ void main() {
       );
       await manager2.init();
 
-      expect(manager2.activeSource.info.name, equals('Garmin GLO 2'));
+      // Após restart, GPS externo é resetado para interno automaticamente.
+      expect(manager2.activeSource, isA<InternalGpsService>());
       expect(manager2.activeSource.info.connectionType,
-          equals(GpsConnectionType.bluetooth));
+          equals(GpsConnectionType.internal));
 
       await btController.close();
     });

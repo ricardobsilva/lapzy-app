@@ -1,12 +1,14 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'gps_source.dart';
 import 'internal_gps_service.dart';
-import 'external_gps_service.dart';
+
+void _log(String msg) => debugPrint('[LAPZY/GPS] $msg');
 
 const _kPrefsKey = 'lapzy_gps_source_v1';
 
@@ -74,6 +76,10 @@ class GpsSourceManager {
   final _positionController = StreamController<Position>.broadcast();
   final _eventController = StreamController<GpsSourceChangedEvent>.broadcast();
 
+  /// Para cálculo de Hz — timestamp da última posição recebida.
+  DateTime? _lastPositionTime;
+  int _positionCount = 0;
+
   // ── interface pública ──────────────────────────────────────────────────────
 
   /// Stream de posições GPS da fonte ativa.
@@ -105,6 +111,7 @@ class GpsSourceManager {
 
   /// Ativa uma nova fonte GPS e persiste a escolha localmente.
   Future<void> setActiveSource(GpsSource source) async {
+    _log('Usuário selecionou: ${source.info.name} (${source.info.connectionType.name})');
     _activeSource = source;
     _subscribeToSource(source);
     _emitEvent(GpsSourceChangedEvent(
@@ -118,22 +125,76 @@ class GpsSourceManager {
 
   void _subscribeToSource(GpsSource source) {
     _sourceSub?.cancel();
+    _lastPositionTime = null;
+    _positionCount = 0;
+    _log('Assinando fonte: ${source.info.name} (${source.info.connectionType.name})');
     _sourceSub = source.positionStream.listen(
-      _positionController.add,
-      onError: (_) => _handleExternalDisconnect(),
-      onDone: () => _handleExternalDisconnect(),
+      _onPositionReceived,
+      onError: (Object err) {
+        _log('ERRO na stream GPS (${source.info.name}): $err');
+        _handleSourceError();
+      },
+      onDone: () {
+        _log('Stream GPS encerrada (${source.info.name})');
+        _handleSourceDone();
+      },
     );
   }
 
-  void _handleExternalDisconnect() {
-    if (!_activeSource.info.isExternal) return;
-    _sourceSub = null; // already done — avoid canceling from within onDone
-    _activeSource = _internalFallback;
-    _subscribeToSource(_internalFallback);
-    _emitEvent(GpsSourceChangedEvent(
-      source: _internalFallback,
-      reason: GpsSourceChangeReason.fallback,
-    ));
+  void _onPositionReceived(Position pos) {
+    final now = DateTime.now();
+    final last = _lastPositionTime;
+    final deltaMs = last != null ? now.difference(last).inMilliseconds : null;
+    final hz = deltaMs != null && deltaMs > 0
+        ? (1000 / deltaMs).toStringAsFixed(2)
+        : '?';
+    _positionCount++;
+    _log(
+      'POS #$_positionCount '
+      'lat=${pos.latitude.toStringAsFixed(6)} '
+      'lng=${pos.longitude.toStringAsFixed(6)} '
+      'speed=${(pos.speed * 3.6).toStringAsFixed(1)}km/h '
+      'acc=${pos.accuracy.toStringAsFixed(0)}m '
+      'Δ=${deltaMs ?? '?'}ms '
+      'hz=$hz '
+      'src=${_activeSource.info.connectionType.name}',
+    );
+    _lastPositionTime = now;
+    _positionController.add(pos);
+  }
+
+  /// Chamado quando a stream emite um erro (ex.: permissão negada).
+  void _handleSourceError() {
+    if (_activeSource.info.isExternal) {
+      _log('GPS externo com erro — fallback para GPS interno');
+      _sourceSub = null;
+      _activeSource = _internalFallback;
+      _subscribeToSource(_internalFallback);
+      _emitEvent(GpsSourceChangedEvent(
+        source: _internalFallback,
+        reason: GpsSourceChangeReason.fallback,
+      ));
+    } else {
+      _log('GPS interno com erro — aguardando recuperação do sistema');
+      // Não tenta reiniciar automaticamente — o erro pode ser permissão negada
+      // ou localização desabilitada. O usuário precisa agir no sistema.
+    }
+  }
+
+  /// Chamado quando a stream termina (GPS externo desconectado ou stream vazia).
+  void _handleSourceDone() {
+    if (_activeSource.info.isExternal) {
+      _log('GPS externo desconectado — fallback para GPS interno');
+      _sourceSub = null;
+      _activeSource = _internalFallback;
+      _subscribeToSource(_internalFallback);
+      _emitEvent(GpsSourceChangedEvent(
+        source: _internalFallback,
+        reason: GpsSourceChangeReason.fallback,
+      ));
+    } else {
+      _log('Stream do GPS interno encerrou inesperadamente');
+    }
   }
 
   void _emitEvent(GpsSourceChangedEvent event) {
@@ -148,11 +209,18 @@ class GpsSourceManager {
       final decoded = jsonDecode(raw);
       if (decoded is! Map<String, dynamic>) return;
       final info = GpsSourceInfo.fromJson(decoded);
-      _activeSource = info.connectionType == GpsConnectionType.internal
-          ? _internalFallback
-          : ExternalGpsService(info: info);
+      if (info.connectionType != GpsConnectionType.internal) {
+        // GPS externo não pode ser restaurado automaticamente — a conexão física
+        // (BT/USB) é perdida quando o app fecha. Reseta para GPS interno e o
+        // usuário reconecta via GpsSourceScreen se necessário.
+        _log('GPS externo persistido (${info.name}) — resetando para GPS interno no startup');
+        await _persistSource(_internalFallback);
+        return;
+      }
+      _activeSource = _internalFallback;
     } catch (_) {
       // Preferência inválida ou corrompida — mantém GPS interno como padrão.
+      _log('Erro ao carregar preferência GPS — usando GPS interno');
     }
   }
 
@@ -163,6 +231,19 @@ class GpsSourceManager {
     } catch (_) {
       // Falha silenciosa — preferência não é crítica para funcionamento.
     }
+  }
+
+  /// Emite um evento de fallback direto — use apenas em testes widget.
+  ///
+  /// Permite testar a resposta da UI a eventos de fallback sem precisar de
+  /// assinatura de stream de posição nem de chamada à plataforma.
+  @visibleForTesting
+  void simulateFallbackForTesting(GpsSource source) {
+    _activeSource = source;
+    _emitEvent(GpsSourceChangedEvent(
+      source: source,
+      reason: GpsSourceChangeReason.fallback,
+    ));
   }
 
   void dispose() {

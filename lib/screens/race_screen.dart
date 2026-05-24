@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
@@ -141,6 +142,8 @@ class _RaceScreenState extends State<RaceScreen> {
 
   late final LapDetector _detector;
   StreamSubscription<LapEvent>? _detectorSub;
+  StreamSubscription<Position>? _speedSub;
+  double? _speedKmh;
 
   Timer? _resetBorderTimer;
   int _nextSectorIndex = 0;
@@ -191,7 +194,18 @@ class _RaceScreenState extends State<RaceScreen> {
           );
     _startLapTimer();
     _startDetector();
+    _startSpeedListener();
     unawaited(_checkThemeHint());
+  }
+
+  void _startSpeedListener() {
+    debugPrint('[LAPZY/UI] _startSpeedListener iniciado');
+    _speedSub = GpsSourceManager.instance.positionStream.listen((pos) {
+      final raw = pos.speed * 3.6;
+      final kmh = raw < 0 ? 0.0 : raw;
+      debugPrint('[LAPZY/UI] velocidade recebida: ${kmh.toStringAsFixed(1)} km/h (raw=${pos.speed.toStringAsFixed(3)} m/s)');
+      if (mounted) setState(() => _speedKmh = kmh);
+    });
   }
 
   @override
@@ -203,6 +217,7 @@ class _RaceScreenState extends State<RaceScreen> {
     for (final t in _sectorFeedbackTimers) {
       t?.cancel();
     }
+    _speedSub?.cancel();
     _detectorSub?.cancel();
     _detector.dispose();
     WakelockPlus.disable();
@@ -223,6 +238,7 @@ class _RaceScreenState extends State<RaceScreen> {
   }
 
   void _startDetector() {
+    debugPrint('[LAPZY/UI] _startDetector iniciado — track="${widget.track.name}"');
     _detectorSub = _detector.events.listen(_onLapEvent);
     _detector.start();
   }
@@ -458,6 +474,7 @@ class _RaceScreenState extends State<RaceScreen> {
                       totalRaceMs: _totalRaceMs,
                       hasStarted: _hasStarted,
                       bestLapMs: _bestLapMs,
+                      speedKmh: _speedKmh,
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -740,6 +757,7 @@ class _CenterColumn extends StatelessWidget {
   final int totalRaceMs;
   final bool hasStarted;
   final int? bestLapMs;
+  final double? speedKmh;
 
   const _CenterColumn({
     required this.lapMs,
@@ -751,6 +769,7 @@ class _CenterColumn extends StatelessWidget {
     required this.totalRaceMs,
     required this.hasStarted,
     required this.bestLapMs,
+    required this.speedKmh,
   });
 
   @override
@@ -796,25 +815,41 @@ class _CenterColumn extends StatelessWidget {
           _PrBanner(),
           const SizedBox(height: 8),
         ],
-        Text(
-          'TEMPO DA VOLTA',
-          style: GoogleFonts.rajdhani(
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 1.5,
-            color: theme.textVeryDim,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          _formatMs(lapMs),
-          key: const Key('race_lap_time'),
-          style: GoogleFonts.rajdhani(
-            fontSize: 96,
-            fontWeight: FontWeight.w700,
-            color: theme.textPrimary,
-            height: 1,
-            letterSpacing: -1,
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              _SpeedDisplay(speedKmh: speedKmh),
+              const SizedBox(width: 24),
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'TEMPO DA VOLTA',
+                    style: GoogleFonts.rajdhani(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1.5,
+                      color: theme.textVeryDim,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    _formatMs(lapMs),
+                    key: const Key('race_lap_time'),
+                    style: GoogleFonts.rajdhani(
+                      fontSize: 96,
+                      fontWeight: FontWeight.w700,
+                      color: theme.textPrimary,
+                      height: 1,
+                      letterSpacing: -1,
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
         const SizedBox(height: 8),
@@ -827,6 +862,43 @@ class _CenterColumn extends StatelessWidget {
             sectorFeedbackColors: sectorFeedbackColors,
           ),
         ],
+      ],
+    );
+  }
+}
+
+class _SpeedDisplay extends StatelessWidget {
+  final double? speedKmh;
+
+  const _SpeedDisplay({required this.speedKmh});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = _RaceThemeScope.of(context);
+    final value = speedKmh != null ? speedKmh!.toStringAsFixed(0) : '—';
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          'KM/H',
+          style: GoogleFonts.rajdhani(
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 1.5,
+            color: theme.textVeryDim,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          key: const Key('race_speed'),
+          style: GoogleFonts.rajdhani(
+            fontSize: 64,
+            fontWeight: FontWeight.w700,
+            color: theme.textPrimary,
+            height: 1,
+          ),
+        ),
       ],
     );
   }

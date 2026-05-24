@@ -106,6 +106,10 @@ class LapDetector {
   GeoPoint? _previousPosition;
   DateTime? _previousTimestamp;
 
+  /// Para cálculo de Hz — instante em que a última posição foi processada.
+  DateTime? _lastPositionWallTime;
+  int _positionCount = 0;
+
   /// Timestamp do último cruzamento válido da S/C.
   DateTime? _lastCrossingTime;
 
@@ -125,6 +129,8 @@ class LapDetector {
     _previousPosition = null;
     _previousTimestamp = null;
     _lastCrossingTime = null;
+    _lastPositionWallTime = null;
+    _positionCount = 0;
     _recentLapMs.clear();
     _sectorLastSign
       ..clear()
@@ -132,20 +138,24 @@ class LapDetector {
     _sectorLastCrossing
       ..clear()
       ..addAll(List.filled(track.sectorBoundaries.length, null));
+    debugPrint('[LAPZY/DET] LapDetector.start() — track="${track.name}" setores=${track.sectorBoundaries.length}');
     _gpsSub = positionStreamFactory().listen(
       _onPosition,
-      onError: (_) {
-        // Permissão negada ou erro de GPS — sem eventos, sem crash.
+      onError: (Object err) {
+        debugPrint('[LAPZY/DET] ERRO na stream do detector: $err');
       },
     );
   }
 
   void stop() {
+    debugPrint('[LAPZY/DET] LapDetector.stop() — voltas=${_recentLapMs.length} posições=$_positionCount');
     _gpsSub?.cancel();
     _gpsSub = null;
     _previousPosition = null;
     _previousTimestamp = null;
     _lastCrossingTime = null;
+    _lastPositionWallTime = null;
+    _positionCount = 0;
     _recentLapMs.clear();
     _sectorLastSign.clear();
     _sectorLastCrossing.clear();
@@ -157,14 +167,33 @@ class LapDetector {
   }
 
   void _onPosition(Position pos) {
+    final now = DateTime.now();
+    final last = _lastPositionWallTime;
+    final deltaMs = last != null ? now.difference(last).inMilliseconds : null;
+    _positionCount++;
+    if (_positionCount <= 3 || _positionCount % 10 == 0) {
+      final hz = deltaMs != null && deltaMs > 0
+          ? (1000 / deltaMs).toStringAsFixed(2)
+          : '?';
+      debugPrint(
+        '[LAPZY/DET] POS #$_positionCount '
+        'speed=${(pos.speed * 3.6).toStringAsFixed(1)}km/h '
+        'acc=${pos.accuracy.toStringAsFixed(0)}m '
+        'Δ=${deltaMs ?? '?'}ms hz=$hz '
+        'hasPrev=${_previousPosition != null}',
+      );
+    }
+    _lastPositionWallTime = now;
+
     final current = GeoPoint(pos.latitude, pos.longitude);
     final currentTime = pos.timestamp;
     final previous = _previousPosition;
     final previousTime = _previousTimestamp;
 
     if (previous != null && previousTime != null) {
-      _checkStartFinish(previous, current, previousTime, currentTime);
-
+      // IMPORTANTE: setores verificados ANTES da S/C.
+      // Garante que um setor cruzado no mesmo par GPS que a S/C seja emitido
+      // antes do LapCrossedEvent — evitando rejeição por _nextSectorIndex=0.
       for (int i = 0; i < track.sectorBoundaries.length; i++) {
         final sectorTime = _checkSectorCrossing(
           previous, current, previousTime, currentTime,
@@ -172,11 +201,13 @@ class LapDetector {
         );
         if (sectorTime != null) {
           debugPrint(
-            '[LapDetector] Setor $i cruzado — timestamp=${sectorTime.toIso8601String()}',
+            '[LAPZY/DET] Setor $i cruzado — timestamp=${sectorTime.toIso8601String()}',
           );
           _controller.add(SectorCrossedEvent(i, sectorTime));
         }
       }
+
+      _checkStartFinish(previous, current, previousTime, currentTime);
     }
 
     // Atualiza sinal por setor após verificar cruzamentos — o sinal anterior
