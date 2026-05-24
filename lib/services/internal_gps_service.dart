@@ -28,16 +28,19 @@ class InternalGpsService implements GpsSource {
   @override
   Stream<Position> get positionStream {
     if (streamFactory != null) return streamFactory!();
+    // 100ms → pede até 10 Hz ao FusedLocationProvider.
+    // O hardware entrega o que suporta (tipicamente 1–5 Hz).
+    // Duration.zero causava setInterval(0) na API legada do Android,
+    // que silencia o provider sem emitir erro nem posições.
+    const interval = Duration(milliseconds: 100);
     final settings = AndroidSettings(
       accuracy: LocationAccuracy.best,
       distanceFilter: 0,
-      // Duration.zero → "deliver as fast as the provider can".
-      // Sem isso, o FusedLocationProvider usa o padrão de 5000ms (0.2 Hz).
-      intervalDuration: Duration.zero,
+      intervalDuration: interval,
     );
     debugPrint(
       '[LAPZY/GPS] InternalGpsService — solicitando: '
-      'accuracy=best distanceFilter=0 intervalDuration=0ms (máxima frequência)',
+      'accuracy=best distanceFilter=0 intervalDuration=${interval.inMilliseconds}ms',
     );
     return Geolocator.getPositionStream(locationSettings: settings);
   }
