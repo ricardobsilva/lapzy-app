@@ -5,6 +5,7 @@ import 'repositories/race_session_repository.dart';
 import 'repositories/track_repository.dart';
 import 'screens/home_screen.dart';
 import 'services/gps_source_manager.dart';
+import 'services/telemetry_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -12,6 +13,7 @@ Future<void> main() async {
   await TrackRepository().load();
   await RaceSessionRepository().load();
   await GpsSourceManager.instance.init();
+  await TelemetryService.instance.init();
   await seedDebugDataIfNeeded();
   runApp(const LapzyApp());
 }

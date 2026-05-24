@@ -8,6 +8,7 @@ import '../models/race_session.dart';
 import '../models/track.dart';
 import '../services/gps_source.dart';
 import '../services/lap_filter.dart';
+import '../widgets/pressable.dart';
 
 const _kBg = Color(0xFF0A0A0A);
 const _kSurface = Color(0xFF141414);
@@ -721,7 +722,7 @@ class _ShareButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 12, 24, 16),
-      child: GestureDetector(
+      child: Pressable(
         onTap: () {},
         child: Container(
           key: const Key('summary_share_button'),

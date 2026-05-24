@@ -17,6 +17,7 @@ import '../services/delta_calculator.dart';
 import '../services/foreground_location_service.dart';
 import '../services/gps_source_manager.dart';
 import '../services/lap_detector.dart';
+import '../services/telemetry_service.dart';
 import 'race_summary_screen.dart';
 
 const _kGreen = Color(0xFF00E676);
@@ -154,6 +155,8 @@ class _RaceScreenState extends State<RaceScreen> {
   /// Melhor tempo de cada setor na corrida — base para detecção de roxo (novo recorde de setor).
   List<int?> _bestSectorTimes = [];
 
+  late final String _telemetrySessionId;
+
   int _themeIndex = 0;
   bool _showThemeHint = false;
   Timer? _hintShowTimer;
@@ -178,6 +181,15 @@ class _RaceScreenState extends State<RaceScreen> {
     _sectorFeedbackTimers = List.filled(sectorCount, null);
     _bestSectorTimes = List.filled(sectorCount, null);
     _clock = widget.clockFactory ?? DateTime.now;
+    _telemetrySessionId = const Uuid().v4();
+    final gpsInfo = GpsSourceManager.instance.activeSource.info;
+    TelemetryService.instance.startSession(
+      sessionId: _telemetrySessionId,
+      trackId: widget.track.id,
+      trackName: widget.track.name,
+      gpsSource: gpsInfo.connectionType.name,
+      gpsSourceName: gpsInfo.name,
+    );
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.landscapeLeft,
       DeviceOrientation.landscapeRight,
@@ -210,6 +222,7 @@ class _RaceScreenState extends State<RaceScreen> {
 
   @override
   void dispose() {
+    TelemetryService.instance.endSession(note: 'screen_disposed');
     _hintShowTimer?.cancel();
     _hintDismissTimer?.cancel();
     _lapTimer?.cancel();
@@ -421,6 +434,7 @@ class _RaceScreenState extends State<RaceScreen> {
   }
 
   Future<void> _saveAndNavigate() async {
+    TelemetryService.instance.endSession();
     final now = DateTime.now();
     final gpsSource = GpsSourceManager.instance.activeSource.info;
     final record = RaceSessionRecord(

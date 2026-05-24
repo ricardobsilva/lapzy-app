@@ -1,10 +1,14 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../services/bluetooth_gps_scanner.dart';
 import '../services/gps_source.dart';
 import '../services/gps_source_manager.dart';
 import '../services/internal_gps_service.dart';
 import '../services/external_gps_service.dart';
+import '../services/usb_gps_detector.dart';
+import '../widgets/pressable.dart';
 
 const _kBg = Color(0xFF0A0A0A);
 const _kSurface = Color(0xFF141414);
@@ -17,10 +21,17 @@ class GpsSourceScreen extends StatefulWidget {
   final GpsSourceManager? manager;
 
   /// Fábrica de scanner BT — injetável para testes.
-  /// Recebe um stream de listas de dispositivos encontrados durante o scan.
   final Stream<List<ExternalGpsService>> Function()? btScannerFactory;
 
-  const GpsSourceScreen({super.key, this.manager, this.btScannerFactory});
+  /// Fábrica de detector USB — injetável para testes.
+  final Stream<ExternalGpsService?> Function()? usbDetectorFactory;
+
+  const GpsSourceScreen({
+    super.key,
+    this.manager,
+    this.btScannerFactory,
+    this.usbDetectorFactory,
+  });
 
   @override
   State<GpsSourceScreen> createState() => _GpsSourceScreenState();
@@ -32,24 +43,47 @@ class _GpsSourceScreenState extends State<GpsSourceScreen> {
   List<ExternalGpsService> _btDevices = [];
   bool _scanning = true;
   StreamSubscription<List<ExternalGpsService>>? _btSub;
+  ExternalGpsService? _usbDevice;
+  StreamSubscription<ExternalGpsService?>? _usbSub;
+  StreamSubscription<GpsSourceChangedEvent>? _managerSub;
 
   @override
   void initState() {
     super.initState();
     _manager = widget.manager ?? GpsSourceManager.instance;
     _selectedSource = _manager.activeSource;
+    _subscribeToManagerEvents();
     _startBtScan();
+    _startUsbMonitor();
   }
 
   @override
   void dispose() {
     _stopBtScan();
+    _usbSub?.cancel();
+    _managerSub?.cancel();
     super.dispose();
   }
 
+  void _subscribeToManagerEvents() {
+    _managerSub = _manager.events.listen((event) {
+      if (!mounted) return;
+      setState(() {
+        if (event.reason == GpsSourceChangeReason.fallback) {
+          _selectedSource = event.source;
+        }
+      });
+    });
+  }
+
   void _startBtScan() {
-    final factory = widget.btScannerFactory ?? _defaultBtScanner;
-    _btSub = factory().listen(
+    final factory = widget.btScannerFactory;
+    if (factory == null && !Platform.isAndroid) {
+      _scanning = false;
+      return;
+    }
+    final resolvedFactory = factory ?? BluetoothGpsScanner().scan;
+    _btSub = resolvedFactory().listen(
       (devices) {
         if (mounted) setState(() => _btDevices = devices);
       },
@@ -67,9 +101,30 @@ class _GpsSourceScreenState extends State<GpsSourceScreen> {
     _btSub = null;
   }
 
-  /// Stub de produção: sem pacote BT instalado, scan retorna lista vazia.
-  Stream<List<ExternalGpsService>> _defaultBtScanner() async* {
-    yield [];
+  void _startUsbMonitor() {
+    final factory = widget.usbDetectorFactory;
+    if (factory == null && !Platform.isAndroid) return;
+    final resolvedFactory = factory ?? UsbGpsDetector().watch;
+    _usbSub = resolvedFactory().listen(
+      (device) {
+        if (!mounted) return;
+        setState(() {
+          _usbDevice = device;
+          final usbWasSelected = _selectedSource is ExternalGpsService &&
+              _selectedSource.info.connectionType == GpsConnectionType.usb;
+          if (usbWasSelected && device == null) {
+            _selectedSource = InternalGpsService();
+          }
+        });
+        // Se o GPS ativo no manager era USB e o cabo foi removido, faz fallback
+        // imediato — sem esperar que o stream de posição feche.
+        if (device == null &&
+            _manager.activeSource.info.connectionType == GpsConnectionType.usb) {
+          unawaited(_manager.setActiveSource(InternalGpsService()));
+        }
+      },
+      onError: (_) {},
+    );
   }
 
   Future<void> _applySource() async {
@@ -120,7 +175,15 @@ class _GpsSourceScreenState extends State<GpsSourceScreen> {
                         ),
                       ),
                     const Divider(color: _kDivider, height: 1, indent: 16, endIndent: 16),
-                    _UsbItem(),
+                    _UsbItem(
+                      device: _usbDevice,
+                      selected: _usbDevice != null &&
+                          _selectedSource is ExternalGpsService &&
+                          _selectedSource.info == _usbDevice!.info,
+                      onTap: _usbDevice != null
+                          ? () => setState(() => _selectedSource = _usbDevice!)
+                          : null,
+                    ),
                     const SizedBox(height: 24),
                   ],
                 ),
@@ -147,7 +210,7 @@ class _TopBar extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
       child: Row(
         children: [
-          GestureDetector(
+          Pressable(
             onTap: () => Navigator.of(context).pop(),
             child: Icon(
               Icons.arrow_back_ios_new,
@@ -286,19 +349,33 @@ class _ExternalDeviceItem extends StatelessWidget {
 
 // ── USB-C ITEM ────────────────────────────────────────────────────────────────
 
-/// USB-C é exibido como desabilitado quando nenhum cabo está conectado.
-/// Em v1, a detecção de USB-C não está implementada — sempre desabilitado.
+/// USB-C: desabilitado quando nenhum cabo está conectado; ativo automaticamente
+/// quando um receptor GPS USB é detectado via [UsbGpsDetector].
 class _UsbItem extends StatelessWidget {
+  final ExternalGpsService? device;
+  final bool selected;
+  final VoidCallback? onTap;
+
+  const _UsbItem({
+    required this.device,
+    required this.selected,
+    this.onTap,
+  });
+
   @override
   Widget build(BuildContext context) {
+    final connected = device != null;
+    final label = connected
+        ? 'USB-C · ${device!.info.name}'
+        : 'USB-C · Nenhum cabo conectado';
     return _DeviceListItem(
       key: const Key('gps_item_usb'),
-      label: 'USB-C · Nenhum cabo conectado',
+      label: label,
       badgeLabel: 'USB',
       badgeArgb: 0xFFFFD600,
-      selected: false,
-      enabled: false,
-      onTap: null,
+      selected: selected,
+      enabled: connected,
+      onTap: onTap,
     );
   }
 }
@@ -380,7 +457,7 @@ class _DeviceListItem extends StatelessWidget {
     final textAlpha = enabled ? 255 : 71;
     final badgeAlpha = enabled ? 100 : 38;
 
-    return GestureDetector(
+    return Pressable(
       onTap: enabled ? onTap : null,
       child: Container(
         color: Colors.transparent,
@@ -455,7 +532,7 @@ class _ApplyButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
-      child: GestureDetector(
+      child: Pressable(
         onTap: enabled ? onTap : null,
         child: Container(
           key: const Key('gps_apply_button'),

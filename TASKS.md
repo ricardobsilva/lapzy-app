@@ -1,5 +1,7 @@
 # Lapzy — Tasks
 
+## Doing
+
 ## Done
 
 - [x] TASK-025 · Feature — Seleção de Fonte GPS e Suporte a GPS Externo (US GPS-001)
@@ -51,19 +53,32 @@
   | USB-C | USB | `#FFD600` |
   | GPS interno | OK | `#00E676` |
 
+  ### Implementação
+
+  Subtasks 1–16 concluídas. Integração real com hardware via platform channels (Kotlin):
+  - `LapzyGpsChannels.kt` — BT RFCOMM/SPP + USB CDC-ACM driver
+  - `NmeaParser` — parser NMEA 0183 puro Dart (GPRMC/GNRMC/GPGGA)
+  - `BluetoothGpsScanner` / `BluetoothGpsChannel` — scan de dispositivos pareados com permissão runtime
+  - `UsbGpsDetector` / `UsbGpsChannel` — detecção hot-plug USB OTG
+
   ### Subtasks
 
   - [x] 1. Definir interface `GpsSourceStream` — contrato comum entre internal e external services
   - [x] 2. Refatorar lógica atual de GPS em `InternalGpsService` — toda suavização e correção fica encapsulada aqui, sem exposição externa
-  - [x] 3. Criar `ExternalGpsService` — recebe stream bruto do dispositivo externo via BT ou USB-C; força melhor precisão disponível na API do protocolo; sem nenhuma otimização de dados
+  - [x] 3. Criar esqueleto de `ExternalGpsService` — estrutura, interface e injeção de stream para testes
   - [x] 4. Criar `GpsSourceManager` — singleton que mantém qual source está ativa, persiste preferência (SharedPreferences) e expõe o `GpsSourceStream` correto para o restante do app
   - [x] 5. Adicionar banner passivo na `HomeScreen` — exibido somente quando GPS externo está ativo
-  - [x] 6. Criar `GpsSourceScreen` — seção Ativo (read-only) + lista de disponíveis + botão "USAR ESTE GPS"
+  - [x] 6. Criar `GpsSourceScreen` — seção Ativo (read-only) + lista de disponíveis + botão "USAR ESTE GPS" (UI completa)
   - [x] 7. Adicionar campo `gpsSource` em `RaceSessionRecord` + atualizar `toJson`/`fromJson`
   - [x] 8. Exibir linha de fonte GPS na `RaceSummaryScreen`
-  - [x] 9. Testes unitários: `InternalGpsService`, `ExternalGpsService`, `GpsSourceManager` (detecção, persistência, fallback, isolamento entre services)
+  - [x] 9. Testes unitários: `InternalGpsService`, `ExternalGpsService`, `GpsSourceManager` (com streams simulados)
   - [x] 10. Testes de widget: banner (exibido/oculto por estado), `GpsSourceScreen` (seleção, confirmação, USB-C desabilitado)
-  - [x] 11. Testes de integração: `GpsSourceManager` → `LapDetector` usando fonte interna e fonte externa — verificar que o `LapDetector` se comporta corretamente com ambas
+  - [x] 11. Testes de integração: `GpsSourceManager` → `LapDetector` com streams simulados
+  - [x] 12. Integração BT real — platform channel Kotlin (RFCOMM/SPP); scan de dispositivos pareados com permissão runtime `BLUETOOTH_CONNECT`; `BluetoothGpsScanner` + `BluetoothGpsChannel`
+  - [x] 13. Leitura e parse NMEA via BT — `NmeaParser` (GPRMC/GNRMC/GPGGA → Position); `ExternalGpsService.streamFactory` usa stream real via SPP
+  - [x] 14. Detecção de USB-C — platform channel Kotlin (UsbManager CDC-ACM); `UsbGpsDetector` monitora hot-plug; item USB-C ativa/desativa automaticamente sem reiniciar a tela
+  - [x] 15. Leitura NMEA via USB-C — mesmo `NmeaParser` reutilizado sobre serial USB CDC-ACM
+  - [x] 16. Atualizar testes — `nmea_parser_test.dart` (unitário completo); testes de widget USB-C com stream real simulada
 
   ### Critérios de aceite
 

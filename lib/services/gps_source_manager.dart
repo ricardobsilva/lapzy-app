@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'gps_source.dart';
 import 'internal_gps_service.dart';
+import 'telemetry_service.dart';
 
 void _log(String msg) => debugPrint('[LAPZY/GPS] $msg');
 
@@ -80,6 +81,12 @@ class GpsSourceManager {
   DateTime? _lastPositionTime;
   int _positionCount = 0;
 
+  /// Última posição GPS recebida — usada pelo pre-race check.
+  Position? _lastPosition;
+
+  /// Timestamp GPS da posição anterior — usada para delta_gps no telemetry.
+  DateTime? _lastGpsTime;
+
   // ── interface pública ──────────────────────────────────────────────────────
 
   /// Stream de posições GPS da fonte ativa.
@@ -96,6 +103,16 @@ class GpsSourceManager {
 
   /// Fonte GPS ativa no momento.
   GpsSource get activeSource => _activeSource;
+
+  /// Última posição GPS recebida. Null se ainda não houve nenhuma.
+  Position? get lastPosition => _lastPosition;
+
+  /// True se uma posição foi recebida nos últimos [maxAgeSeconds] segundos.
+  bool isReceivingPositions({int maxAgeSeconds = 5}) {
+    final last = _lastPositionTime;
+    if (last == null) return false;
+    return DateTime.now().difference(last).inSeconds < maxAgeSeconds;
+  }
 
   // ── inicialização ──────────────────────────────────────────────────────────
 
@@ -159,7 +176,17 @@ class GpsSourceManager {
       'hz=$hz '
       'src=${_activeSource.info.connectionType.name}',
     );
+
+    TelemetryService.instance.logPosition(
+      pos,
+      deltaWallMs: deltaMs,
+      prevGpsTime: _lastGpsTime,
+      gpsSource: _activeSource.info.connectionType.name,
+    );
+
     _lastPositionTime = now;
+    _lastGpsTime = pos.timestamp;
+    _lastPosition = pos;
     _positionController.add(pos);
   }
 
@@ -167,6 +194,9 @@ class GpsSourceManager {
   void _handleSourceError() {
     if (_activeSource.info.isExternal) {
       _log('GPS externo com erro — fallback para GPS interno');
+      TelemetryService.instance.logEvent('gps_fallback',
+          reason: 'source_error',
+          extra: {'from': _activeSource.info.name});
       _sourceSub = null;
       _activeSource = _internalFallback;
       _subscribeToSource(_internalFallback);
@@ -176,8 +206,8 @@ class GpsSourceManager {
       ));
     } else {
       _log('GPS interno com erro — aguardando recuperação do sistema');
-      // Não tenta reiniciar automaticamente — o erro pode ser permissão negada
-      // ou localização desabilitada. O usuário precisa agir no sistema.
+      TelemetryService.instance.logEvent('gps_source_error',
+          reason: 'internal_gps_error');
     }
   }
 
@@ -185,6 +215,9 @@ class GpsSourceManager {
   void _handleSourceDone() {
     if (_activeSource.info.isExternal) {
       _log('GPS externo desconectado — fallback para GPS interno');
+      TelemetryService.instance.logEvent('gps_fallback',
+          reason: 'source_done',
+          extra: {'from': _activeSource.info.name});
       _sourceSub = null;
       _activeSource = _internalFallback;
       _subscribeToSource(_internalFallback);
@@ -194,6 +227,8 @@ class GpsSourceManager {
       ));
     } else {
       _log('Stream do GPS interno encerrou inesperadamente');
+      TelemetryService.instance.logEvent('gps_source_done',
+          reason: 'internal_stream_ended');
     }
   }
 

@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import '../models/track.dart';
+import 'telemetry_service.dart';
 
 /// Evento emitido pelo LapDetector.
 sealed class LapEvent {}
@@ -139,6 +140,8 @@ class LapDetector {
       ..clear()
       ..addAll(List.filled(track.sectorBoundaries.length, null));
     debugPrint('[LAPZY/DET] LapDetector.start() — track="${track.name}" setores=${track.sectorBoundaries.length}');
+    TelemetryService.instance.logEvent('detector_start',
+        extra: {'track': track.name, 'sectors': track.sectorBoundaries.length});
     _gpsSub = positionStreamFactory().listen(
       _onPosition,
       onError: (Object err) {
@@ -149,6 +152,8 @@ class LapDetector {
 
   void stop() {
     debugPrint('[LAPZY/DET] LapDetector.stop() — voltas=${_recentLapMs.length} posições=$_positionCount');
+    TelemetryService.instance.logEvent('detector_stop',
+        extra: {'laps': _recentLapMs.length, 'positions': _positionCount});
     _gpsSub?.cancel();
     _gpsSub = null;
     _previousPosition = null;
@@ -203,6 +208,8 @@ class LapDetector {
           debugPrint(
             '[LAPZY/DET] Setor $i cruzado — timestamp=${sectorTime.toIso8601String()}',
           );
+          TelemetryService.instance.logEvent('sector_crossed',
+              gpsTime: sectorTime, sectorIdx: i);
           _controller.add(SectorCrossedEvent(i, sectorTime));
         }
       }
@@ -276,6 +283,11 @@ class LapDetector {
           '[LapDetector] Setor $index rejeitado (cooldown) — '
           'ms=$ms < minSectorMs=$minSectorMs',
         );
+        TelemetryService.instance.logEvent('sector_rejected_cooldown',
+            gpsTime: crossingTime,
+            sectorIdx: index,
+            reason: 'cooldown',
+            extra: {'ms_since_last': ms, 'min_sector_ms': minSectorMs});
         return null;
       }
     }
@@ -317,6 +329,14 @@ class LapDetector {
         'perpCurr=${perpCurr.toStringAsFixed(1)}m '
         'threshold=${threshold.toStringAsFixed(1)}m',
       );
+      TelemetryService.instance.logEvent('sector_rejected_proximity',
+          sectorIdx: index,
+          reason: 'perp_distance',
+          extra: {
+            'perp_prev_m': perpPrev.toStringAsFixed(1),
+            'perp_curr_m': perpCurr.toStringAsFixed(1),
+            'threshold_m': threshold.toStringAsFixed(1),
+          });
       return null;
     }
 
@@ -360,6 +380,10 @@ class LapDetector {
           '[LapDetector] S/C rejeitado (cooldown) — '
           'msSinceLast=$msSinceLast < minLapMs=$minLapMs',
         );
+        TelemetryService.instance.logEvent('lap_rejected_cooldown',
+            gpsTime: crossingTime,
+            reason: 'cooldown',
+            extra: {'ms_since_last': msSinceLast, 'min_lap_ms': minLapMs});
         return;
       }
     }
@@ -381,6 +405,8 @@ class LapDetector {
             '[LapDetector] S/C suspeito — '
             'lapMs=$lapMs | mediana=$median | desvio=$deviation',
           );
+          TelemetryService.instance.logEvent('lap_suspect',
+              gpsTime: crossingTime, valueMs: lapMs, medianMs: median);
           event = LapCrossedSuspectEvent(
             crossingTime,
             lapMs: lapMs,
@@ -390,6 +416,8 @@ class LapDetector {
           debugPrint(
             '[LapDetector] S/C válido — lapMs=$lapMs | mediana=$median',
           );
+          TelemetryService.instance.logEvent('lap_crossed',
+              gpsTime: crossingTime, valueMs: lapMs, medianMs: median);
           _updateRecentLaps(lapMs);
           event = LapCrossedEvent(crossingTime);
         }
@@ -397,6 +425,8 @@ class LapDetector {
         debugPrint(
           '[LapDetector] S/C válido (sem mediana ainda) — lapMs=$lapMs',
         );
+        TelemetryService.instance.logEvent('lap_crossed',
+            gpsTime: crossingTime, valueMs: lapMs);
         _updateRecentLaps(lapMs);
         event = LapCrossedEvent(crossingTime);
       }
@@ -405,6 +435,7 @@ class LapDetector {
         '[LapDetector] S/C inicial — '
         'timestamp=${crossingTime.toIso8601String()}',
       );
+      TelemetryService.instance.logEvent('lap_start', gpsTime: crossingTime);
       event = LapCrossedEvent(crossingTime);
     }
 
