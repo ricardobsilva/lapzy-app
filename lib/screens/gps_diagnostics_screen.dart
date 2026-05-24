@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../services/gps_diagnostics.dart';
 import '../services/gps_diagnostics_service.dart';
 import '../services/gps_source.dart';
+import '../services/usb_gps_channel.dart';
 import '../widgets/pressable.dart';
 
 const _kBg = Color(0xFF0A0A0A);
@@ -74,6 +75,10 @@ class _GpsDiagnosticsScreenState extends State<GpsDiagnosticsScreen> {
                         _snap.sourceType == GpsConnectionType.bluetooth) ...[
                       const Divider(color: _kDivider, height: 1),
                       _NmeaSection(snap: _snap),
+                    ],
+                    if (_snap.sourceType == GpsConnectionType.usb) ...[
+                      const Divider(color: _kDivider, height: 1),
+                      _UsbSerialSection(snap: _snap),
                     ],
                     const Divider(color: _kDivider, height: 1),
                     _EventsSection(snap: _snap),
@@ -231,12 +236,7 @@ class _PositionSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _SectionHeader(
-          label: 'POSIÇÃO',
-          trailing: snap.isLastPositionCached
-              ? _CachedBadge()
-              : null,
-        ),
+        _SectionHeader(label: 'POSIÇÃO'),
         _DiagRow(
           label: 'Latitude',
           value: snap.lastLat != null
@@ -495,56 +495,126 @@ class _EventsSection extends StatelessWidget {
   }
 }
 
-// ── SHARED WIDGETS ────────────────────────────────────────────────────────────
+// ── USB SERIAL SECTION ────────────────────────────────────────────────────────
 
-class _SectionHeader extends StatelessWidget {
-  final String label;
-  final Widget? trailing;
+class _UsbSerialSection extends StatelessWidget {
+  final GpsDiagnosticsSnapshot snap;
 
-  const _SectionHeader({required this.label, this.trailing});
+  const _UsbSerialSection({required this.snap});
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-      child: Row(
-        children: [
-          Text(
-            label,
-            style: GoogleFonts.rajdhani(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 2,
-              color: Colors.white.withAlpha(71),
-            ),
+    final bytesOk = snap.usbRawBytesTotal > 0;
+    final threadProblem =
+        snap.usbSerialState == 'reading' && snap.usbSerialThreadAlive == false;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _SectionHeader(label: 'SERIAL USB'),
+        _DiagRow(
+          label: 'Estado',
+          value: snap.usbSerialState ?? '—',
+        ),
+        _DiagRow(
+          label: 'Baud rate',
+          value: '${snap.usbBaudRate}',
+        ),
+        _DiagRow(
+          label: 'Thread viva',
+          value: snap.usbSerialThreadAlive == null
+              ? '—'
+              : snap.usbSerialThreadAlive!
+                  ? 'sim'
+                  : 'não',
+          valueColor: threadProblem ? _kRed : null,
+        ),
+        _DiagRow(
+          label: 'Bytes RX total',
+          value: '${snap.usbRawBytesTotal}',
+          valueColor: bytesOk ? _kGreen : _kRed,
+        ),
+        _DiagRow(
+          label: 'Bytes RX/s',
+          value: snap.usbRawBytesPerSec.toStringAsFixed(1),
+        ),
+        _DiagRow(
+          label: 'Endpoint',
+          value: snap.usbEndpointInfo ?? '—',
+        ),
+        _DiagRow(
+          label: 'Último erro',
+          value: snap.usbLastSerialError ?? '—',
+          valueColor: snap.usbLastSerialError != null ? _kRed : null,
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+          child: Row(
+            children: [9600, 38400, 115200].map((baud) {
+              final isActive = snap.usbBaudRate == baud;
+              return Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: _BaudButton(
+                  baud: baud,
+                  isActive: isActive,
+                ),
+              );
+            }).toList(),
           ),
-          if (trailing != null) ...[
-            const SizedBox(width: 8),
-            trailing!,
-          ],
-        ],
+        ),
+      ],
+    );
+  }
+}
+
+class _BaudButton extends StatelessWidget {
+  final int baud;
+  final bool isActive;
+
+  const _BaudButton({required this.baud, required this.isActive});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = isActive ? _kYellow : Colors.white.withAlpha(89);
+    return Pressable(
+      onTap: () => UsbGpsChannel().setBaudRate(baud),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: isActive ? _kYellow.withAlpha(25) : Colors.transparent,
+          borderRadius: BorderRadius.circular(5),
+          border: Border.all(color: color.withAlpha(120), width: 1),
+        ),
+        child: Text(
+          '$baud',
+          style: GoogleFonts.spaceMono(
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            color: color,
+          ),
+        ),
       ),
     );
   }
 }
 
-class _CachedBadge extends StatelessWidget {
+// ── SHARED WIDGETS ────────────────────────────────────────────────────────────
+
+class _SectionHeader extends StatelessWidget {
+  final String label;
+
+  const _SectionHeader({required this.label});
+
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFFD600).withAlpha(30),
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: const Color(0xFFFFD600).withAlpha(100)),
-      ),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
       child: Text(
-        'CACHE · aguardando fix',
-        style: GoogleFonts.spaceMono(
-          fontSize: 8,
+        label,
+        style: GoogleFonts.rajdhani(
+          fontSize: 11,
           fontWeight: FontWeight.w700,
-          color: const Color(0xFFFFD600),
-          letterSpacing: 0.5,
+          letterSpacing: 2,
+          color: Colors.white.withAlpha(71),
         ),
       ),
     );

@@ -8,6 +8,7 @@ class UsbGpsChannel {
   static const _method = MethodChannel('lapzy/usb');
   static const _data = EventChannel('lapzy/usb_data');
   static const _status = EventChannel('lapzy/usb_status');
+  static const _diag = EventChannel('lapzy/usb_diag');
 
   /// Retorna as informações do dispositivo USB GPS atualmente conectado,
   /// ou `null` se nenhum cabo estiver plugado.
@@ -50,6 +51,50 @@ class UsbGpsChannel {
       await _method.invokeMethod<void>('disconnect');
     } catch (_) {}
   }
+
+  /// Stream de diagnóstico serial USB — emite estado do thread de leitura,
+  /// contagem de bytes e informações do endpoint.
+  Stream<UsbSerialDiag> diagStream() {
+    return _diag.receiveBroadcastStream().map((raw) {
+      final m = Map<String, Object?>.from(raw as Map);
+      return UsbSerialDiag(
+        state: (m['state'] as String?) ?? 'idle',
+        bytesTotal: (m['bytesTotal'] as int?) ?? 0,
+        bytesPerSec: (m['bytesPerSec'] as double?) ?? 0.0,
+        threadAlive: (m['threadAlive'] as bool?) ?? false,
+        baudRate: (m['baudRate'] as int?) ?? 9600,
+        endpoint: (m['endpoint'] as String?) ?? '—',
+        lastError: m['lastError'] as String?,
+      );
+    });
+  }
+
+  /// Altera o baud rate do receptor USB em tempo real.
+  Future<void> setBaudRate(int baud) async {
+    try {
+      await _method.invokeMethod<void>('setBaudRate', {'baud': baud});
+    } catch (_) {}
+  }
+}
+
+class UsbSerialDiag {
+  final String state;
+  final int bytesTotal;
+  final double bytesPerSec;
+  final bool threadAlive;
+  final int baudRate;
+  final String endpoint;
+  final String? lastError;
+
+  const UsbSerialDiag({
+    required this.state,
+    required this.bytesTotal,
+    required this.bytesPerSec,
+    required this.threadAlive,
+    required this.baudRate,
+    required this.endpoint,
+    this.lastError,
+  });
 }
 
 class UsbDeviceInfo {

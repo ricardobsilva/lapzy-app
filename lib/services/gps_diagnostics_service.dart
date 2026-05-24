@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import 'gps_diagnostics.dart';
 import 'gps_source.dart';
+import 'usb_gps_channel.dart';
 
 /// Singleton que coleta eventos do pipeline GPS e expõe um snapshot diagnóstico
 /// em tempo real para a UI e para análise pós-teste.
@@ -85,9 +86,7 @@ class GpsDiagnosticsService {
   }
 
   /// Chamado por [GpsSourceManager] quando uma posição válida é recebida.
-  /// [isCached] = true indica posição do cache do Android (getLastKnownPosition),
-  /// false indica posição fresca do provider.
-  void onPositionReceived(Position pos, DateTime wallTime, {bool isCached = false}) {
+  void onPositionReceived(Position pos, DateTime wallTime) {
     final isFirst = _snap.firstRawDataAt == null;
     final isFirstValid = _snap.firstValidPositionAt == null;
 
@@ -130,7 +129,7 @@ class GpsDiagnosticsService {
     _snap = _snap.copyWith(
       fixState: GpsFixState.fixAcquired,
       firstRawDataAt: isFirst ? wallTime : null,
-      firstValidPositionAt: isFirstValid && !isCached ? wallTime : null,
+      firstValidPositionAt: isFirstValid ? wallTime : null,
       lastLat: pos.latitude,
       lastLng: pos.longitude,
       lastAccuracyM: pos.accuracy,
@@ -138,10 +137,9 @@ class GpsDiagnosticsService {
       lastBearing: pos.heading,
       lastPositionGpsTime: pos.timestamp,
       lastPositionWallTime: wallTime,
-      hzInstantaneous: isCached ? null : hzInstant,
-      hzRollingAvg: isCached ? null : hzAvg,
-      clearHzInstantaneous: isCached || hzInstant == null,
-      isLastPositionCached: isCached,
+      hzInstantaneous: hzInstant,
+      hzRollingAvg: hzAvg,
+      clearHzInstantaneous: hzInstant == null,
     );
     _emit();
   }
@@ -218,6 +216,21 @@ class GpsDiagnosticsService {
       nmeaLinesPerSec: linesPerSec,
     );
 
+    _emit();
+  }
+
+  /// Chamado por [UsbGpsDetector] com dados de diagnóstico da camada serial USB.
+  void onUsbSerialDiag(UsbSerialDiag diag) {
+    _snap = _snap.copyWith(
+      usbRawBytesTotal: diag.bytesTotal,
+      usbRawBytesPerSec: diag.bytesPerSec,
+      usbSerialThreadAlive: diag.threadAlive,
+      usbSerialState: diag.state,
+      usbEndpointInfo: diag.endpoint,
+      usbBaudRate: diag.baudRate,
+      usbLastSerialError:
+          diag.lastError?.isNotEmpty == true ? diag.lastError : null,
+    );
     _emit();
   }
 

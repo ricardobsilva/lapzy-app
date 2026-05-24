@@ -161,35 +161,9 @@ class GpsSourceManager {
         _handleSourceDone();
       },
     );
-    if (source.info.connectionType == GpsConnectionType.internal) {
-      unawaited(_emitLastKnownPosition());
-    }
   }
 
-  /// Emite a última posição em cache do Android imediatamente após assinar
-  /// a fonte interna. Evita ficar em estado "conectando" durante o cold start
-  /// do GPS — a tela de diagnóstico e o pré-corrida mostram dados ao instante.
-  /// O stream fresco vai sobrescrevendo conforme chega.
-  Future<void> _emitLastKnownPosition() async {
-    try {
-      final cached = await Geolocator.getLastKnownPosition();
-      if (cached == null) return;
-      final age = DateTime.now().difference(cached.timestamp);
-      _log(
-        'Posição cached disponível: '
-        'lat=${cached.latitude.toStringAsFixed(6)} '
-        'lng=${cached.longitude.toStringAsFixed(6)} '
-        'acc=${cached.accuracy.toStringAsFixed(0)}m '
-        'idade=${age.inSeconds}s',
-      );
-      _onPositionReceived(cached, isCached: true);
-    } catch (_) {
-      // Falha silenciosa — getLastKnownPosition pode falhar em emuladores
-      // ou quando a permissão foi revogada entre inicializações.
-    }
-  }
-
-  void _onPositionReceived(Position pos, {bool isCached = false}) {
+  void _onPositionReceived(Position pos) {
     final now = DateTime.now();
     final last = _lastPositionTime;
     final deltaMs = last != null ? now.difference(last).inMilliseconds : null;
@@ -223,7 +197,7 @@ class GpsSourceManager {
     // Diagnostics: external USB GPS is already reported via onNmeaLine in
     // UsbGpsDetector. For internal and BT sources, report here.
     if (_activeSource.info.connectionType != GpsConnectionType.usb) {
-      GpsDiagnosticsService.instance.onPositionReceived(pos, now, isCached: isCached);
+      GpsDiagnosticsService.instance.onPositionReceived(pos, now);
     }
   }
 

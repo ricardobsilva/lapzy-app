@@ -63,10 +63,6 @@ class GpsDiagnosticsSnapshot {
   final double? hzInstantaneous;
   final double? hzRollingAvg;
 
-  /// True enquanto a posição exibida é o cache do Android (getLastKnownPosition).
-  /// Vira false quando chega a primeira posição fresca do provider.
-  final bool isLastPositionCached;
-
   // NMEA (GPS externo)
   final List<NmeaLineDiag> recentNmea; // últimas 15 linhas (todos os tipos)
   final String? lastRmcStatus;          // 'A' (fix) ou 'V' (void)
@@ -74,6 +70,15 @@ class GpsDiagnosticsSnapshot {
   final int nmeaReceived;
   final int nmeaDiscarded;
   final double? nmeaLinesPerSec;
+
+  // USB Serial (apenas para GPS externo USB)
+  final int usbRawBytesTotal;
+  final double usbRawBytesPerSec;
+  final bool? usbSerialThreadAlive;
+  final String? usbSerialState;
+  final String? usbEndpointInfo;
+  final int usbBaudRate;
+  final String? usbLastSerialError;
 
   const GpsDiagnosticsSnapshot({
     required this.sourceName,
@@ -97,7 +102,13 @@ class GpsDiagnosticsSnapshot {
     this.nmeaReceived = 0,
     this.nmeaDiscarded = 0,
     this.nmeaLinesPerSec,
-    this.isLastPositionCached = false,
+    this.usbRawBytesTotal = 0,
+    this.usbRawBytesPerSec = 0.0,
+    this.usbSerialThreadAlive,
+    this.usbSerialState,
+    this.usbEndpointInfo,
+    this.usbBaudRate = 9600,
+    this.usbLastSerialError,
   });
 
   GpsDiagnosticsSnapshot copyWith({
@@ -122,7 +133,13 @@ class GpsDiagnosticsSnapshot {
     int? nmeaReceived,
     int? nmeaDiscarded,
     double? nmeaLinesPerSec,
-    bool? isLastPositionCached,
+    int? usbRawBytesTotal,
+    double? usbRawBytesPerSec,
+    bool? usbSerialThreadAlive,
+    String? usbSerialState,
+    String? usbEndpointInfo,
+    int? usbBaudRate,
+    String? usbLastSerialError,
     // sentinel values for clearing nullable fields
     bool clearHzInstantaneous = false,
     bool clearHzRollingAvg = false,
@@ -165,7 +182,13 @@ class GpsDiagnosticsSnapshot {
       nmeaLinesPerSec: clearNmeaLinesPerSec
           ? null
           : (nmeaLinesPerSec ?? this.nmeaLinesPerSec),
-      isLastPositionCached: isLastPositionCached ?? this.isLastPositionCached,
+      usbRawBytesTotal: usbRawBytesTotal ?? this.usbRawBytesTotal,
+      usbRawBytesPerSec: usbRawBytesPerSec ?? this.usbRawBytesPerSec,
+      usbSerialThreadAlive: usbSerialThreadAlive ?? this.usbSerialThreadAlive,
+      usbSerialState: usbSerialState ?? this.usbSerialState,
+      usbEndpointInfo: usbEndpointInfo ?? this.usbEndpointInfo,
+      usbBaudRate: usbBaudRate ?? this.usbBaudRate,
+      usbLastSerialError: usbLastSerialError ?? this.usbLastSerialError,
     );
   }
 }

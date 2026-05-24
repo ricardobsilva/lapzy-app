@@ -65,22 +65,29 @@ class UsbGpsDetector {
   }
 
   Stream<Position> _streamFromUsb() async* {
-    final lines = _channel.nmeaLines();
-    final parser = NmeaParser();
-    await for (final line in lines) {
-      final trimmed = line.trim();
-      if (trimmed.isEmpty) continue;
-      final now = DateTime.now();
-      final result = parser.parseLineWithReason(trimmed);
-      GpsDiagnosticsService.instance.onNmeaLine(
-        raw: trimmed,
-        receivedAt: now,
-        parsedPosition: result.position,
-        discardReason: result.discardReason,
-        gga: result.gga,
-        rmcStatus: result.rmcStatus,
-      );
-      if (result.position != null) yield result.position!;
+    final diagSub = _channel.diagStream().listen(
+      (diag) => GpsDiagnosticsService.instance.onUsbSerialDiag(diag),
+    );
+    try {
+      final lines = _channel.nmeaLines();
+      final parser = NmeaParser();
+      await for (final line in lines) {
+        final trimmed = line.trim();
+        if (trimmed.isEmpty) continue;
+        final now = DateTime.now();
+        final result = parser.parseLineWithReason(trimmed);
+        GpsDiagnosticsService.instance.onNmeaLine(
+          raw: trimmed,
+          receivedAt: now,
+          parsedPosition: result.position,
+          discardReason: result.discardReason,
+          gga: result.gga,
+          rmcStatus: result.rmcStatus,
+        );
+        if (result.position != null) yield result.position!;
+      }
+    } finally {
+      await diagSub.cancel();
     }
   }
 }

@@ -15,6 +15,7 @@ import android.hardware.usb.UsbManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
@@ -30,14 +31,16 @@ import java.util.UUID
  *   - EventChannel  "lapzy/bluetooth_data": stream de linhas NMEA
  *
  * Canais USB:
- *   - MethodChannel "lapzy/usb": getConnectedDevice, disconnect
+ *   - MethodChannel "lapzy/usb": getConnectedDevice, disconnect, setBaudRate
  *   - EventChannel  "lapzy/usb_data": stream de linhas NMEA
  *   - EventChannel  "lapzy/usb_status": eventos de attach/detach
+ *   - EventChannel  "lapzy/usb_diag": diagnóstico serial em tempo real
  */
 class LapzyGpsChannels(private val context: Context) {
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private val sppUuid = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
+    private val TAG = "LAPZY/USB"
 
     // ── BT state ─────────────────────────────────────────────────────────────
 
@@ -56,6 +59,17 @@ class LapzyGpsChannels(private val context: Context) {
 
     private var usbStatusSink: EventChannel.EventSink? = null
     private var usbReceiver: BroadcastReceiver? = null
+
+    // ── USB diagnostic state ──────────────────────────────────────────────────
+
+    @Volatile private var rawBytesTotal: Long = 0
+    @Volatile private var rawBytesInWindow: Long = 0
+    @Volatile private var windowStartMs: Long = System.currentTimeMillis()
+    private var currentBaud: Int = 9600
+    private var endpointInfo: String = "—"
+    @Volatile private var lastUsbError: String? = null
+    private var usbSerialState: String = "idle"
+    private var usbDiagSink: EventChannel.EventSink? = null
 
     // ── setup ─────────────────────────────────────────────────────────────────
 
@@ -160,6 +174,12 @@ class LapzyGpsChannels(private val context: Context) {
                         stopUsb()
                         result.success(null)
                     }
+                    "setBaudRate" -> {
+                        val baud = call.argument<Int>("baud") ?: 9600
+                        currentBaud = baud
+                        Log.d(TAG, "setBaudRate → $baud")
+                        result.success(null)
+                    }
                     else -> result.notImplemented()
                 }
             }
@@ -179,24 +199,39 @@ class LapzyGpsChannels(private val context: Context) {
             .setStreamHandler(object : EventChannel.StreamHandler {
                 override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
                     usbStatusSink = events
-                    // O receiver já é registrado em setupUsb() — não registra novamente.
                 }
 
                 override fun onCancel(arguments: Any?) {
                     usbStatusSink = null
-                    // Não cancela o receiver — precisa permanecer ativo para detecção de desconexão.
                 }
             })
 
-        // Registra o receiver assim que o app inicia, independente de quem está
-        // escutando lapzy/usb_status. Garante que ACTION_USB_DEVICE_DETACHED
-        // seja sempre recebido enquanto o app estiver rodando.
+        EventChannel(engine.dartExecutor.binaryMessenger, "lapzy/usb_diag")
+            .setStreamHandler(object : EventChannel.StreamHandler {
+                override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
+                    usbDiagSink = events
+                }
+
+                override fun onCancel(arguments: Any?) {
+                    usbDiagSink = null
+                }
+            })
+
         registerUsbReceiver()
     }
 
     private fun getUsbGpsInfo(): Map<String, String>? {
         val manager = context.getSystemService(Context.USB_SERVICE) as? UsbManager ?: return null
         val device = manager.deviceList.values.firstOrNull() ?: return null
+        Log.d(TAG, "Dispositivo detectado: '${device.productName}' VID=0x${"%04X".format(device.vendorId)} PID=0x${"%04X".format(device.productId)} interfaces=${device.interfaceCount}")
+        for (i in 0 until device.interfaceCount) {
+            val intf = device.getInterface(i)
+            Log.d(TAG, "  intf[$i] class=0x${"%02X".format(intf.interfaceClass)} sub=0x${"%02X".format(intf.interfaceSubclass)} proto=0x${"%02X".format(intf.interfaceProtocol)} endpoints=${intf.endpointCount}")
+            for (j in 0 until intf.endpointCount) {
+                val ep = intf.getEndpoint(j)
+                Log.d(TAG, "    ep[$j] dir=${if (ep.direction == UsbConstants.USB_DIR_IN) "IN" else "OUT"} type=${ep.type} addr=0x${"%02X".format(ep.address)} maxPkt=${ep.maxPacketSize}")
+            }
+        }
         return mapOf("name" to (device.productName ?: device.manufacturerName ?: "USB GPS"))
     }
 
@@ -207,13 +242,14 @@ class LapzyGpsChannels(private val context: Context) {
             return
         }
         val device = manager.deviceList.values.firstOrNull() ?: run {
-            // Nenhum dispositivo USB conectado — encerra o stream imediatamente
-            // para que o GpsSourceManager faça fallback para o GPS interno.
             mainHandler.post { sink?.endOfStream() }
             return
         }
 
+        Log.d(TAG, "startUsbStream: device='${device.productName}' hasPermission=${manager.hasPermission(device)}")
+
         if (!manager.hasPermission(device)) {
+            Log.d(TAG, "Sem permissão USB — solicitando ao usuário")
             requestUsbPermission(manager, device, sink)
             return
         }
@@ -226,6 +262,7 @@ class LapzyGpsChannels(private val context: Context) {
         device: UsbDevice,
         sink: EventChannel.EventSink?,
     ) {
+        Log.d(TAG, "Solicitando permissão USB para '${device.productName}'")
         val action = "com.lapzy.lapzy.USB_PERMISSION"
         val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             PendingIntent.FLAG_IMMUTABLE
@@ -237,9 +274,14 @@ class LapzyGpsChannels(private val context: Context) {
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(ctx: Context, intent: Intent) {
                 context.unregisterReceiver(this)
-                if (intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)) {
+                val granted = intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)
+                Log.d(TAG, "Permissão USB: granted=$granted")
+                if (granted) {
                     openAndStream(manager, device, sink)
                 } else {
+                    Log.e(TAG, "Permissão USB NEGADA — stream encerrado")
+                    lastUsbError = "permissão negada"
+                    emitDiag("error_permission")
                     mainHandler.post { sink?.endOfStream() }
                 }
             }
@@ -257,27 +299,71 @@ class LapzyGpsChannels(private val context: Context) {
         device: UsbDevice,
         sink: EventChannel.EventSink?,
     ) {
-        val connection = manager.openDevice(device) ?: run {
+        Log.d(TAG, "openAndStream: device='${device.productName}' VID=0x${"%04X".format(device.vendorId)} PID=0x${"%04X".format(device.productId)}")
+
+        val connection = manager.openDevice(device)
+        if (connection == null) {
+            Log.e(TAG, "openDevice() retornou null — sem permissão ou driver exclusivo?")
+            lastUsbError = "openDevice=null"
+            emitDiag("error_open")
             mainHandler.post { sink?.endOfStream() }
             return
         }
+        Log.d(TAG, "openDevice() OK")
         usbConnection = connection
         usbDataSink = sink
 
-        val endpoint = findCdcBulkInEndpoint(device, connection) ?: run {
+        rawBytesTotal = 0
+        rawBytesInWindow = 0
+        windowStartMs = System.currentTimeMillis()
+        lastUsbError = null
+
+        val found = findBulkInEndpoint(device, connection)
+        if (found == null) {
+            Log.e(TAG, "Nenhum endpoint bulk-IN encontrado em ${device.interfaceCount} interface(s) — stream encerrado")
+            lastUsbError = "sem endpoint bulk-IN"
+            emitDiag("error_endpoint")
             connection.close()
             mainHandler.post { sink?.endOfStream() }
             return
         }
 
+        val (endpoint, ifaceIndex) = found
+        endpointInfo = "intf=$ifaceIndex addr=0x${"%02X".format(endpoint.address)} maxPkt=${endpoint.maxPacketSize}"
+        Log.d(TAG, "Endpoint selecionado: $endpointInfo baud=$currentBaud")
+        emitDiag("opened")
+
         usbRunning = true
         usbDataThread = Thread {
-            val buffer = ByteArray(64)
+            val bufSize = maxOf(endpoint.maxPacketSize, 256)
+            val buffer = ByteArray(bufSize)
             val lineBuffer = StringBuilder()
+            var consecutiveErrors = 0
+            var diagIntervalMs = System.currentTimeMillis()
+
+            Log.d(TAG, "Thread de leitura iniciada — bufSize=$bufSize baud=$currentBaud endpoint=$endpointInfo")
+            emitDiag("reading")
+
             try {
                 while (usbRunning) {
-                    val n = connection.bulkTransfer(endpoint, buffer, buffer.size, 1000)
+                    val n = connection.bulkTransfer(endpoint, buffer, bufSize, 1000)
+                    val now = System.currentTimeMillis()
+
                     if (n > 0) {
+                        if (rawBytesTotal == 0L) {
+                            val hex = buffer.take(minOf(n, 32)).joinToString(" ") { "%02X".format(it) }
+                            val ascii = buffer.take(minOf(n, 32)).map { b ->
+                                val c = b.toInt().and(0xFF).toChar()
+                                if (c.code in 32..126) c else '.'
+                            }.joinToString("")
+                            Log.d(TAG, "!!! PRIMEIRO BYTE RECEBIDO !!! n=$n")
+                            Log.d(TAG, "  hex: $hex")
+                            Log.d(TAG, "  ascii: $ascii")
+                        }
+                        rawBytesTotal += n
+                        rawBytesInWindow += n
+                        consecutiveErrors = 0
+
                         for (i in 0 until n) {
                             val c = buffer[i].toInt().and(0xFF).toChar()
                             if (c == '\n') {
@@ -290,14 +376,32 @@ class LapzyGpsChannels(private val context: Context) {
                                 lineBuffer.append(c)
                             }
                         }
+                    } else if (n < 0) {
+                        consecutiveErrors++
+                        if (consecutiveErrors == 1 || consecutiveErrors % 30 == 0) {
+                            Log.w(TAG, "bulkTransfer=$n (erro #$consecutiveErrors) totalBytes=$rawBytesTotal")
+                            lastUsbError = "bulkTransfer=$n err#$consecutiveErrors"
+                        }
                     }
-                    // n < 0: erro de transferência ou timeout sem dados — o broadcast
-                    // ACTION_USB_DEVICE_DETACHED é a fonte primária de detecção de
-                    // desconexão; o loop continua até que stopUsb() seja chamado.
+                    // n == 0: timeout sem dados — normal
+
+                    if (now - diagIntervalMs >= 1000) {
+                        val windowMs = now - windowStartMs
+                        Log.d(TAG, "DIAG: totalBytes=$rawBytesTotal windowBytes=$rawBytesInWindow windowMs=$windowMs threadAlive=true")
+                        emitDiag("reading")
+                        diagIntervalMs = now
+                    }
+                    if (now - windowStartMs >= 2000) {
+                        rawBytesInWindow = 0
+                        windowStartMs = now
+                    }
                 }
-            } catch (_: Exception) {
-                // Conexão encerrada.
+            } catch (e: Exception) {
+                Log.e(TAG, "Exceção na thread de leitura: ${e::class.simpleName}: ${e.message}")
+                lastUsbError = "exception: ${e.message}"
             } finally {
+                Log.d(TAG, "Thread encerrada — totalBytes=$rawBytesTotal")
+                emitDiag("done")
                 mainHandler.post { sink?.endOfStream() }
                 connection.close()
                 usbConnection = null
@@ -305,63 +409,97 @@ class LapzyGpsChannels(private val context: Context) {
         }.also { it.start() }
     }
 
-    /**
-     * Encontra o endpoint bulk-IN de um dispositivo CDC-ACM e configura
-     * a interface de dados (SET_LINE_CODING 9600 8N1, SET_CONTROL_LINE_STATE).
-     *
-     * Suporta CDC-ACM (classe 0x0A) — padrão da maioria dos receptores GPS USB.
-     */
-    private fun findCdcBulkInEndpoint(
-        device: UsbDevice,
-        connection: UsbDeviceConnection,
-    ): UsbEndpoint? {
+    private fun findBulkInEndpoint(device: UsbDevice, connection: UsbDeviceConnection): Pair<UsbEndpoint, Int>? {
+        data class Candidate(val endpoint: UsbEndpoint, val ifaceIndex: Int, val priority: Int)
+        val candidates = mutableListOf<Candidate>()
+
         for (i in 0 until device.interfaceCount) {
             val intf = device.getInterface(i)
-            // Classe 0x0A = CDC Data
-            if (intf.interfaceClass != 0x0A) continue
-            var bulkIn: UsbEndpoint? = null
+            Log.d(TAG, "Verificando intf[$i] class=0x${"%02X".format(intf.interfaceClass)}")
             for (j in 0 until intf.endpointCount) {
                 val ep = intf.getEndpoint(j)
-                if (ep.direction == UsbConstants.USB_DIR_IN &&
-                    ep.type == UsbConstants.USB_ENDPOINT_XFER_BULK
-                ) {
-                    bulkIn = ep
+                if (ep.direction == UsbConstants.USB_DIR_IN && ep.type == UsbConstants.USB_ENDPOINT_XFER_BULK) {
+                    val priority = when (intf.interfaceClass) {
+                        0x0A -> 10  // CDC Data — melhor opção
+                        0xFF -> 5   // Vendor-specific — fallback
+                        else -> 1   // Qualquer outra
+                    }
+                    Log.d(TAG, "  Bulk-IN encontrado em intf[$i] ep[$j] class=0x${"%02X".format(intf.interfaceClass)} priority=$priority")
+                    candidates.add(Candidate(ep, i, priority))
                 }
             }
-            if (bulkIn == null) continue
-            connection.claimInterface(intf, true)
-            // SET_LINE_CODING: 9600 baud, 1 stop bit, no parity, 8 data bits
-            val lc = ByteArray(7).apply {
-                this[0] = 0x80.toByte() // 9600 = 0x00002580, little-endian
-                this[1] = 0x25.toByte()
-                this[2] = 0x00
-                this[3] = 0x00
-                this[4] = 0x00 // 1 stop bit
-                this[5] = 0x00 // no parity
-                this[6] = 0x08 // 8 data bits
-            }
-            connection.controlTransfer(0x21, 0x20, 0, i, lc, 7, 0)
-            // SET_CONTROL_LINE_STATE: DTR + RTS
-            connection.controlTransfer(0x21, 0x22, 3, i, null, 0, 0)
-            return bulkIn
         }
-        return null
+
+        if (candidates.isEmpty()) {
+            Log.e(TAG, "Nenhum endpoint bulk-IN em nenhuma das ${device.interfaceCount} interfaces")
+            return null
+        }
+
+        val best = candidates.maxByOrNull { it.priority }!!
+        val intf = device.getInterface(best.ifaceIndex)
+        val claimed = connection.claimInterface(intf, true)
+        Log.d(TAG, "claimInterface(${best.ifaceIndex}, force=true) → $claimed")
+        if (!claimed) {
+            Log.e(TAG, "Falhou claimInterface — kernel pode estar segurando a interface")
+        }
+
+        configureCdcAcm(connection, best.ifaceIndex)
+        return Pair(best.endpoint, best.ifaceIndex)
+    }
+
+    private fun configureCdcAcm(connection: UsbDeviceConnection, ifaceIndex: Int) {
+        val baud = currentBaud
+        val lc = ByteArray(7).apply {
+            this[0] = (baud and 0xFF).toByte()
+            this[1] = ((baud shr 8) and 0xFF).toByte()
+            this[2] = ((baud shr 16) and 0xFF).toByte()
+            this[3] = ((baud shr 24) and 0xFF).toByte()
+            this[4] = 0x00  // 1 stop bit
+            this[5] = 0x00  // no parity
+            this[6] = 0x08  // 8 data bits
+        }
+        val r1 = connection.controlTransfer(0x21, 0x20, 0, ifaceIndex, lc, 7, 1000)
+        Log.d(TAG, "SET_LINE_CODING ($baud baud 8N1) → resultado=$r1 (>=0=OK, <0=erro)")
+
+        val r2 = connection.controlTransfer(0x21, 0x22, 0x03, ifaceIndex, null, 0, 1000)
+        Log.d(TAG, "SET_CONTROL_LINE_STATE (DTR+RTS) → resultado=$r2")
+    }
+
+    private fun emitDiag(state: String) {
+        usbSerialState = state
+        val windowMs = System.currentTimeMillis() - windowStartMs
+        val bps = if (windowMs > 0 && rawBytesInWindow > 0) rawBytesInWindow * 1000.0 / windowMs else 0.0
+        val diag = mapOf(
+            "state" to state,
+            "bytesTotal" to rawBytesTotal,
+            "bytesPerSec" to bps,
+            "threadAlive" to (usbDataThread?.isAlive == true),
+            "baudRate" to currentBaud,
+            "endpoint" to endpointInfo,
+            "lastError" to (lastUsbError ?: ""),
+        )
+        mainHandler.post { usbDiagSink?.success(diag) }
     }
 
     private fun stopUsb() {
+        Log.d(TAG, "stopUsb() — totalBytes=$rawBytesTotal")
+        usbSerialState = "idle"
         usbRunning = false
-        // Encerra o stream Dart imediatamente — o GpsSourceManager recebe onDone
-        // e faz fallback para o GPS interno sem esperar o thread terminar.
         usbDataSink?.endOfStream()
         usbDataSink = null
         usbConnection?.close()
         usbConnection = null
         usbDataThread?.interrupt()
         usbDataThread = null
+        rawBytesTotal = 0
+        rawBytesInWindow = 0
+        endpointInfo = "—"
+        lastUsbError = null
+        emitDiag("idle")
     }
 
     private fun registerUsbReceiver() {
-        if (usbReceiver != null) return // Já registrado — evita duplicata.
+        if (usbReceiver != null) return
 
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(ctx: Context, intent: Intent) {
@@ -377,8 +515,6 @@ class LapzyGpsChannels(private val context: Context) {
                         usbStatusSink?.success(mapOf("event" to "attached", "name" to name))
                     }
                     UsbManager.ACTION_USB_DEVICE_DETACHED -> {
-                        // Para o stream de dados imediatamente — o GpsSourceManager
-                        // recebe onDone e assume o GPS interno sem atraso.
                         stopUsb()
                         usbStatusSink?.success(mapOf("event" to "detached", "name" to null))
                     }
