@@ -1,9 +1,13 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
+
+import '../widgets/pressable.dart';
 
 import '../models/race_session.dart';
 import '../models/race_session_record.dart';
@@ -13,9 +17,9 @@ import '../services/delta_calculator.dart';
 import '../services/foreground_location_service.dart';
 import '../services/gps_source_manager.dart';
 import '../services/lap_detector.dart';
+import '../services/telemetry_service.dart';
 import 'race_summary_screen.dart';
 
-const _kBg = Color(0xFF0A0A0A);
 const _kGreen = Color(0xFF00E676);
 const _kPurple = Color(0xFFBF5AF2);
 const _kRed = Color(0xFFFF3B30);
@@ -25,6 +29,76 @@ const _kS3 = Color(0xFFFF6D00);
 
 const _kBorderWidth = 10.0;
 const _kFixedSectorColors = [_kS1, _kS2, _kS3];
+
+/// Altura reservada para o slot do banner PR — sempre ocupada, banner ou vazio.
+/// Garante que o cronômetro não mude de posição ao aparecer/desaparecer o badge.
+const _kPrBannerHeight = 22.0;
+
+// ── TEMAS DE COR ──────────────────────────────────────────────────────────────
+
+class _RaceThemeData {
+  final Color bg;
+  final Color textPrimary;
+  final Color textDim;      // valores secundários (total, melhor volta)
+  final Color textVeryDim;  // labels de seção (VOLTA, TOTAL, TEMPO DA VOLTA)
+  final String name;
+
+  const _RaceThemeData({
+    required this.bg,
+    required this.textPrimary,
+    required this.textDim,
+    required this.textVeryDim,
+    required this.name,
+  });
+}
+
+const _kThemeDark = _RaceThemeData(
+  bg: Color(0xFF0A0A0A),
+  textPrimary: Colors.white,
+  textDim: Color(0x99FFFFFF),
+  textVeryDim: Color(0x47FFFFFF),
+  name: 'ESCURO',
+);
+
+/// Fundo azul cobalto saturado — chamativo em condições variadas.
+const _kThemeBlue = _RaceThemeData(
+  bg: Color(0xFF0E2BA8),
+  textPrimary: Colors.white,
+  textDim: Color(0xB3FFFFFF),
+  textVeryDim: Color(0x80FFFFFF),
+  name: 'AZUL',
+);
+
+/// Tema claro para sol forte — máximo contraste em pista a céu aberto.
+const _kThemeDay = _RaceThemeData(
+  bg: Color(0xFFF0F0F0),
+  textPrimary: Color(0xFF0D0D0D),
+  textDim: Color(0x990D0D0D),
+  textVeryDim: Color(0x720D0D0D),
+  name: 'DIA',
+);
+
+const _kRaceThemes = [_kThemeDark, _kThemeBlue, _kThemeDay];
+
+/// Propaga o tema de cor ativo para todos os sub-widgets sem passagem
+/// explícita de parâmetro por toda a árvore.
+class _RaceThemeScope extends InheritedWidget {
+  final _RaceThemeData theme;
+
+  const _RaceThemeScope({
+    required this.theme,
+    required super.child,
+  });
+
+  static _RaceThemeData of(BuildContext context) {
+    return context
+        .dependOnInheritedWidgetOfExactType<_RaceThemeScope>()!
+        .theme;
+  }
+
+  @override
+  bool updateShouldNotify(_RaceThemeScope old) => old.theme.name != theme.name;
+}
 const _kExtraSectorColors = [
   Color(0xFF1DE9B6), // teal
   Color(0xFFE040FB), // magenta
@@ -73,6 +147,8 @@ class _RaceScreenState extends State<RaceScreen> {
 
   late final LapDetector _detector;
   StreamSubscription<LapEvent>? _detectorSub;
+  StreamSubscription<Position>? _speedSub;
+  double? _speedKmh;
 
   Timer? _resetBorderTimer;
   int _nextSectorIndex = 0;
@@ -82,6 +158,14 @@ class _RaceScreenState extends State<RaceScreen> {
 
   /// Melhor tempo de cada setor na corrida — base para detecção de roxo (novo recorde de setor).
   List<int?> _bestSectorTimes = [];
+
+  late final String _telemetrySessionId;
+
+  int _themeIndex = 0;
+  bool _showThemeHint = false;
+  Timer? _hintShowTimer;
+  Timer? _hintDismissTimer;
+  static const _kHintPrefKey = 'race_theme_hint_dismissed';
 
   /// Tempo decorrido na volta atual em ms, baseado no relógio injetado.
   /// Resolução de ~1ms, sem deriva do timer periódico.
@@ -101,6 +185,15 @@ class _RaceScreenState extends State<RaceScreen> {
     _sectorFeedbackTimers = List.filled(sectorCount, null);
     _bestSectorTimes = List.filled(sectorCount, null);
     _clock = widget.clockFactory ?? DateTime.now;
+    _telemetrySessionId = const Uuid().v4();
+    final gpsInfo = GpsSourceManager.instance.activeSource.info;
+    TelemetryService.instance.startSession(
+      sessionId: _telemetrySessionId,
+      trackId: widget.track.id,
+      trackName: widget.track.name,
+      gpsSource: gpsInfo.connectionType.name,
+      gpsSourceName: gpsInfo.name,
+    );
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.landscapeLeft,
       DeviceOrientation.landscapeRight,
@@ -115,19 +208,49 @@ class _RaceScreenState extends State<RaceScreen> {
             positionStreamFactory: () =>
                 GpsSourceManager.instance.positionStream,
           );
+    GpsSourceManager.instance.notifyScreenAttached('RaceScreen');
     _startLapTimer();
     _startDetector();
+    _startSpeedListener();
+    unawaited(_checkThemeHint());
+  }
+
+  void _startSpeedListener() {
+    debugPrint('[LAPZY/UI] _startSpeedListener iniciado');
+    DateTime? lastSpeedUpdate;
+    _speedSub = GpsSourceManager.instance.positionStream.listen((pos) {
+      final now = DateTime.now();
+      final deltaMs = lastSpeedUpdate != null
+          ? now.difference(lastSpeedUpdate!).inMilliseconds
+          : null;
+      lastSpeedUpdate = now;
+      final hz = deltaMs != null && deltaMs > 0
+          ? (1000 / deltaMs).toStringAsFixed(2)
+          : '?';
+      final raw = pos.speed * 3.6;
+      final kmh = raw < 0 ? 0.0 : raw;
+      debugPrint(
+        '[LAPZY/UI] velocidade=${kmh.toStringAsFixed(1)}km/h '
+        'Δ=${deltaMs ?? '?'}ms hz=$hz',
+      );
+      if (mounted) setState(() => _speedKmh = kmh);
+    });
   }
 
   @override
   void dispose() {
+    _hintShowTimer?.cancel();
+    _hintDismissTimer?.cancel();
     _lapTimer?.cancel();
     _resetBorderTimer?.cancel();
     for (final t in _sectorFeedbackTimers) {
       t?.cancel();
     }
+    _speedSub?.cancel();
     _detectorSub?.cancel();
     _detector.dispose();
+    GpsSourceManager.instance.notifyScreenDetached('RaceScreen');
+    TelemetryService.instance.endSession(note: 'screen_disposed');
     WakelockPlus.disable();
     unawaited(ForegroundLocationService.stop());
     SystemChrome.setEnabledSystemUIMode(
@@ -146,6 +269,7 @@ class _RaceScreenState extends State<RaceScreen> {
   }
 
   void _startDetector() {
+    debugPrint('[LAPZY/UI] _startDetector iniciado — track="${widget.track.name}"');
     _detectorSub = _detector.events.listen(_onLapEvent);
     _detector.start();
   }
@@ -295,11 +419,40 @@ class _RaceScreenState extends State<RaceScreen> {
     }
   }
 
+  void _cycleTheme() {
+    setState(() {
+      _themeIndex = (_themeIndex + 1) % _kRaceThemes.length;
+    });
+  }
+
+  Future<void> _checkThemeHint() async {
+    final prefs = await SharedPreferences.getInstance();
+    final dismissed = prefs.getBool(_kHintPrefKey) ?? false;
+    if (!dismissed && mounted) {
+      _hintShowTimer = Timer(const Duration(milliseconds: 1800), () {
+        if (mounted) {
+          setState(() => _showThemeHint = true);
+          _hintDismissTimer = Timer(const Duration(seconds: 10), () {
+            if (mounted) setState(() => _showThemeHint = false);
+          });
+        }
+      });
+    }
+  }
+
+  Future<void> _dismissThemeHint() async {
+    setState(() => _showThemeHint = false);
+    _hintDismissTimer?.cancel();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_kHintPrefKey, true);
+  }
+
   void _endRaceImmediately() {
     unawaited(_saveAndNavigate());
   }
 
   Future<void> _saveAndNavigate() async {
+    TelemetryService.instance.endSession();
     final now = DateTime.now();
     final gpsSource = GpsSourceManager.instance.activeSource.info;
     final record = RaceSessionRecord(
@@ -328,37 +481,53 @@ class _RaceScreenState extends State<RaceScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: _kBg,
-      body: Stack(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(18),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _LeftColumn(lapNumber: _lapNumber),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _CenterColumn(
-                    lapMs: _lapMs,
-                    eventState: _eventState,
-                    deltaMs: _deltaMs,
-                    sectors: List.unmodifiable(_currentSectors),
-                    hasSectors: widget.track.sectorBoundaries.isNotEmpty,
-                    sectorFeedbackColors: List.unmodifiable(_sectorFeedbackColors),
-                    totalRaceMs: _totalRaceMs,
-                    hasStarted: _hasStarted,
-                    bestLapMs: _bestLapMs,
+    final theme = _kRaceThemes[_themeIndex];
+    return _RaceThemeScope(
+      theme: theme,
+      child: Scaffold(
+        backgroundColor: theme.bg,
+        body: Stack(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(18),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _LeftColumn(lapNumber: _lapNumber),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _CenterColumn(
+                      lapMs: _lapMs,
+                      eventState: _eventState,
+                      deltaMs: _deltaMs,
+                      sectors: List.unmodifiable(_currentSectors),
+                      hasSectors: widget.track.sectorBoundaries.isNotEmpty,
+                      sectorFeedbackColors: List.unmodifiable(_sectorFeedbackColors),
+                      totalRaceMs: _totalRaceMs,
+                      hasStarted: _hasStarted,
+                      bestLapMs: _bestLapMs,
+                      speedKmh: _speedKmh,
+                    ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                _RightColumn(onEnd: _endRaceImmediately),
-              ],
+                  const SizedBox(width: 12),
+                  _RightColumn(onEnd: _endRaceImmediately),
+                ],
+              ),
             ),
-          ),
-          _EventBorder(eventState: _eventState),
-        ],
+            _EventBorder(eventState: _eventState),
+            Positioned(
+              top: 8,
+              right: 8,
+              child: _ThemeToggleButton(onTap: _cycleTheme),
+            ),
+            if (_showThemeHint)
+              Positioned(
+                top: 44,
+                right: 8,
+                child: _ThemeHint(onDismiss: _dismissThemeHint),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -479,6 +648,7 @@ class _LapCounter extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = _RaceThemeScope.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -488,16 +658,19 @@ class _LapCounter extends StatelessWidget {
             fontSize: 10,
             fontWeight: FontWeight.w700,
             letterSpacing: 2,
-            color: Colors.white.withAlpha(71),
+            color: theme.textVeryDim,
           ),
         ),
-        Text(
-          '$lapNumber',
-          style: GoogleFonts.rajdhani(
-            fontSize: 60,
-            fontWeight: FontWeight.w700,
-            color: Colors.white,
-            height: 1,
+        SizedBox(
+          width: 118,
+          child: Text(
+            '$lapNumber',
+            style: GoogleFonts.spaceMono(
+              fontSize: 52,
+              fontWeight: FontWeight.w700,
+              color: theme.textPrimary,
+              height: 1,
+            ),
           ),
         ),
       ],
@@ -586,8 +759,8 @@ class _SectorCell extends StatelessWidget {
           if (filled)
             Text(
               (timeMs! / 1000).toStringAsFixed(3),
-              style: GoogleFonts.rajdhani(
-                fontSize: 18,
+              style: GoogleFonts.spaceMono(
+                fontSize: 14,
                 fontWeight: FontWeight.w700,
                 color: color,
               ),
@@ -619,6 +792,7 @@ class _CenterColumn extends StatelessWidget {
   final int totalRaceMs;
   final bool hasStarted;
   final int? bestLapMs;
+  final double? speedKmh;
 
   const _CenterColumn({
     required this.lapMs,
@@ -630,6 +804,7 @@ class _CenterColumn extends StatelessWidget {
     required this.totalRaceMs,
     required this.hasStarted,
     required this.bestLapMs,
+    required this.speedKmh,
   });
 
   @override
@@ -645,7 +820,7 @@ class _CenterColumn extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             mainAxisSize: MainAxisSize.min,
             children: [
-              _buildContent(),
+              _buildContent(context),
             ],
           ),
         ),
@@ -653,7 +828,8 @@ class _CenterColumn extends StatelessWidget {
     );
   }
 
-  Widget _buildContent() {
+  Widget _buildContent(BuildContext context) {
+    final theme = _RaceThemeScope.of(context);
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -670,29 +846,47 @@ class _CenterColumn extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 8),
-        if (eventState == RaceEventState.personalRecord) ...[
-          _PrBanner(),
-          const SizedBox(height: 8),
-        ],
-        Text(
-          'TEMPO DA VOLTA',
-          style: GoogleFonts.rajdhani(
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 1.5,
-            color: Colors.white.withAlpha(71),
-          ),
+        SizedBox(
+          height: _kPrBannerHeight,
+          child: eventState == RaceEventState.personalRecord
+              ? _PrBanner()
+              : null,
         ),
-        const SizedBox(height: 4),
-        Text(
-          _formatMs(lapMs),
-          key: const Key('race_lap_time'),
-          style: GoogleFonts.rajdhani(
-            fontSize: 96,
-            fontWeight: FontWeight.w700,
-            color: Colors.white,
-            height: 1,
-            letterSpacing: -1,
+        const SizedBox(height: 8),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              _SpeedDisplay(speedKmh: speedKmh),
+              const SizedBox(width: 24),
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'TEMPO DA VOLTA',
+                    style: GoogleFonts.rajdhani(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1.5,
+                      color: theme.textVeryDim,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    _formatMs(lapMs),
+                    key: const Key('race_lap_time'),
+                    style: GoogleFonts.spaceMono(
+                      fontSize: 76,
+                      fontWeight: FontWeight.w700,
+                      color: theme.textPrimary,
+                      height: 1,
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
         const SizedBox(height: 8),
@@ -705,6 +899,47 @@ class _CenterColumn extends StatelessWidget {
             sectorFeedbackColors: sectorFeedbackColors,
           ),
         ],
+      ],
+    );
+  }
+}
+
+class _SpeedDisplay extends StatelessWidget {
+  final double? speedKmh;
+
+  const _SpeedDisplay({required this.speedKmh});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = _RaceThemeScope.of(context);
+    final value = speedKmh != null ? speedKmh!.toStringAsFixed(0) : '—';
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          'KM/H',
+          style: GoogleFonts.rajdhani(
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 1.5,
+            color: theme.textVeryDim,
+          ),
+        ),
+        const SizedBox(height: 4),
+        SizedBox(
+          width: 108,
+          child: Text(
+            value,
+            key: const Key('race_speed'),
+            textAlign: TextAlign.center,
+            style: GoogleFonts.spaceMono(
+              fontSize: 52,
+              fontWeight: FontWeight.w700,
+              color: theme.textPrimary,
+              height: 1,
+            ),
+          ),
+        ),
       ],
     );
   }
@@ -741,36 +976,27 @@ class _DeltaPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return switch (eventState) {
-      RaceEventState.neutral => const SizedBox(height: 36),
-      RaceEventState.melhorVolta => _pill(
-          text: 'MELHOR',
-          color: _kPurple,
-          bgAlpha: 26,
-        ),
-      RaceEventState.voltaMelhor => _pill(
-          text: '▲ +${_formatDelta(deltaMs ?? 0)}',
-          color: _kGreen,
-          bgAlpha: 26,
-        ),
-      RaceEventState.voltaPior => _pill(
-          text: '▼ −${_formatDelta((-(deltaMs ?? 0)).abs())}',
-          color: _kRed,
-          bgAlpha: 26,
-        ),
-      RaceEventState.personalRecord => _pill(
-          text: '▲ +${_formatDelta(deltaMs ?? 0)}',
-          color: _kGreen,
-          bgAlpha: 26,
-        ),
+    final (text, color) = switch (eventState) {
+      RaceEventState.neutral => (null, null),
+      RaceEventState.melhorVolta => ('MELHOR', _kPurple),
+      RaceEventState.voltaMelhor => ('▲ +${_formatDelta(deltaMs ?? 0)}', _kGreen),
+      RaceEventState.voltaPior => ('▼ −${_formatDelta((-(deltaMs ?? 0)).abs())}', _kRed),
+      RaceEventState.personalRecord => ('▲ +${_formatDelta(deltaMs ?? 0)}', _kGreen),
     };
+
+    return SizedBox(
+      height: 36,
+      child: text == null
+          ? const SizedBox.shrink()
+          : _pill(text: text, color: color!),
+    );
   }
 
-  Widget _pill({required String text, required Color color, required int bgAlpha}) {
+  Widget _pill({required String text, required Color color}) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
       decoration: BoxDecoration(
-        color: color.withAlpha(bgAlpha),
+        color: color.withAlpha(26),
         borderRadius: BorderRadius.circular(4),
       ),
       child: Text(
@@ -810,6 +1036,7 @@ class _TotalTime extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = _RaceThemeScope.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
@@ -819,16 +1046,16 @@ class _TotalTime extends StatelessWidget {
             fontSize: 10,
             fontWeight: FontWeight.w700,
             letterSpacing: 2,
-            color: Colors.white.withAlpha(71),
+            color: theme.textVeryDim,
           ),
         ),
         Text(
           hasStarted ? _formatMs(totalRaceMs) : '—',
           key: const Key('race_total_time'),
-          style: GoogleFonts.rajdhani(
-            fontSize: 20,
+          style: GoogleFonts.spaceMono(
+            fontSize: 16,
             fontWeight: FontWeight.w700,
-            color: Colors.white.withAlpha(153),
+            color: theme.textDim,
           ),
         ),
       ],
@@ -843,6 +1070,7 @@ class _BestLap extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = _RaceThemeScope.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
@@ -852,13 +1080,13 @@ class _BestLap extends StatelessWidget {
             fontSize: 10,
             fontWeight: FontWeight.w700,
             letterSpacing: 2,
-            color: Colors.white.withAlpha(71),
+            color: theme.textVeryDim,
           ),
         ),
         Text(
           bestLapMs != null ? _formatMs(bestLapMs!) : '—',
-          style: GoogleFonts.rajdhani(
-            fontSize: 26,
+          style: GoogleFonts.spaceMono(
+            fontSize: 18,
             fontWeight: FontWeight.w700,
             color: _kPurple,
           ),
@@ -968,6 +1196,193 @@ class _EndButtonState extends State<_EndButton>
   }
 }
 
+
+// ── THEME TOGGLE ─────────────────────────────────────────────────────────────
+
+class _ThemeToggleButton extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _ThemeToggleButton({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = _RaceThemeScope.of(context);
+    return Pressable(
+      onTap: onTap,
+      child: Container(
+        key: const Key('race_theme_toggle'),
+        width: 28,
+        height: 28,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: theme.textPrimary.withAlpha(51),
+            width: 1.2,
+          ),
+        ),
+        child: Icon(
+          Icons.palette_outlined,
+          size: 14,
+          color: theme.textPrimary.withAlpha(128),
+        ),
+      ),
+    );
+  }
+}
+
+class _ThemeHint extends StatefulWidget {
+  final VoidCallback onDismiss;
+
+  const _ThemeHint({required this.onDismiss});
+
+  @override
+  State<_ThemeHint> createState() => _ThemeHintState();
+}
+
+class _ThemeHintState extends State<_ThemeHint>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _fadeCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _fadeCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 350),
+    );
+    _fadeCtrl.forward();
+  }
+
+  @override
+  void dispose() {
+    _fadeCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _fadeCtrl,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () {},
+        child: Container(
+          key: const Key('race_theme_hint'),
+          width: 244,
+          padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+          decoration: BoxDecoration(
+            color: const Color(0xF0111111),
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(10),
+              topRight: Radius.circular(4),
+              bottomLeft: Radius.circular(10),
+              bottomRight: Radius.circular(10),
+            ),
+            border: Border.all(color: Colors.white.withAlpha(35), width: 1),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'TOQUE PARA MUDAR O TEMA',
+                style: GoogleFonts.rajdhani(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.5,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _ThemeSwatch(
+                    name: _kThemeDark.name,
+                    color: _kThemeDark.bg,
+                    isLight: false,
+                  ),
+                  const SizedBox(width: 10),
+                  _ThemeSwatch(
+                    name: _kThemeBlue.name,
+                    color: _kThemeBlue.bg,
+                    isLight: false,
+                  ),
+                  const SizedBox(width: 10),
+                  _ThemeSwatch(
+                    name: _kThemeDay.name,
+                    color: _kThemeDay.bg,
+                    isLight: true,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              GestureDetector(
+                onTap: widget.onDismiss,
+                child: Text(
+                  'NÃO MOSTRAR NOVAMENTE',
+                  style: GoogleFonts.rajdhani(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1,
+                    color: Colors.white.withAlpha(128),
+                    decoration: TextDecoration.underline,
+                    decorationColor: Colors.white.withAlpha(60),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ThemeSwatch extends StatelessWidget {
+  final String name;
+  final Color color;
+  final bool isLight;
+
+  const _ThemeSwatch({
+    required this.name,
+    required this.color,
+    required this.isLight,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 12,
+          height: 12,
+          decoration: BoxDecoration(
+            color: color,
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: isLight
+                  ? Colors.black.withAlpha(80)
+                  : Colors.white.withAlpha(80),
+              width: 1,
+            ),
+          ),
+        ),
+        const SizedBox(width: 4),
+        Text(
+          name,
+          style: GoogleFonts.rajdhani(
+            fontSize: 10,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 1,
+            color: Colors.white.withAlpha(153),
+          ),
+        ),
+      ],
+    );
+  }
+}
 
 String _formatMs(int ms) {
   final m = ms ~/ 60000;

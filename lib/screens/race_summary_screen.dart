@@ -8,6 +8,7 @@ import '../models/race_session.dart';
 import '../models/track.dart';
 import '../services/gps_source.dart';
 import '../services/lap_filter.dart';
+import '../widgets/pressable.dart';
 
 const _kBg = Color(0xFF0A0A0A);
 const _kSurface = Color(0xFF141414);
@@ -101,13 +102,18 @@ class _RaceSummaryScreenState extends State<RaceSummaryScreen> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
-      builder: (ctx) => _LapDetailSheet(
-        lapNumber: lapNumber,
-        lap: lap,
-        bestLap: _bestLap,
-        sectorCount: sectorCount,
-        maxHeight: MediaQuery.of(ctx).size.height * 0.85,
-      ),
+      builder: (ctx) {
+        final mq = MediaQuery.of(ctx);
+        final safeBottom = mq.viewPadding.bottom;
+        return _LapDetailSheet(
+          lapNumber: lapNumber,
+          lap: lap,
+          bestLap: _bestLap,
+          sectorCount: sectorCount,
+          maxHeight: mq.size.height * 0.85,
+          bottomInset: safeBottom,
+        );
+      },
     );
   }
 
@@ -260,7 +266,9 @@ class _SummaryHero extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               _HeroStat(
-                label: 'MELHOR VOLTA',
+                label: bestLapNumber != null
+                    ? 'MELHOR VOLTA · V$bestLapNumber'
+                    : 'MELHOR VOLTA',
                 value: bestLapMs != null ? _formatMs(bestLapMs!) : '—',
                 color: _kPurple,
                 valueKey: const Key('summary_best_lap'),
@@ -268,10 +276,8 @@ class _SummaryHero extends StatelessWidget {
               ),
               const SizedBox(width: 32),
               _HeroStat(
-                label: 'VOLTA',
-                value: bestLapNumber != null
-                    ? '$bestLapNumber/$lapCount'
-                    : '$lapCount',
+                label: 'VOLTAS',
+                value: '$lapCount',
                 color: Colors.white,
                 valueKey: const Key('summary_lap_count'),
               ),
@@ -721,7 +727,7 @@ class _ShareButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 12, 24, 16),
-      child: GestureDetector(
+      child: Pressable(
         onTap: () {},
         child: Container(
           key: const Key('summary_share_button'),
@@ -753,6 +759,7 @@ class _LapDetailSheet extends StatelessWidget {
   final LapResult? bestLap;
   final int sectorCount;
   final double maxHeight;
+  final double bottomInset;
 
   const _LapDetailSheet({
     required this.lapNumber,
@@ -760,6 +767,7 @@ class _LapDetailSheet extends StatelessWidget {
     required this.bestLap,
     required this.sectorCount,
     required this.maxHeight,
+    this.bottomInset = 0.0,
   });
 
   @override
@@ -819,7 +827,8 @@ class _LapDetailSheet extends StatelessWidget {
               const SizedBox(height: 8),
               Flexible(
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
+                  padding: EdgeInsets.fromLTRB(
+                      24, 0, 24, max(bottomInset + 16.0, 32.0)),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: List.generate(sectorCount, (s) {

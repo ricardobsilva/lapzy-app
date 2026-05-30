@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:lapzy/models/track.dart';
 import 'package:lapzy/screens/race_screen.dart';
 import 'package:lapzy/services/lap_detector.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void _mockWakelock() {
   TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -102,6 +103,11 @@ void main() {
   setUp(() {
     _mockWakelock();
     _mockForegroundService();
+    // Garante que o hint de tema já foi dispensado nos testes visuais
+    // para que o popup não apareça e altere os goldens.
+    SharedPreferences.setMockInitialValues({
+      'race_theme_hint_dismissed': true,
+    });
   });
 
   group('evidências — bordas por volta', () {

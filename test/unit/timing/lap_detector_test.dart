@@ -1044,6 +1044,230 @@ void main() {
       });
     });
 
+    group('ordem de setores (_nextExpectedSectorIndex)', () {
+      test('setores aceitos na ordem correta S0→S1 após S/C', () async {
+        // Fluxo completo: S/C → S0 → S1. Ambos os setores devem ser aceitos.
+        final ctrl = StreamController<Position>();
+        final track = _trackWithSectors();
+        final detector = LapDetector(
+          track: track,
+          positionStreamFactory: () => ctrl.stream,
+          minLapMs: 1000,
+          minSectorMs: 1000,
+        );
+        detector.start();
+
+        final events = <LapEvent>[];
+        detector.events.listen(events.add);
+
+        final base = DateTime(2026, 1, 1, 12, 0, 0);
+
+        // S/C → _nextExpectedSectorIndex = 0
+        ctrl.add(_posAt(-23.5004, -46.625, base));
+        await Future.delayed(Duration.zero);
+        ctrl.add(_posAt(-23.4996, -46.625, base.add(const Duration(seconds: 1))));
+        await Future.delayed(Duration.zero);
+
+        // S0 (lat=-23.490) → aceito, _nextExpectedSectorIndex = 1
+        ctrl.add(_posAt(-23.4904, -46.625, base.add(const Duration(seconds: 10))));
+        await Future.delayed(Duration.zero);
+        ctrl.add(_posAt(-23.4896, -46.625, base.add(const Duration(seconds: 11))));
+        await Future.delayed(Duration.zero);
+
+        // S1 (lat=-23.480) → aceito, _nextExpectedSectorIndex = 2
+        ctrl.add(_posAt(-23.4804, -46.625, base.add(const Duration(seconds: 20))));
+        await Future.delayed(Duration.zero);
+        ctrl.add(_posAt(-23.4796, -46.625, base.add(const Duration(seconds: 21))));
+        await Future.delayed(Duration.zero);
+
+        final sectorEvents = events.whereType<SectorCrossedEvent>().toList();
+        expect(sectorEvents, hasLength(2));
+        expect(sectorEvents[0].sectorIndex, 0);
+        expect(sectorEvents[1].sectorIndex, 1);
+
+        detector.dispose();
+        await ctrl.close();
+      });
+
+      test('S1 sem S0 → rejeitado por ordem', () async {
+        // S0 é uma linha vertical em lng=-46.615 (fora do trajeto do veículo em
+        // lng=-46.625). S1 é uma linha horizontal em lat=-23.490 no trajeto.
+        // O veículo cruza S/C e S1 mas nunca S0 → S1 rejeitado por ordem.
+        final ctrl = StreamController<Position>();
+        const track = Track(
+          id: 'test',
+          name: 'Test Track',
+          startFinishLine: TrackLine(
+            a: GeoPoint(-23.500, -46.630),
+            b: GeoPoint(-23.500, -46.620),
+            widthMeters: 50.0,
+          ),
+          sectorBoundaries: [
+            // S0 (index=0): linha vertical em lng=-46.615 — o veículo em lng=-46.625
+            // está sempre no mesmo lado desta linha (sem sign-change → sem cruzamento).
+            TrackLine(
+              a: GeoPoint(-23.495, -46.615),
+              b: GeoPoint(-23.485, -46.615),
+              widthMeters: 50.0,
+            ),
+            // S1 (index=1): linha horizontal em lat=-23.490 — no trajeto do veículo.
+            TrackLine(
+              a: GeoPoint(-23.490, -46.630),
+              b: GeoPoint(-23.490, -46.620),
+              widthMeters: 50.0,
+            ),
+          ],
+        );
+        final detector = LapDetector(
+          track: track,
+          positionStreamFactory: () => ctrl.stream,
+          minLapMs: 1000,
+          minSectorMs: 1000,
+        );
+        detector.start();
+
+        final events = <LapEvent>[];
+        detector.events.listen(events.add);
+
+        final base = DateTime(2026, 1, 1, 12, 0, 0);
+
+        // S/C → _nextExpectedSectorIndex = 0
+        ctrl.add(_posAt(-23.5004, -46.625, base));
+        await Future.delayed(Duration.zero);
+        ctrl.add(_posAt(-23.4996, -46.625, base.add(const Duration(seconds: 1))));
+        await Future.delayed(Duration.zero);
+
+        // S1 (index=1) tenta cruzar sem S0 → rejeitado (esperado=0).
+        // O veículo em lng=-46.625 nunca cruza S0 (vertical em lng=-46.615).
+        ctrl.add(_posAt(-23.4904, -46.625, base.add(const Duration(seconds: 10))));
+        await Future.delayed(Duration.zero);
+        ctrl.add(_posAt(-23.4896, -46.625, base.add(const Duration(seconds: 11))));
+        await Future.delayed(Duration.zero);
+
+        expect(events.whereType<SectorCrossedEvent>(), isEmpty,
+            reason: 'S1 sem S0 deve ser rejeitado por ordem');
+
+        detector.dispose();
+        await ctrl.close();
+      });
+
+      test('burst de S0 → somente primeiro aceito, demais rejeitados por ordem', () async {
+        // Cenário real: GPS a 5Hz próximo à fronteira causa múltiplos sign-changes.
+        // Após o primeiro S0 aceito, _nextExpectedSectorIndex avança para 1 e
+        // todas as detecções subsequentes de S0 são rejeitadas.
+        final ctrl = StreamController<Position>();
+        final track = _trackWithSectors();
+        final detector = LapDetector(
+          track: track,
+          positionStreamFactory: () => ctrl.stream,
+          minLapMs: 1000,
+          minSectorMs: 1, // cooldown mínimo para não interferir com o teste
+        );
+        detector.start();
+
+        final events = <LapEvent>[];
+        detector.events.listen(events.add);
+
+        final base = DateTime(2026, 1, 1, 12, 0, 0);
+
+        // S/C → _nextExpectedSectorIndex = 0
+        ctrl.add(_posAt(-23.5004, -46.625, base));
+        await Future.delayed(Duration.zero);
+        ctrl.add(_posAt(-23.4996, -46.625, base.add(const Duration(seconds: 1))));
+        await Future.delayed(Duration.zero);
+
+        // Burst: 5 cruzamentos de S0 em sequência rápida (simula 5 Hz na fronteira)
+        for (int i = 0; i < 5; i++) {
+          final t = base.add(Duration(seconds: 10 + i * 2));
+          ctrl.add(_posAt(-23.4904, -46.625, t));
+          await Future.delayed(Duration.zero);
+          ctrl.add(_posAt(-23.4896, -46.625, t.add(const Duration(seconds: 1))));
+          await Future.delayed(Duration.zero);
+          ctrl.add(_posAt(-23.4904, -46.625, t.add(const Duration(seconds: 1))));
+          await Future.delayed(Duration.zero);
+        }
+
+        final sectorEvents = events.whereType<SectorCrossedEvent>().toList();
+        expect(sectorEvents, hasLength(1),
+            reason: 'Burst de S0 deve gerar exatamente 1 evento (ordem rejeita os demais)');
+        expect(sectorEvents.first.sectorIndex, 0);
+
+        detector.dispose();
+        await ctrl.close();
+      });
+
+      test('S0 aceito de novo na volta seguinte (após nova S/C)', () async {
+        // Garante que _nextExpectedSectorIndex é resetado para 0 a cada nova S/C.
+        // O veículo retorna ao sul via lng=-46.650 (fora do range de S/C e S0)
+        // para evitar disparar linhas desnecessárias na volta de retorno.
+        final ctrl = StreamController<Position>();
+        const track = Track(
+          id: 'test',
+          name: 'Test Track',
+          startFinishLine: TrackLine(
+            a: GeoPoint(-23.500, -46.630),
+            b: GeoPoint(-23.500, -46.620),
+            widthMeters: 50.0,
+          ),
+          sectorBoundaries: [
+            TrackLine(
+              a: GeoPoint(-23.490, -46.630),
+              b: GeoPoint(-23.490, -46.620),
+              widthMeters: 50.0,
+            ),
+          ],
+        );
+        final detector = LapDetector(
+          track: track,
+          positionStreamFactory: () => ctrl.stream,
+          minLapMs: 20000,
+          minSectorMs: 1000,
+        );
+        detector.start();
+
+        final events = <LapEvent>[];
+        detector.events.listen(events.add);
+
+        final base = DateTime(2026, 1, 1, 12, 0, 0);
+
+        // Volta 1: S/C → S0
+        ctrl.add(_posAt(-23.5004, -46.625, base));
+        await Future.delayed(Duration.zero);
+        ctrl.add(_posAt(-23.4996, -46.625, base.add(const Duration(seconds: 1))));
+        await Future.delayed(Duration.zero);
+
+        ctrl.add(_posAt(-23.4904, -46.625, base.add(const Duration(seconds: 10))));
+        await Future.delayed(Duration.zero);
+        ctrl.add(_posAt(-23.4896, -46.625, base.add(const Duration(seconds: 11))));
+        await Future.delayed(Duration.zero);
+
+        // Retorno ao sul via lng=-46.650 (fora do range das linhas em lng=-46.630..-46.620)
+        // → não dispara S/C nem S0 nessa passagem.
+        ctrl.add(_posAt(-23.5100, -46.650, base.add(const Duration(seconds: 20))));
+        await Future.delayed(Duration.zero);
+
+        // Volta 2: S/C (t=30s > minLapMs=20s desde t≈0.5s) → S0
+        ctrl.add(_posAt(-23.5004, -46.625, base.add(const Duration(seconds: 30))));
+        await Future.delayed(Duration.zero);
+        ctrl.add(_posAt(-23.4996, -46.625, base.add(const Duration(seconds: 31))));
+        await Future.delayed(Duration.zero);
+
+        ctrl.add(_posAt(-23.4904, -46.625, base.add(const Duration(seconds: 40))));
+        await Future.delayed(Duration.zero);
+        ctrl.add(_posAt(-23.4896, -46.625, base.add(const Duration(seconds: 41))));
+        await Future.delayed(Duration.zero);
+
+        final sectorEvents = events.whereType<SectorCrossedEvent>().toList();
+        expect(sectorEvents, hasLength(2),
+            reason: 'S0 deve ser aceito em cada volta após S/C');
+        expect(sectorEvents[0].sectorIndex, 0);
+        expect(sectorEvents[1].sectorIndex, 0);
+
+        detector.dispose();
+        await ctrl.close();
+      });
+    });
+
     group('TASK-018: cooldown por fronteira de setor', () {
       test('segundo cruzamento de setor dentro do cooldown → rejeitado', () async {
         final ctrl = StreamController<Position>();
@@ -1084,14 +1308,17 @@ void main() {
         await ctrl.close();
       });
 
-      test('segundo cruzamento de setor após o cooldown → aceito', () async {
+      test('segundo cruzamento do mesmo setor na mesma volta → rejeitado por ordem', () async {
+        // Mesmo que o cooldown já tenha passado, o setor 0 não pode cruzar duas
+        // vezes na mesma volta: após o primeiro aceite, _nextExpectedSectorIndex
+        // avança para 1, e tentativas de cruzar o setor 0 novamente são rejeitadas.
         final ctrl = StreamController<Position>();
         final track = _trackWithSectors();
         final detector = LapDetector(
           track: track,
           positionStreamFactory: () => ctrl.stream,
           minLapMs: 1000,
-          minSectorMs: 5000, // 5s de cooldown
+          minSectorMs: 5000,
         );
         detector.start();
 
@@ -1100,20 +1327,19 @@ void main() {
 
         final base = DateTime(2026, 1, 1, 12, 0, 0);
 
-        // Primeiro cruzamento do setor 0 (sul→norte)
+        // Primeiro cruzamento do setor 0 (sul→norte) — aceito
         ctrl.add(_posAt(-23.4904, -46.625, base));
         await Future.delayed(Duration.zero);
         ctrl.add(_posAt(-23.4896, -46.625,
             base.add(const Duration(seconds: 1))));
         await Future.delayed(Duration.zero);
 
-        // Recuo imediato ao sul (2s) — back-crossing dentro do cooldown de 5s
-        // → rejeitado pelo cooldown, reestabelece GPS ao sul para a próxima volta.
+        // Recuo imediato ao sul (2s) — back-crossing dentro do cooldown
         ctrl.add(_posAt(-23.4904, -46.625,
             base.add(const Duration(seconds: 2))));
         await Future.delayed(Duration.zero);
 
-        // Segundo cruzamento a 20s (> cooldown de 5s desde o primeiro)
+        // Segundo cruzamento a 20s — cooldown passou, mas fora de ordem → rejeitado
         ctrl.add(_posAt(-23.4904, -46.625,
             base.add(const Duration(seconds: 20))));
         await Future.delayed(Duration.zero);
@@ -1122,8 +1348,8 @@ void main() {
         await Future.delayed(Duration.zero);
 
         final sectorEvents = events.whereType<SectorCrossedEvent>().toList();
-        expect(sectorEvents, hasLength(2),
-            reason: 'Segundo cruzamento após o cooldown deve ser aceito');
+        expect(sectorEvents, hasLength(1),
+            reason: 'Setor 0 não pode cruzar duas vezes na mesma volta (ordem)');
 
         detector.dispose();
         await ctrl.close();

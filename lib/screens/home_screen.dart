@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../services/gps_source.dart';
 import '../services/gps_source_manager.dart';
+import '../widgets/pressable.dart';
 import '../widgets/track_selection_sheet.dart';
 import 'gps_source_screen.dart';
 import 'race_history_screen.dart';
@@ -90,7 +91,7 @@ class _GpsBannerState extends State<_GpsBanner>
   Widget build(BuildContext context) {
     final badgeColor = Color(widget.info.badgeArgb);
 
-    return GestureDetector(
+    return Pressable(
       key: const Key('home_gps_banner'),
       onTap: widget.onTap,
       child: AnimatedBuilder(
@@ -208,7 +209,13 @@ class _TopBar extends StatelessWidget {
             ],
           ),
           _Logo(),
-          _CircleIconButton(icon: Icons.person_outline),
+          _CircleIconButton(
+            key: const Key('home_gps_settings_button'),
+            icon: Icons.satellite_alt_outlined,
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const GpsSourceScreen()),
+            ),
+          ),
         ],
       ),
     );
@@ -245,7 +252,7 @@ class _CircleIconButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return Pressable(
       onTap: onTap,
       child: Container(
         width: 28,
@@ -342,29 +349,23 @@ class _IniciarButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
-        splashColor: Colors.white.withAlpha(30),
-        highlightColor: Colors.white.withAlpha(15),
-        child: Ink(
-          width: 240,
-          height: 64,
-          decoration: BoxDecoration(
-            color: const Color(0xFF00E676),
-            borderRadius: BorderRadius.circular(14),
-          ),
-          child: Center(
-            child: Text(
-              'INICIAR',
-              style: GoogleFonts.spaceMono(
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 4,
-                color: Colors.black,
-              ),
+    return Pressable(
+      onTap: onTap,
+      child: Container(
+        width: 240,
+        height: 64,
+        decoration: BoxDecoration(
+          color: const Color(0xFF00E676),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Center(
+          child: Text(
+            'INICIAR',
+            style: GoogleFonts.spaceMono(
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 4,
+              color: Colors.black,
             ),
           ),
         ),

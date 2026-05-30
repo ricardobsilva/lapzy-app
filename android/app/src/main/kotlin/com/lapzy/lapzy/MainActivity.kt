@@ -7,11 +7,13 @@ import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
 
-    private val channelName = "lapzy/foreground_service"
+    private val foregroundChannel = "lapzy/foreground_service"
+    private lateinit var gpsChannels: LapzyGpsChannels
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, channelName)
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, foregroundChannel)
             .setMethodCallHandler { call, result ->
                 when (call.method) {
                     "start" -> {
@@ -33,5 +35,8 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
+
+        gpsChannels = LapzyGpsChannels(this)
+        gpsChannels.setup(flutterEngine)
     }
 }

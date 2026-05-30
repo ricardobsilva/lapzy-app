@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../models/race_session_record.dart';
 import '../models/track.dart';
 import '../repositories/race_session_repository.dart';
+import '../widgets/pressable.dart';
 import 'race_summary_screen.dart';
 
 const _kBg = Color(0xFF0A0A0A);
@@ -70,7 +71,7 @@ class _TopBar extends StatelessWidget {
         children: [
           Align(
             alignment: Alignment.centerLeft,
-            child: GestureDetector(
+            child: Pressable(
               key: const Key('history_back_button'),
               onTap: () => Navigator.of(context).pop(),
               child: Text(
@@ -324,7 +325,7 @@ class _GhostButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return Pressable(
       key: const Key('history_start_race_button'),
       onTap: onTap,
       child: Container(

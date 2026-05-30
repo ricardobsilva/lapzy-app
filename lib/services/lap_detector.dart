@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import '../models/track.dart';
+import 'telemetry_service.dart';
 
 /// Evento emitido pelo LapDetector.
 sealed class LapEvent {}
@@ -106,6 +107,10 @@ class LapDetector {
   GeoPoint? _previousPosition;
   DateTime? _previousTimestamp;
 
+  /// Para cálculo de Hz — instante em que a última posição foi processada.
+  DateTime? _lastPositionWallTime;
+  int _positionCount = 0;
+
   /// Timestamp do último cruzamento válido da S/C.
   DateTime? _lastCrossingTime;
 
@@ -119,34 +124,53 @@ class LapDetector {
   /// Timestamp do último cruzamento por fronteira de setor (para cooldown).
   final List<DateTime?> _sectorLastCrossing = [];
 
+  /// Índice do próximo setor esperado na volta atual.
+  ///
+  /// -1  = antes do primeiro S/C (sem enforçamento de ordem).
+  /// N≥0 = somente o setor N pode ser aceito; outros são rejeitados.
+  /// N >= sectorBoundaries.length = todos os setores já passaram; aguarda S/C.
+  int _nextExpectedSectorIndex = -1;
+
   Stream<LapEvent> get events => _controller.stream;
 
   void start() {
     _previousPosition = null;
     _previousTimestamp = null;
     _lastCrossingTime = null;
+    _lastPositionWallTime = null;
+    _positionCount = 0;
     _recentLapMs.clear();
+    _nextExpectedSectorIndex = -1;
     _sectorLastSign
       ..clear()
       ..addAll(List.filled(track.sectorBoundaries.length, 0));
     _sectorLastCrossing
       ..clear()
       ..addAll(List.filled(track.sectorBoundaries.length, null));
+    debugPrint('[LAPZY/DET] LapDetector.start() — track="${track.name}" setores=${track.sectorBoundaries.length}');
+    TelemetryService.instance.logEvent('detector_start',
+        extra: {'track': track.name, 'sectors': track.sectorBoundaries.length});
     _gpsSub = positionStreamFactory().listen(
       _onPosition,
-      onError: (_) {
-        // Permissão negada ou erro de GPS — sem eventos, sem crash.
+      onError: (Object err) {
+        debugPrint('[LAPZY/DET] ERRO na stream do detector: $err');
       },
     );
   }
 
   void stop() {
+    debugPrint('[LAPZY/DET] LapDetector.stop() — voltas=${_recentLapMs.length} posições=$_positionCount');
+    TelemetryService.instance.logEvent('detector_stop',
+        extra: {'laps': _recentLapMs.length, 'positions': _positionCount});
     _gpsSub?.cancel();
     _gpsSub = null;
     _previousPosition = null;
     _previousTimestamp = null;
     _lastCrossingTime = null;
+    _lastPositionWallTime = null;
+    _positionCount = 0;
     _recentLapMs.clear();
+    _nextExpectedSectorIndex = -1;
     _sectorLastSign.clear();
     _sectorLastCrossing.clear();
   }
@@ -157,14 +181,31 @@ class LapDetector {
   }
 
   void _onPosition(Position pos) {
+    final now = DateTime.now();
+    final last = _lastPositionWallTime;
+    final deltaMs = last != null ? now.difference(last).inMilliseconds : null;
+    _positionCount++;
+    final hz = deltaMs != null && deltaMs > 0
+        ? (1000 / deltaMs).toStringAsFixed(2)
+        : '?';
+    debugPrint(
+      '[LAPZY/DET] POS #$_positionCount '
+      'speed=${(pos.speed * 3.6).toStringAsFixed(1)}km/h '
+      'acc=${pos.accuracy.toStringAsFixed(0)}m '
+      'Δ=${deltaMs ?? '?'}ms hz=$hz '
+      'hasPrev=${_previousPosition != null}',
+    );
+    _lastPositionWallTime = now;
+
     final current = GeoPoint(pos.latitude, pos.longitude);
     final currentTime = pos.timestamp;
     final previous = _previousPosition;
     final previousTime = _previousTimestamp;
 
     if (previous != null && previousTime != null) {
-      _checkStartFinish(previous, current, previousTime, currentTime);
-
+      // IMPORTANTE: setores verificados ANTES da S/C.
+      // Garante que um setor cruzado no mesmo par GPS que a S/C seja emitido
+      // antes do LapCrossedEvent — evitando rejeição por _nextSectorIndex=0.
       for (int i = 0; i < track.sectorBoundaries.length; i++) {
         final sectorTime = _checkSectorCrossing(
           previous, current, previousTime, currentTime,
@@ -172,11 +213,15 @@ class LapDetector {
         );
         if (sectorTime != null) {
           debugPrint(
-            '[LapDetector] Setor $i cruzado — timestamp=${sectorTime.toIso8601String()}',
+            '[LAPZY/DET] Setor $i cruzado — timestamp=${sectorTime.toIso8601String()}',
           );
+          TelemetryService.instance.logEvent('sector_crossed',
+              gpsTime: sectorTime, sectorIdx: i);
           _controller.add(SectorCrossedEvent(i, sectorTime));
         }
       }
+
+      _checkStartFinish(previous, current, previousTime, currentTime);
     }
 
     // Atualiza sinal por setor após verificar cruzamentos — o sinal anterior
@@ -236,7 +281,37 @@ class LapDetector {
 
     if (crossingTime == null) return null;
 
-    // ── 3. COOLDOWN ────────────────────────────────────────────────────────
+    // ── 3. CANDIDATO DETECTADO ────────────────────────────────────────────
+    debugPrint(
+      '[LapDetector] Setor $index candidato detectado — '
+      'nextExpected=$_nextExpectedSectorIndex',
+    );
+    TelemetryService.instance.logEvent(
+      'sector_candidate_detected',
+      gpsTime: crossingTime,
+      sectorIdx: index,
+      extra: {'next_expected': _nextExpectedSectorIndex},
+    );
+
+    // ── 5. ORDEM DE SETORES ────────────────────────────────────────────────
+    // Garante que cada setor seja aceito somente uma vez por volta e na ordem
+    // correta. Antes do primeiro S/C (_nextExpectedSectorIndex == -1), a ordem
+    // não é enforçada (apenas cooldown protege contra burst).
+    if (_nextExpectedSectorIndex >= 0 && index != _nextExpectedSectorIndex) {
+      debugPrint(
+        '[LapDetector] Setor $index rejeitado (fora de ordem) — '
+        'esperado=$_nextExpectedSectorIndex',
+      );
+      TelemetryService.instance.logEvent(
+        'sector_rejected_order',
+        sectorIdx: index,
+        reason: 'out_of_order',
+        extra: {'expected': _nextExpectedSectorIndex},
+      );
+      return null;
+    }
+
+    // ── 6. COOLDOWN ────────────────────────────────────────────────────────
     final lastCrossing = _sectorLastCrossing[index];
     if (lastCrossing != null) {
       final ms = crossingTime.difference(lastCrossing).inMilliseconds;
@@ -245,11 +320,17 @@ class LapDetector {
           '[LapDetector] Setor $index rejeitado (cooldown) — '
           'ms=$ms < minSectorMs=$minSectorMs',
         );
+        TelemetryService.instance.logEvent('sector_rejected_cooldown',
+            gpsTime: crossingTime,
+            sectorIdx: index,
+            reason: 'cooldown',
+            extra: {'ms_since_last': ms, 'min_sector_ms': minSectorMs});
         return null;
       }
     }
 
     _sectorLastCrossing[index] = crossingTime;
+    _nextExpectedSectorIndex = index + 1;
     return crossingTime;
   }
 
@@ -286,6 +367,14 @@ class LapDetector {
         'perpCurr=${perpCurr.toStringAsFixed(1)}m '
         'threshold=${threshold.toStringAsFixed(1)}m',
       );
+      TelemetryService.instance.logEvent('sector_rejected_proximity',
+          sectorIdx: index,
+          reason: 'perp_distance',
+          extra: {
+            'perp_prev_m': perpPrev.toStringAsFixed(1),
+            'perp_curr_m': perpCurr.toStringAsFixed(1),
+            'threshold_m': threshold.toStringAsFixed(1),
+          });
       return null;
     }
 
@@ -329,6 +418,10 @@ class LapDetector {
           '[LapDetector] S/C rejeitado (cooldown) — '
           'msSinceLast=$msSinceLast < minLapMs=$minLapMs',
         );
+        TelemetryService.instance.logEvent('lap_rejected_cooldown',
+            gpsTime: crossingTime,
+            reason: 'cooldown',
+            extra: {'ms_since_last': msSinceLast, 'min_lap_ms': minLapMs});
         return;
       }
     }
@@ -350,6 +443,8 @@ class LapDetector {
             '[LapDetector] S/C suspeito — '
             'lapMs=$lapMs | mediana=$median | desvio=$deviation',
           );
+          TelemetryService.instance.logEvent('lap_suspect',
+              gpsTime: crossingTime, valueMs: lapMs, medianMs: median);
           event = LapCrossedSuspectEvent(
             crossingTime,
             lapMs: lapMs,
@@ -359,6 +454,8 @@ class LapDetector {
           debugPrint(
             '[LapDetector] S/C válido — lapMs=$lapMs | mediana=$median',
           );
+          TelemetryService.instance.logEvent('lap_crossed',
+              gpsTime: crossingTime, valueMs: lapMs, medianMs: median);
           _updateRecentLaps(lapMs);
           event = LapCrossedEvent(crossingTime);
         }
@@ -366,6 +463,8 @@ class LapDetector {
         debugPrint(
           '[LapDetector] S/C válido (sem mediana ainda) — lapMs=$lapMs',
         );
+        TelemetryService.instance.logEvent('lap_crossed',
+            gpsTime: crossingTime, valueMs: lapMs);
         _updateRecentLaps(lapMs);
         event = LapCrossedEvent(crossingTime);
       }
@@ -374,10 +473,27 @@ class LapDetector {
         '[LapDetector] S/C inicial — '
         'timestamp=${crossingTime.toIso8601String()}',
       );
+      TelemetryService.instance.logEvent('lap_start', gpsTime: crossingTime);
       event = LapCrossedEvent(crossingTime);
     }
 
     _lastCrossingTime = crossingTime;
+    if (_nextExpectedSectorIndex > 0 &&
+        _nextExpectedSectorIndex < track.sectorBoundaries.length) {
+      debugPrint(
+        '[LapDetector] Volta fechada antes de completar setores — '
+        'próximo esperado=$_nextExpectedSectorIndex '
+        'total=${track.sectorBoundaries.length}',
+      );
+      TelemetryService.instance.logEvent(
+        'lap_closed_before_sector',
+        extra: {
+          'next_expected_sector': _nextExpectedSectorIndex,
+          'total_sectors': track.sectorBoundaries.length,
+        },
+      );
+    }
+    _nextExpectedSectorIndex = 0;
     _controller.add(event);
   }
 

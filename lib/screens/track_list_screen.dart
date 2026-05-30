@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../models/track.dart';
 import '../repositories/track_repository.dart';
+import '../widgets/pressable.dart';
 import 'track_creation_screen.dart';
 import 'track_detail_screen.dart';
 
@@ -120,7 +121,7 @@ class _TopBar extends StatelessWidget {
         children: [
           Align(
             alignment: Alignment.centerLeft,
-            child: GestureDetector(
+            child: Pressable(
               key: const Key('tracks_back_button'),
               onTap: () => Navigator.of(context).pop(),
               child: Text(
@@ -394,7 +395,7 @@ class _GhostButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return Pressable(
       key: const Key('tracks_create_button'),
       onTap: onTap,
       child: Container(
@@ -451,7 +452,7 @@ class _DeleteConfirmSheet extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 24),
-          GestureDetector(
+          Pressable(
             key: const Key('delete_confirm_button'),
             onTap: () => Navigator.of(context).pop(true),
             child: Container(
@@ -474,7 +475,7 @@ class _DeleteConfirmSheet extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 10),
-          GestureDetector(
+          Pressable(
             key: const Key('delete_cancel_button'),
             onTap: () => Navigator.of(context).pop(false),
             child: Container(

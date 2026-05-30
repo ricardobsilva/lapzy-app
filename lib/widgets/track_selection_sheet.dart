@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/track.dart';
 import '../repositories/track_repository.dart';
-import '../screens/race_screen.dart';
 import '../screens/track_creation_screen.dart';
+import 'pre_race_check_sheet.dart';
 
 void showTrackSelectionSheet(BuildContext context) {
   showModalBottomSheet(
@@ -99,11 +99,7 @@ class _TrackSelectionSheetState extends State<_TrackSelectionSheet> {
                 onSelect: (id) => setState(() => _selectedId = id),
                 onStart: (track) {
                   Navigator.of(context).pop();
-                  Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => RaceScreen(track: track),
-                    ),
-                  );
+                  showPreRaceCheckSheet(context, track);
                 },
               ),
             )

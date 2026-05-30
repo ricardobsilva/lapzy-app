@@ -6,6 +6,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../models/track.dart';
 import '../repositories/track_repository.dart';
+import '../widgets/pressable.dart';
 import 'race_screen.dart';
 import 'track_creation_screen.dart';
 
@@ -259,7 +260,7 @@ class _TopBar extends StatelessWidget {
         children: [
           Align(
             alignment: Alignment.centerLeft,
-            child: GestureDetector(
+            child: Pressable(
               key: const Key('detail_back_button'),
               onTap: () => Navigator.of(context).pop(),
               child: Text(
@@ -362,7 +363,7 @@ class _EditButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return Pressable(
       key: const Key('detail_edit_button'),
       onTap: onTap,
       child: Container(
@@ -401,7 +402,7 @@ class _PostEditButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return Pressable(
       onTap: onTap,
       child: Container(
         height: 48,
