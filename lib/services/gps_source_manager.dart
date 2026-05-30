@@ -36,9 +36,11 @@ class GpsSourceManager {
     required GpsSource initialSource,
     required InternalGpsService internalFallback,
     SharedPreferences? prefs,
+    Duration? watchdogTimeout,
   })  : _activeSource = initialSource,
         _internalFallback = internalFallback,
-        _prefs = prefs;
+        _prefs = prefs,
+        _watchdogTimeout = watchdogTimeout ?? _kFirstPositionTimeout;
 
   // ── singleton ──────────────────────────────────────────────────────────────
 
@@ -56,16 +58,20 @@ class GpsSourceManager {
   ///
   /// [internalFallback] é o serviço usado no fallback automático quando o GPS
   /// externo desconecta. Defaults para `Stream.empty()` em testes.
+  /// [watchdogTimeout] controla o timeout do watchdog de primeira posição.
+  /// Passe `Duration.zero` para desabilitar em testes que não precisam do watchdog.
   factory GpsSourceManager.forTesting({
     required GpsSource activeSource,
     InternalGpsService? internalFallback,
     SharedPreferences? prefs,
+    Duration watchdogTimeout = Duration.zero,
   }) {
     return GpsSourceManager._(
       initialSource: activeSource,
       internalFallback: internalFallback ??
           InternalGpsService(streamFactory: () => const Stream.empty()),
       prefs: prefs,
+      watchdogTimeout: watchdogTimeout,
     );
   }
 
@@ -87,6 +93,19 @@ class GpsSourceManager {
 
   /// Timestamp GPS da posição anterior — usada para delta_gps no telemetry.
   DateTime? _lastGpsTime;
+
+  /// Timer de watchdog: reinicia a subscription se nenhum dado chegar em tempo.
+  Timer? _firstPositionTimer;
+
+  /// Quanto tempo esperar pelo primeiro dado antes de reiniciar.
+  static const _kFirstPositionTimeout = Duration(seconds: 15);
+
+  /// Número máximo de tentativas automáticas de restart do watchdog.
+  static const _kMaxWatchdogRetries = 2;
+
+  /// Timeout efetivo do watchdog — injetável via [forTesting].
+  /// Duration.zero desabilita o watchdog completamente.
+  final Duration _watchdogTimeout;
 
   // ── interface pública ──────────────────────────────────────────────────────
 
@@ -122,16 +141,26 @@ class GpsSourceManager {
   /// Deve ser chamado em [main] antes de [runApp]. Idempotente.
   Future<void> init() async {
     await _loadPersistedSource();
-    _subscribeToSource(_activeSource);
+    _log('source_selected: ${_activeSource.info.name} (startup)');
+    await _subscribeToSource(_activeSource);
   }
 
   // ── mudança de fonte ───────────────────────────────────────────────────────
 
   /// Ativa uma nova fonte GPS e persiste a escolha localmente.
+  ///
+  /// Idempotente: se a fonte já está ativa e a subscription está viva,
+  /// ignora a chamada para evitar reconectar desnecessariamente.
   Future<void> setActiveSource(GpsSource source) async {
-    _log('Usuário selecionou: ${source.info.name} (${source.info.connectionType.name})');
+    final alreadyActive = _sourceSub != null &&
+        _activeSource.info.name == source.info.name;
+    if (alreadyActive) {
+      _log('source_already_active_reusing: ${source.info.name} — skipping restart');
+      return;
+    }
+    _log('source_selected: ${source.info.name} (${source.info.connectionType.name}) reason=user_choice');
     _activeSource = source;
-    _subscribeToSource(source);
+    await _subscribeToSource(source);
     _emitEvent(GpsSourceChangedEvent(
       source: source,
       reason: GpsSourceChangeReason.userChoice,
@@ -139,16 +168,55 @@ class GpsSourceManager {
     await _persistSource(source);
   }
 
+  /// Reinicia a subscription da fonte ativa — útil para depuração manual.
+  Future<void> restartSource() async {
+    _log('source_start_requested: ${_activeSource.info.name} reason=manual_restart');
+    await _subscribeToSource(_activeSource);
+  }
+
+  /// Notifica que uma tela se conectou ao stream GPS.
+  void notifyScreenAttached(String screen) {
+    _log('screen_attached_to_stream: $screen src=${_activeSource.info.name}');
+  }
+
+  /// Notifica que uma tela se desconectou do stream GPS.
+  void notifyScreenDetached(String screen) {
+    _log('screen_detached_from_stream: $screen src=${_activeSource.info.name}');
+  }
+
   // ── internos ───────────────────────────────────────────────────────────────
 
-  void _subscribeToSource(GpsSource source) {
+  /// Cancela a subscription anterior, reseta estado e inicia nova subscription.
+  ///
+  /// O `await` no cancel evita race conditions onde a stream antiga ainda emite
+  /// posições após a nova subscription ter sido criada.
+  ///
+  /// [retryAttempt] conta quantas vezes o watchdog já reiniciou esta fonte.
+  /// O watchdog para após [_kMaxWatchdogRetries] tentativas.
+  Future<void> _subscribeToSource(GpsSource source, {int retryAttempt = 0}) async {
+    _firstPositionTimer?.cancel();
+    _firstPositionTimer = null;
+
     if (_sourceSub != null) {
+      _log('previous_subscription_cancel_start: prev=${_activeSource.info.name}');
       GpsDiagnosticsService.instance.onSubscriptionCancelled(_activeSource);
+      await _sourceSub!.cancel();
+      _sourceSub = null;
+      _log('previous_subscription_cancel_done');
     }
-    _sourceSub?.cancel();
+
+    _log('source_state_reset');
     _lastPositionTime = null;
+    _lastPosition = null;
+    _lastGpsTime = null;
     _positionCount = 0;
-    _log('Assinando fonte: ${source.info.name} (${source.info.connectionType.name})');
+
+    if (retryAttempt > 0) {
+      _log('subscription_restart_attempt: ${source.info.name} (tentativa $retryAttempt/$_kMaxWatchdogRetries)');
+    } else {
+      _log('new_subscription_start: ${source.info.name} (${source.info.connectionType.name})');
+    }
+
     GpsDiagnosticsService.instance.onSubscriptionStarted(source);
     _sourceSub = source.positionStream.listen(
       _onPositionReceived,
@@ -161,6 +229,46 @@ class GpsSourceManager {
         _handleSourceDone();
       },
     );
+
+    _scheduleFirstPositionWatchdog(source, retryAttempt: retryAttempt);
+  }
+
+  /// Agenda watchdog que reinicia a subscription se nenhum dado chegar em tempo.
+  ///
+  /// Reinicia até [_kMaxWatchdogRetries] vezes. Se todas as tentativas falharem,
+  /// loga [subscription_restart_failure] e para.
+  /// Desabilitado quando [_watchdogTimeout] é [Duration.zero] (testes).
+  void _scheduleFirstPositionWatchdog(GpsSource source, {required int retryAttempt}) {
+    if (_watchdogTimeout == Duration.zero) return;
+    _firstPositionTimer = Timer(_watchdogTimeout, () {
+      if (_positionCount > 0) return;
+      if (_activeSource.info.name != source.info.name) return;
+
+      if (retryAttempt < _kMaxWatchdogRetries) {
+        final nextAttempt = retryAttempt + 1;
+        _log(
+          'no_first_position_timeout: ${source.info.name} '
+          'após ${_watchdogTimeout.inSeconds}s sem dados — '
+          'reiniciando (tentativa $nextAttempt/$_kMaxWatchdogRetries)',
+        );
+        TelemetryService.instance.logEvent(
+          'gps_no_data_timeout',
+          reason: 'first_position_timeout',
+          extra: {'source': source.info.name, 'attempt': nextAttempt},
+        );
+        unawaited(_subscribeToSource(source, retryAttempt: nextAttempt));
+      } else {
+        _log(
+          'subscription_restart_failure: ${source.info.name} '
+          '— sem dados após $_kMaxWatchdogRetries tentativas de reinício',
+        );
+        TelemetryService.instance.logEvent(
+          'gps_no_data_timeout',
+          reason: 'retry_also_failed',
+          extra: {'source': source.info.name, 'attempts': retryAttempt + 1},
+        );
+      }
+    });
   }
 
   void _onPositionReceived(Position pos) {
@@ -171,6 +279,25 @@ class GpsSourceManager {
         ? (1000 / deltaMs).toStringAsFixed(2)
         : '?';
     _positionCount++;
+
+    if (_positionCount == 1) {
+      _firstPositionTimer?.cancel();
+      _firstPositionTimer = null;
+      final subStartedAt =
+          GpsDiagnosticsService.instance.current.subscriptionStartedAt;
+      final deltaFromSub = subStartedAt != null
+          ? now.difference(subStartedAt).inMilliseconds
+          : null;
+      _log(
+        'first_raw_position_received: src=${_activeSource.info.name} '
+        'Δ_subscription=${deltaFromSub ?? '?'}ms',
+      );
+      _log(
+        'first_fix_valid: lat=${pos.latitude.toStringAsFixed(6)} '
+        'acc=${pos.accuracy.toStringAsFixed(1)}m',
+      );
+    }
+
     _log(
       'POS #$_positionCount '
       'lat=${pos.latitude.toStringAsFixed(6)} '
@@ -194,29 +321,30 @@ class GpsSourceManager {
     _lastPosition = pos;
     _positionController.add(pos);
 
-    // Diagnostics: external USB GPS is already reported via onNmeaLine in
-    // UsbGpsDetector. For internal and BT sources, report here.
-    if (_activeSource.info.connectionType != GpsConnectionType.usb) {
-      GpsDiagnosticsService.instance.onPositionReceived(pos, now);
-    }
+    GpsDiagnosticsService.instance.onPositionReceived(pos, now);
   }
 
   /// Chamado quando a stream emite um erro (ex.: permissão negada).
+  ///
+  /// O `_sourceSub` é anulado antes de chamar [_subscribeToSource] para que
+  /// a nova subscription não tente await-cancelar uma stream já em erro.
   void _handleSourceError() {
     GpsDiagnosticsService.instance.onSourceError(_activeSource, 'stream_error');
     if (_activeSource.info.isExternal) {
-      _log('GPS externo com erro — fallback para GPS interno');
+      _log('source_selected: ${_internalFallback.info.name} reason=fallback_error from=${_activeSource.info.name}');
       TelemetryService.instance.logEvent('gps_fallback',
           reason: 'source_error',
           extra: {'from': _activeSource.info.name});
       _sourceSub = null;
       _activeSource = _internalFallback;
-      _subscribeToSource(_internalFallback);
+      unawaited(_subscribeToSource(_internalFallback));
       _emitEvent(GpsSourceChangedEvent(
         source: _internalFallback,
         reason: GpsSourceChangeReason.fallback,
       ));
     } else {
+      _firstPositionTimer?.cancel();
+      _firstPositionTimer = null;
       _log('GPS interno com erro — aguardando recuperação do sistema');
       TelemetryService.instance.logEvent('gps_source_error',
           reason: 'internal_gps_error');
@@ -224,21 +352,26 @@ class GpsSourceManager {
   }
 
   /// Chamado quando a stream termina (GPS externo desconectado ou stream vazia).
+  ///
+  /// O `_sourceSub` é anulado antes de chamar [_subscribeToSource] para que
+  /// a nova subscription não tente await-cancelar uma stream já encerrada.
   void _handleSourceDone() {
     GpsDiagnosticsService.instance.onSourceDone(_activeSource);
     if (_activeSource.info.isExternal) {
-      _log('GPS externo desconectado — fallback para GPS interno');
+      _log('source_selected: ${_internalFallback.info.name} reason=fallback_done from=${_activeSource.info.name}');
       TelemetryService.instance.logEvent('gps_fallback',
           reason: 'source_done',
           extra: {'from': _activeSource.info.name});
       _sourceSub = null;
       _activeSource = _internalFallback;
-      _subscribeToSource(_internalFallback);
+      unawaited(_subscribeToSource(_internalFallback));
       _emitEvent(GpsSourceChangedEvent(
         source: _internalFallback,
         reason: GpsSourceChangeReason.fallback,
       ));
     } else {
+      _firstPositionTimer?.cancel();
+      _firstPositionTimer = null;
       _log('Stream do GPS interno encerrou inesperadamente');
       TelemetryService.instance.logEvent('gps_source_done',
           reason: 'internal_stream_ended');
@@ -295,6 +428,7 @@ class GpsSourceManager {
   }
 
   void dispose() {
+    _firstPositionTimer?.cancel();
     _sourceSub?.cancel();
     _positionController.close();
     _eventController.close();

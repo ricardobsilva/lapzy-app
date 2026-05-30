@@ -5,6 +5,8 @@ import 'gps_diagnostics.dart';
 import 'gps_source.dart';
 import 'usb_gps_channel.dart';
 
+const _kStaleTimeout = Duration(seconds: 5);
+
 /// Singleton que coleta eventos do pipeline GPS e expõe um snapshot diagnóstico
 /// em tempo real para a UI e para análise pós-teste.
 ///
@@ -39,6 +41,9 @@ class GpsDiagnosticsService {
   int _nmeaCountInWindow = 0;
   DateTime? _nmeaWindowStart;
 
+  /// Timer de stale: dispara quando nenhuma posição chega em 5s após fix.
+  Timer? _staleTimer;
+
   final _ctrl = StreamController<GpsDiagnosticsSnapshot>.broadcast();
 
   GpsDiagnosticsSnapshot get current => _snap;
@@ -49,6 +54,8 @@ class GpsDiagnosticsService {
     debugPrint(
       '[LAPZY/DIAG] Subscription iniciada → ${source.info.name} (${source.info.connectionType.name})',
     );
+    _staleTimer?.cancel();
+    _staleTimer = null;
     _hzSamples.clear();
     _lastPositionWallTime = null;
     _nmeaCountInWindow = 0;
@@ -57,8 +64,18 @@ class GpsDiagnosticsService {
     _snap = GpsDiagnosticsSnapshot(
       sourceName: source.info.name,
       sourceType: source.info.connectionType,
-      fixState: GpsFixState.connecting,
+      fixState: GpsFixState.initializing,
       subscriptionStartedAt: now,
+      // Preserve USB serial fields so the diagnostics screen keeps showing
+      // the last USB state even after fallback to internal GPS.
+      usbRawBytesTotal: _snap.usbRawBytesTotal,
+      usbRawBytesPerSec: _snap.usbRawBytesPerSec,
+      usbSerialThreadAlive: _snap.usbSerialThreadAlive,
+      usbSerialState: _snap.usbSerialState,
+      usbEndpointInfo: _snap.usbEndpointInfo,
+      usbBaudRate: _snap.usbBaudRate,
+      usbLastSerialError: _snap.usbLastSerialError,
+      usbConfiguredHz: _snap.usbConfiguredHz,
     );
     _emit();
   }
@@ -74,6 +91,8 @@ class GpsDiagnosticsService {
   /// Chamado por [GpsSourceManager] quando a stream GPS emite um erro.
   void onSourceError(GpsSource source, Object error) {
     debugPrint('[LAPZY/DIAG] Erro na fonte ${source.info.name}: $error');
+    _staleTimer?.cancel();
+    _staleTimer = null;
     _snap = _snap.copyWith(fixState: GpsFixState.error);
     _emit();
   }
@@ -81,7 +100,9 @@ class GpsDiagnosticsService {
   /// Chamado por [GpsSourceManager] quando a stream GPS fecha (done).
   void onSourceDone(GpsSource source) {
     debugPrint('[LAPZY/DIAG] Stream fechada → ${source.info.name}');
-    _snap = _snap.copyWith(fixState: GpsFixState.done);
+    _staleTimer?.cancel();
+    _staleTimer = null;
+    _snap = _snap.copyWith(fixState: GpsFixState.disconnected);
     _emit();
   }
 
@@ -142,6 +163,15 @@ class GpsDiagnosticsService {
       clearHzInstantaneous: hzInstant == null,
     );
     _emit();
+
+    _staleTimer?.cancel();
+    _staleTimer = Timer(_kStaleTimeout, () {
+      if (_snap.fixState == GpsFixState.fixAcquired) {
+        debugPrint('[LAPZY/DIAG] stale: sem posição por ${_kStaleTimeout.inSeconds}s → ${_snap.sourceName}');
+        _snap = _snap.copyWith(fixState: GpsFixState.stale);
+        _emit();
+      }
+    });
   }
 
   /// Chamado por [UsbGpsDetector] para cada linha NMEA bruta recebida.
@@ -199,9 +229,9 @@ class GpsDiagnosticsService {
         _snap.nmeaDiscarded + (discardReason != null ? 1 : 0);
     final newReceived = _snap.nmeaReceived + 1;
 
-    // Estado: se estava connecting, agora está receiving
-    final newState = _snap.fixState == GpsFixState.connecting
-        ? GpsFixState.receiving
+    // Estado: se estava initializing, agora está waitingFix (dados chegando, sem fix ainda)
+    final newState = _snap.fixState == GpsFixState.initializing
+        ? GpsFixState.waitingFix
         : _snap.fixState;
 
     _snap = _snap.copyWith(
@@ -230,6 +260,7 @@ class GpsDiagnosticsService {
       usbBaudRate: diag.baudRate,
       usbLastSerialError:
           diag.lastError?.isNotEmpty == true ? diag.lastError : null,
+      usbConfiguredHz: diag.configuredHz,
     );
     _emit();
   }
@@ -239,6 +270,7 @@ class GpsDiagnosticsService {
   }
 
   void dispose() {
+    _staleTimer?.cancel();
     _ctrl.close();
   }
 }

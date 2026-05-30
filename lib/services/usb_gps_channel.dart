@@ -65,6 +65,7 @@ class UsbGpsChannel {
         baudRate: (m['baudRate'] as int?) ?? 9600,
         endpoint: (m['endpoint'] as String?) ?? '—',
         lastError: m['lastError'] as String?,
+        configuredHz: (m['configuredHz'] as int?) ?? 1,
       );
     });
   }
@@ -73,6 +74,19 @@ class UsbGpsChannel {
   Future<void> setBaudRate(int baud) async {
     try {
       await _method.invokeMethod<void>('setBaudRate', {'baud': baud});
+    } catch (_) {}
+  }
+
+  /// Configura a taxa de saída do receptor u-blox via UBX-CFG-RATE.
+  ///
+  /// Suporte por módulo:
+  ///   1 Hz  → padrão de fábrica
+  ///   5 Hz  → u-blox M8/M9 (recomendado para kart)
+  ///   10 Hz → u-blox M8/M9
+  ///   20 Hz → u-blox M9 e superior
+  Future<void> setRate(int hz) async {
+    try {
+      await _method.invokeMethod<void>('setRate', {'hz': hz});
     } catch (_) {}
   }
 }
@@ -85,6 +99,7 @@ class UsbSerialDiag {
   final int baudRate;
   final String endpoint;
   final String? lastError;
+  final int configuredHz;
 
   const UsbSerialDiag({
     required this.state,
@@ -94,6 +109,7 @@ class UsbSerialDiag {
     required this.baudRate,
     required this.endpoint,
     this.lastError,
+    this.configuredHz = 1,
   });
 }
 

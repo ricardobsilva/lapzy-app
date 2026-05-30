@@ -80,7 +80,7 @@ void main() {
         expect(find.text('Pista Teste'), findsOneWidget);
       });
 
-      testWidgets('exibe contagem total de voltas com posição da melhor', (tester) async {
+      testWidgets('exibe contagem total de voltas como número simples', (tester) async {
         // CA-BUG-002-01: a melhor volta é sempre computada a partir das voltas,
         // mesmo sem bestLapMs explícito. _lapA (83887) < _lapB (85441) → melhor = lap 1.
         await tester.pumpWidget(_buildScreen(
@@ -90,10 +90,11 @@ void main() {
         final lapCountWidget = tester.widget<Text>(
           find.byKey(const Key('summary_lap_count')),
         );
-        expect(lapCountWidget.data, '1/2');
+        expect(lapCountWidget.data, '2');
       });
 
-      testWidgets('exibe melhor volta com número/total quando disponível', (tester) async {
+      testWidgets('label MELHOR VOLTA inclui número da melhor volta', (tester) async {
+        // _lapA (83887) < _lapB (85441) → melhor = volta 1
         await tester.pumpWidget(_buildScreen(
           laps: [_lapA, _lapB],
           bestLapMs: _lapA.lapMs,
@@ -102,7 +103,8 @@ void main() {
         final lapCountWidget = tester.widget<Text>(
           find.byKey(const Key('summary_lap_count')),
         );
-        expect(lapCountWidget.data, '1/2');
+        expect(lapCountWidget.data, '2');
+        expect(find.text('MELHOR VOLTA · V1'), findsOneWidget);
       });
 
       testWidgets('exibe melhor volta quando disponível', (tester) async {
@@ -797,9 +799,8 @@ void main() {
         ));
 
         final lapCount = tester.widget<Text>(find.byKey(const Key('summary_lap_count')));
-        // Total = 4 (transparência ao piloto). Com melhor volta computada,
-        // o formato é 'bestLap/total'. O denominador deve ser sempre 4.
-        expect(lapCount.data, endsWith('/4'));
+        // Total = 4 (transparência ao piloto): exibe só o número total.
+        expect(lapCount.data, '4');
       });
 
       testWidgets('melhor volta referencia número correto da volta no total', (tester) async {
@@ -812,8 +813,10 @@ void main() {
         ));
 
         final lapCount = tester.widget<Text>(find.byKey(const Key('summary_lap_count')));
-        // melhor=volta 3 (índice 2 + 1), total=3
-        expect(lapCount.data, '3/3');
+        // total = 3 (exibido como número simples)
+        expect(lapCount.data, '3');
+        // número da melhor volta (índice 2 + 1 = 3) aparece no label MELHOR VOLTA
+        expect(find.text('MELHOR VOLTA · V3'), findsOneWidget);
       });
     });
   });

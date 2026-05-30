@@ -124,6 +124,13 @@ class LapDetector {
   /// Timestamp do último cruzamento por fronteira de setor (para cooldown).
   final List<DateTime?> _sectorLastCrossing = [];
 
+  /// Índice do próximo setor esperado na volta atual.
+  ///
+  /// -1  = antes do primeiro S/C (sem enforçamento de ordem).
+  /// N≥0 = somente o setor N pode ser aceito; outros são rejeitados.
+  /// N >= sectorBoundaries.length = todos os setores já passaram; aguarda S/C.
+  int _nextExpectedSectorIndex = -1;
+
   Stream<LapEvent> get events => _controller.stream;
 
   void start() {
@@ -133,6 +140,7 @@ class LapDetector {
     _lastPositionWallTime = null;
     _positionCount = 0;
     _recentLapMs.clear();
+    _nextExpectedSectorIndex = -1;
     _sectorLastSign
       ..clear()
       ..addAll(List.filled(track.sectorBoundaries.length, 0));
@@ -162,6 +170,7 @@ class LapDetector {
     _lastPositionWallTime = null;
     _positionCount = 0;
     _recentLapMs.clear();
+    _nextExpectedSectorIndex = -1;
     _sectorLastSign.clear();
     _sectorLastCrossing.clear();
   }
@@ -272,7 +281,37 @@ class LapDetector {
 
     if (crossingTime == null) return null;
 
-    // ── 3. COOLDOWN ────────────────────────────────────────────────────────
+    // ── 3. CANDIDATO DETECTADO ────────────────────────────────────────────
+    debugPrint(
+      '[LapDetector] Setor $index candidato detectado — '
+      'nextExpected=$_nextExpectedSectorIndex',
+    );
+    TelemetryService.instance.logEvent(
+      'sector_candidate_detected',
+      gpsTime: crossingTime,
+      sectorIdx: index,
+      extra: {'next_expected': _nextExpectedSectorIndex},
+    );
+
+    // ── 5. ORDEM DE SETORES ────────────────────────────────────────────────
+    // Garante que cada setor seja aceito somente uma vez por volta e na ordem
+    // correta. Antes do primeiro S/C (_nextExpectedSectorIndex == -1), a ordem
+    // não é enforçada (apenas cooldown protege contra burst).
+    if (_nextExpectedSectorIndex >= 0 && index != _nextExpectedSectorIndex) {
+      debugPrint(
+        '[LapDetector] Setor $index rejeitado (fora de ordem) — '
+        'esperado=$_nextExpectedSectorIndex',
+      );
+      TelemetryService.instance.logEvent(
+        'sector_rejected_order',
+        sectorIdx: index,
+        reason: 'out_of_order',
+        extra: {'expected': _nextExpectedSectorIndex},
+      );
+      return null;
+    }
+
+    // ── 6. COOLDOWN ────────────────────────────────────────────────────────
     final lastCrossing = _sectorLastCrossing[index];
     if (lastCrossing != null) {
       final ms = crossingTime.difference(lastCrossing).inMilliseconds;
@@ -291,6 +330,7 @@ class LapDetector {
     }
 
     _sectorLastCrossing[index] = crossingTime;
+    _nextExpectedSectorIndex = index + 1;
     return crossingTime;
   }
 
@@ -438,6 +478,22 @@ class LapDetector {
     }
 
     _lastCrossingTime = crossingTime;
+    if (_nextExpectedSectorIndex > 0 &&
+        _nextExpectedSectorIndex < track.sectorBoundaries.length) {
+      debugPrint(
+        '[LapDetector] Volta fechada antes de completar setores — '
+        'próximo esperado=$_nextExpectedSectorIndex '
+        'total=${track.sectorBoundaries.length}',
+      );
+      TelemetryService.instance.logEvent(
+        'lap_closed_before_sector',
+        extra: {
+          'next_expected_sector': _nextExpectedSectorIndex,
+          'total_sectors': track.sectorBoundaries.length,
+        },
+      );
+    }
+    _nextExpectedSectorIndex = 0;
     _controller.add(event);
   }
 

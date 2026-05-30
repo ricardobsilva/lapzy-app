@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../services/gps_diagnostics.dart';
 import '../services/gps_diagnostics_service.dart';
 import '../services/gps_source.dart';
+import '../services/gps_source_manager.dart';
 import '../services/usb_gps_channel.dart';
 import '../widgets/pressable.dart';
 
@@ -39,6 +40,7 @@ class _GpsDiagnosticsScreenState extends State<GpsDiagnosticsScreen> {
     _sub = _service.stream.listen((snap) {
       if (mounted) setState(() => _snap = snap);
     });
+    GpsSourceManager.instance.notifyScreenAttached('DiagnosticsScreen');
     // Tick every second to refresh elapsed times
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) setState(() {});
@@ -47,6 +49,7 @@ class _GpsDiagnosticsScreenState extends State<GpsDiagnosticsScreen> {
 
   @override
   void dispose() {
+    GpsSourceManager.instance.notifyScreenDetached('DiagnosticsScreen');
     _sub?.cancel();
     _ticker?.cancel();
     super.dispose();
@@ -76,7 +79,8 @@ class _GpsDiagnosticsScreenState extends State<GpsDiagnosticsScreen> {
                       const Divider(color: _kDivider, height: 1),
                       _NmeaSection(snap: _snap),
                     ],
-                    if (_snap.sourceType == GpsConnectionType.usb) ...[
+                    if (_snap.sourceType == GpsConnectionType.usb ||
+                        _snap.usbSerialState != null) ...[
                       const Divider(color: _kDivider, height: 1),
                       _UsbSerialSection(snap: _snap),
                     ],
@@ -211,11 +215,12 @@ class _StateSection extends StatelessWidget {
 
   static (String, Color) _stateDisplay(GpsFixState state) => switch (state) {
         GpsFixState.idle => ('INATIVO', Colors.white.withAlpha(89)),
-        GpsFixState.connecting => ('CONECTANDO', _kOrange),
-        GpsFixState.receiving => ('RECEBENDO', _kYellow),
+        GpsFixState.initializing => ('INICIALIZANDO', _kOrange),
+        GpsFixState.waitingFix => ('AGUARDANDO FIX', _kYellow),
         GpsFixState.fixAcquired => ('FIX ADQUIRIDO', _kGreen),
+        GpsFixState.stale => ('SEM SINAL', _kOrange),
         GpsFixState.error => ('ERRO', _kRed),
-        GpsFixState.done => ('DESCONECTADO', _kRed),
+        GpsFixState.disconnected => ('DESCONECTADO', _kRed),
       };
 }
 
@@ -513,11 +518,13 @@ class _UsbSerialSection extends StatelessWidget {
         _SectionHeader(label: 'SERIAL USB'),
         _DiagRow(
           label: 'Estado',
-          value: snap.usbSerialState ?? '—',
+          value: _usbStateLabel(snap.usbSerialState),
+          valueColor: _usbStateColor(snap.usbSerialState),
         ),
         _DiagRow(
-          label: 'Baud rate',
-          value: '${snap.usbBaudRate}',
+          label: 'Taxa configurada',
+          value: '${snap.usbConfiguredHz} Hz',
+          valueColor: snap.usbConfiguredHz >= 5 ? _kGreen : _kOrange,
         ),
         _DiagRow(
           label: 'Thread viva',
@@ -549,14 +556,11 @@ class _UsbSerialSection extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
           child: Row(
-            children: [9600, 38400, 115200].map((baud) {
-              final isActive = snap.usbBaudRate == baud;
+            children: [1, 5, 10].map((hz) {
+              final isActive = snap.usbConfiguredHz == hz;
               return Padding(
                 padding: const EdgeInsets.only(right: 8),
-                child: _BaudButton(
-                  baud: baud,
-                  isActive: isActive,
-                ),
+                child: _HzButton(hz: hz, isActive: isActive),
               );
             }).toList(),
           ),
@@ -566,26 +570,50 @@ class _UsbSerialSection extends StatelessWidget {
   }
 }
 
-class _BaudButton extends StatelessWidget {
-  final int baud;
+String _usbStateLabel(String? state) => switch (state) {
+      null => '—',
+      'idle' => 'inativo',
+      'detecting' => 'detectando',
+      'device_detected' => 'dispositivo detectado',
+      'requesting_permission' => 'aguardando permissão',
+      'permission_granted' => 'permissão concedida',
+      'opening_port' => 'abrindo porta',
+      'configuring_serial' => 'configurando serial',
+      'starting_reader' => 'iniciando leitura',
+      'reading' => 'lendo',
+      'done' => 'encerrado',
+      _ when state.startsWith('failed_') => 'FALHA: ${state.substring(7).replaceAll('_', ' ')}',
+      _ => state,
+    };
+
+Color? _usbStateColor(String? state) => switch (state) {
+      null || 'idle' => null,
+      'reading' => _kGreen,
+      'permission_granted' || 'device_detected' => _kYellow,
+      _ when state.startsWith('failed_') => _kRed,
+      _ => _kOrange,
+    };
+
+class _HzButton extends StatelessWidget {
+  final int hz;
   final bool isActive;
 
-  const _BaudButton({required this.baud, required this.isActive});
+  const _HzButton({required this.hz, required this.isActive});
 
   @override
   Widget build(BuildContext context) {
-    final color = isActive ? _kYellow : Colors.white.withAlpha(89);
+    final color = isActive ? _kGreen : Colors.white.withAlpha(89);
     return Pressable(
-      onTap: () => UsbGpsChannel().setBaudRate(baud),
+      onTap: () => UsbGpsChannel().setRate(hz),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-          color: isActive ? _kYellow.withAlpha(25) : Colors.transparent,
+          color: isActive ? _kGreen.withAlpha(25) : Colors.transparent,
           borderRadius: BorderRadius.circular(5),
           border: Border.all(color: color.withAlpha(120), width: 1),
         ),
         child: Text(
-          '$baud',
+          '${hz}Hz',
           style: GoogleFonts.spaceMono(
             fontSize: 11,
             fontWeight: FontWeight.w700,

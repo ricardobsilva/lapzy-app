@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import 'gps_diagnostics.dart';
 
@@ -29,9 +30,9 @@ class NmeaParseResult {
 /// O bufferização de bytes → linhas é responsabilidade do lado nativo
 /// (Kotlin), que emite cada linha via EventChannel.
 ///
-/// Sentenças suportadas:
-/// - `$GPRMC` / `$GNRMC` — posição, velocidade, heading, timestamp
-/// - `$GPGGA` / `$GNGGA` — altitude e qualidade do fix (complementar)
+/// Sentenças suportadas (qualquer prefixo GNSS: GP, GN, GL, GA, GB):
+/// - `xxRMC` — posição, velocidade, heading, timestamp
+/// - `xxGGA` — altitude e qualidade do fix (complementar)
 class NmeaParser {
   double _lastAltitude = 0.0;
 
@@ -55,8 +56,8 @@ class NmeaParser {
 
     final type = fields[0].substring(1);
 
-    if (type == 'GPRMC' || type == 'GNRMC') return _parseGprmc(fields);
-    if (type == 'GPGGA' || type == 'GNGGA') _updateAltitude(fields);
+    if (type.endsWith('RMC')) return _parseGprmc(fields);
+    if (type.endsWith('GGA')) _updateAltitude(fields);
     return null;
   }
 
@@ -157,10 +158,10 @@ class NmeaParser {
 
     final type = fields[0].substring(1);
 
-    if (type == 'GPRMC' || type == 'GNRMC') {
+    if (type.endsWith('RMC')) {
       if (fields.length < 10) {
-        return const NmeaParseResult(
-            discardReason: 'RMC: campos insuficientes');
+        debugPrint('[LAPZY/NMEA] $type: campos insuficientes (${fields.length})');
+        return const NmeaParseResult(discardReason: 'RMC: campos insuficientes');
       }
       final status = fields[2];
       if (status != 'A') {
@@ -170,6 +171,7 @@ class NmeaParser {
         );
       }
       if (fields[3].isEmpty || fields[5].isEmpty) {
+        debugPrint('[LAPZY/NMEA] $type: coordenadas vazias lat="${fields[3]}" lon="${fields[5]}"');
         return NmeaParseResult(
           discardReason: 'RMC: coordenadas vazias',
           rmcStatus: 'A',
@@ -178,6 +180,7 @@ class NmeaParser {
       final lat = parseLatitude(fields[3], fields[4]);
       final lon = parseLongitude(fields[5], fields[6]);
       if (lat == null || lon == null) {
+        debugPrint('[LAPZY/NMEA] $type: coordenadas inválidas lat="${fields[3]},${fields[4]}" lon="${fields[5]},${fields[6]}"');
         return NmeaParseResult(
           discardReason: 'RMC: coordenadas inválidas',
           rmcStatus: 'A',
@@ -185,8 +188,9 @@ class NmeaParser {
       }
       final timestamp = parseDateTime(fields[1], fields[9]);
       if (timestamp == null) {
+        debugPrint('[LAPZY/NMEA] $type: timestamp inválido time="${fields[1]}" date="${fields[9]}"');
         return NmeaParseResult(
-          discardReason: 'RMC: timestamp inválido',
+          discardReason: 'RMC: timestamp inválido time=${fields[1]} date=${fields[9]}',
           rmcStatus: 'A',
         );
       }
@@ -204,10 +208,11 @@ class NmeaParser {
         headingAccuracy: 1.0,
         speedAccuracy: 0.1,
       );
+      debugPrint('[LAPZY/NMEA] $type → lat=${lat.toStringAsFixed(6)} lng=${lon.toStringAsFixed(6)} speed=${(speedKnots * 1.852).toStringAsFixed(1)}km/h hdg=${heading.toStringAsFixed(1)}°');
       return NmeaParseResult(position: pos, rmcStatus: 'A');
     }
 
-    if (type == 'GPGGA' || type == 'GNGGA') {
+    if (type.endsWith('GGA')) {
       _updateAltitude(fields);
       final gga = _parseGga(fields);
       return NmeaParseResult(gga: gga);

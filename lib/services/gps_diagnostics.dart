@@ -2,12 +2,13 @@ import 'gps_source.dart';
 
 /// Estado da fonte GPS no pipeline de diagnóstico.
 enum GpsFixState {
-  idle,        // não subscrito ainda
-  connecting,  // subscription criada, zero dados recebidos
-  receiving,   // dados chegando (NMEA ou posição), sem fix válido ainda
-  fixAcquired, // ao menos uma Position válida recebida
-  error,       // stream emitiu erro
-  done,        // stream fechou (fonte desconectada)
+  idle,           // não subscrito ainda
+  initializing,   // subscription criada, zero dados recebidos
+  waitingFix,     // dados chegando (NMEA ou posição), sem fix válido ainda
+  fixAcquired,    // ao menos uma Position válida recebida
+  stale,          // tinha fix, mas nenhuma posição nos últimos 5s
+  error,          // stream emitiu erro
+  disconnected,   // stream fechou (fonte desconectada)
 }
 
 /// Linha NMEA individual com resultado do parse.
@@ -79,6 +80,7 @@ class GpsDiagnosticsSnapshot {
   final String? usbEndpointInfo;
   final int usbBaudRate;
   final String? usbLastSerialError;
+  final int usbConfiguredHz;
 
   const GpsDiagnosticsSnapshot({
     required this.sourceName,
@@ -109,6 +111,7 @@ class GpsDiagnosticsSnapshot {
     this.usbEndpointInfo,
     this.usbBaudRate = 9600,
     this.usbLastSerialError,
+    this.usbConfiguredHz = 1,
   });
 
   GpsDiagnosticsSnapshot copyWith({
@@ -140,6 +143,7 @@ class GpsDiagnosticsSnapshot {
     String? usbEndpointInfo,
     int? usbBaudRate,
     String? usbLastSerialError,
+    int? usbConfiguredHz,
     // sentinel values for clearing nullable fields
     bool clearHzInstantaneous = false,
     bool clearHzRollingAvg = false,
@@ -189,6 +193,7 @@ class GpsDiagnosticsSnapshot {
       usbEndpointInfo: usbEndpointInfo ?? this.usbEndpointInfo,
       usbBaudRate: usbBaudRate ?? this.usbBaudRate,
       usbLastSerialError: usbLastSerialError ?? this.usbLastSerialError,
+      usbConfiguredHz: usbConfiguredHz ?? this.usbConfiguredHz,
     );
   }
 }

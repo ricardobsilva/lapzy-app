@@ -30,6 +30,10 @@ const _kS3 = Color(0xFFFF6D00);
 const _kBorderWidth = 10.0;
 const _kFixedSectorColors = [_kS1, _kS2, _kS3];
 
+/// Altura reservada para o slot do banner PR — sempre ocupada, banner ou vazio.
+/// Garante que o cronômetro não mude de posição ao aparecer/desaparecer o badge.
+const _kPrBannerHeight = 22.0;
+
 // ── TEMAS DE COR ──────────────────────────────────────────────────────────────
 
 class _RaceThemeData {
@@ -204,6 +208,7 @@ class _RaceScreenState extends State<RaceScreen> {
             positionStreamFactory: () =>
                 GpsSourceManager.instance.positionStream,
           );
+    GpsSourceManager.instance.notifyScreenAttached('RaceScreen');
     _startLapTimer();
     _startDetector();
     _startSpeedListener();
@@ -244,6 +249,7 @@ class _RaceScreenState extends State<RaceScreen> {
     _speedSub?.cancel();
     _detectorSub?.cancel();
     _detector.dispose();
+    GpsSourceManager.instance.notifyScreenDetached('RaceScreen');
     TelemetryService.instance.endSession(note: 'screen_disposed');
     WakelockPlus.disable();
     unawaited(ForegroundLocationService.stop());
@@ -655,13 +661,16 @@ class _LapCounter extends StatelessWidget {
             color: theme.textVeryDim,
           ),
         ),
-        Text(
-          '$lapNumber',
-          style: GoogleFonts.rajdhani(
-            fontSize: 60,
-            fontWeight: FontWeight.w700,
-            color: theme.textPrimary,
-            height: 1,
+        SizedBox(
+          width: 118,
+          child: Text(
+            '$lapNumber',
+            style: GoogleFonts.spaceMono(
+              fontSize: 52,
+              fontWeight: FontWeight.w700,
+              color: theme.textPrimary,
+              height: 1,
+            ),
           ),
         ),
       ],
@@ -750,8 +759,8 @@ class _SectorCell extends StatelessWidget {
           if (filled)
             Text(
               (timeMs! / 1000).toStringAsFixed(3),
-              style: GoogleFonts.rajdhani(
-                fontSize: 18,
+              style: GoogleFonts.spaceMono(
+                fontSize: 14,
                 fontWeight: FontWeight.w700,
                 color: color,
               ),
@@ -837,10 +846,13 @@ class _CenterColumn extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 8),
-        if (eventState == RaceEventState.personalRecord) ...[
-          _PrBanner(),
-          const SizedBox(height: 8),
-        ],
+        SizedBox(
+          height: _kPrBannerHeight,
+          child: eventState == RaceEventState.personalRecord
+              ? _PrBanner()
+              : null,
+        ),
+        const SizedBox(height: 8),
         FittedBox(
           fit: BoxFit.scaleDown,
           child: Row(
@@ -865,12 +877,11 @@ class _CenterColumn extends StatelessWidget {
                   Text(
                     _formatMs(lapMs),
                     key: const Key('race_lap_time'),
-                    style: GoogleFonts.rajdhani(
-                      fontSize: 96,
+                    style: GoogleFonts.spaceMono(
+                      fontSize: 76,
                       fontWeight: FontWeight.w700,
                       color: theme.textPrimary,
                       height: 1,
-                      letterSpacing: -1,
                     ),
                   ),
                 ],
@@ -915,14 +926,18 @@ class _SpeedDisplay extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 4),
-        Text(
-          value,
-          key: const Key('race_speed'),
-          style: GoogleFonts.rajdhani(
-            fontSize: 64,
-            fontWeight: FontWeight.w700,
-            color: theme.textPrimary,
-            height: 1,
+        SizedBox(
+          width: 108,
+          child: Text(
+            value,
+            key: const Key('race_speed'),
+            textAlign: TextAlign.center,
+            style: GoogleFonts.spaceMono(
+              fontSize: 52,
+              fontWeight: FontWeight.w700,
+              color: theme.textPrimary,
+              height: 1,
+            ),
           ),
         ),
       ],
@@ -961,36 +976,27 @@ class _DeltaPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return switch (eventState) {
-      RaceEventState.neutral => const SizedBox(height: 36),
-      RaceEventState.melhorVolta => _pill(
-          text: 'MELHOR',
-          color: _kPurple,
-          bgAlpha: 26,
-        ),
-      RaceEventState.voltaMelhor => _pill(
-          text: '▲ +${_formatDelta(deltaMs ?? 0)}',
-          color: _kGreen,
-          bgAlpha: 26,
-        ),
-      RaceEventState.voltaPior => _pill(
-          text: '▼ −${_formatDelta((-(deltaMs ?? 0)).abs())}',
-          color: _kRed,
-          bgAlpha: 26,
-        ),
-      RaceEventState.personalRecord => _pill(
-          text: '▲ +${_formatDelta(deltaMs ?? 0)}',
-          color: _kGreen,
-          bgAlpha: 26,
-        ),
+    final (text, color) = switch (eventState) {
+      RaceEventState.neutral => (null, null),
+      RaceEventState.melhorVolta => ('MELHOR', _kPurple),
+      RaceEventState.voltaMelhor => ('▲ +${_formatDelta(deltaMs ?? 0)}', _kGreen),
+      RaceEventState.voltaPior => ('▼ −${_formatDelta((-(deltaMs ?? 0)).abs())}', _kRed),
+      RaceEventState.personalRecord => ('▲ +${_formatDelta(deltaMs ?? 0)}', _kGreen),
     };
+
+    return SizedBox(
+      height: 36,
+      child: text == null
+          ? const SizedBox.shrink()
+          : _pill(text: text, color: color!),
+    );
   }
 
-  Widget _pill({required String text, required Color color, required int bgAlpha}) {
+  Widget _pill({required String text, required Color color}) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
       decoration: BoxDecoration(
-        color: color.withAlpha(bgAlpha),
+        color: color.withAlpha(26),
         borderRadius: BorderRadius.circular(4),
       ),
       child: Text(
@@ -1046,8 +1052,8 @@ class _TotalTime extends StatelessWidget {
         Text(
           hasStarted ? _formatMs(totalRaceMs) : '—',
           key: const Key('race_total_time'),
-          style: GoogleFonts.rajdhani(
-            fontSize: 20,
+          style: GoogleFonts.spaceMono(
+            fontSize: 16,
             fontWeight: FontWeight.w700,
             color: theme.textDim,
           ),
@@ -1079,8 +1085,8 @@ class _BestLap extends StatelessWidget {
         ),
         Text(
           bestLapMs != null ? _formatMs(bestLapMs!) : '—',
-          style: GoogleFonts.rajdhani(
-            fontSize: 26,
+          style: GoogleFonts.spaceMono(
+            fontSize: 18,
             fontWeight: FontWeight.w700,
             color: _kPurple,
           ),

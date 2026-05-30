@@ -70,6 +70,15 @@ class LapzyGpsChannels(private val context: Context) {
     @Volatile private var lastUsbError: String? = null
     private var usbSerialState: String = "idle"
     private var usbDiagSink: EventChannel.EventSink? = null
+    private var permissionTimeoutRunnable: Runnable? = null
+
+    // ── USB rate control ──────────────────────────────────────────────────────
+
+    /** Endpoint bulk-OUT da interface USB ativa — usado para enviar comandos UBX. */
+    @Volatile private var usbOutEndpoint: UsbEndpoint? = null
+
+    /** Hz configurado via UBX-CFG-RATE. 1 = padrão do receptor. */
+    private var configuredHz: Int = 1
 
     // ── setup ─────────────────────────────────────────────────────────────────
 
@@ -180,6 +189,11 @@ class LapzyGpsChannels(private val context: Context) {
                         Log.d(TAG, "setBaudRate → $baud")
                         result.success(null)
                     }
+                    "setRate" -> {
+                        val hz = call.argument<Int>("hz") ?: 1
+                        sendUbxCfgRate(hz)
+                        result.success(null)
+                    }
                     else -> result.notImplemented()
                 }
             }
@@ -237,19 +251,29 @@ class LapzyGpsChannels(private val context: Context) {
 
     private fun startUsbStream(sink: EventChannel.EventSink?) {
         stopUsb()
+        emitDiag("detecting")
         val manager = context.getSystemService(Context.USB_SERVICE) as? UsbManager ?: run {
+            Log.e(TAG, "UsbManager indisponível — stream encerrado")
+            lastUsbError = "UsbManager indisponível"
+            emitDiag("failed_no_manager")
             mainHandler.post { sink?.endOfStream() }
             return
         }
         val device = manager.deviceList.values.firstOrNull() ?: run {
+            Log.e(TAG, "Nenhum dispositivo USB — stream encerrado")
+            lastUsbError = "nenhum dispositivo USB"
+            emitDiag("failed_no_device")
             mainHandler.post { sink?.endOfStream() }
             return
         }
 
-        Log.d(TAG, "startUsbStream: device='${device.productName}' hasPermission=${manager.hasPermission(device)}")
+        val hasPermission = manager.hasPermission(device)
+        Log.d(TAG, "startUsbStream: device='${device.productName}' VID=0x${"%04X".format(device.vendorId)} hasPermission=$hasPermission")
+        emitDiag("device_detected")
 
-        if (!manager.hasPermission(device)) {
+        if (!hasPermission) {
             Log.d(TAG, "Sem permissão USB — solicitando ao usuário")
+            emitDiag("requesting_permission")
             requestUsbPermission(manager, device, sink)
             return
         }
@@ -262,36 +286,89 @@ class LapzyGpsChannels(private val context: Context) {
         device: UsbDevice,
         sink: EventChannel.EventSink?,
     ) {
-        Log.d(TAG, "Solicitando permissão USB para '${device.productName}'")
         val action = "com.lapzy.lapzy.USB_PERMISSION"
+
+        // FLAG_MUTABLE is required: UsbManager calls pi.send(context, 0, intent) to attach
+        // EXTRA_PERMISSION_GRANTED to the Intent. With FLAG_IMMUTABLE (Android 12+), the system
+        // rejects that send() call silently — the receiver never fires and the app hangs forever.
         val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            PendingIntent.FLAG_IMMUTABLE
+            PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         } else {
-            0
+            PendingIntent.FLAG_UPDATE_CURRENT
         }
-        val pi = PendingIntent.getBroadcast(context, 0, Intent(action), flags)
+
+        Log.d(TAG, "requestUsbPermission: device='${device.productName}' SDK=${Build.VERSION.SDK_INT} flags=0x${"%08X".format(flags)}")
+        val pi = PendingIntent.getBroadcast(context, 0, Intent(action).setPackage(context.packageName), flags)
+        Log.d(TAG, "PendingIntent criado: $pi")
 
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(ctx: Context, intent: Intent) {
-                context.unregisterReceiver(this)
-                val granted = intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)
-                Log.d(TAG, "Permissão USB: granted=$granted")
-                if (granted) {
-                    openAndStream(manager, device, sink)
-                } else {
-                    Log.e(TAG, "Permissão USB NEGADA — stream encerrado")
-                    lastUsbError = "permissão negada"
-                    emitDiag("error_permission")
-                    mainHandler.post { sink?.endOfStream() }
+                Log.d(TAG, "BroadcastReceiver.onReceive: action=${intent.action} extras=${intent.extras?.keySet()}")
+                permissionTimeoutRunnable?.let { mainHandler.removeCallbacks(it) }
+                permissionTimeoutRunnable = null
+                try {
+                    context.unregisterReceiver(this)
+                } catch (e: Exception) {
+                    Log.w(TAG, "unregisterReceiver falhou (já removido?): ${e.message}")
                 }
+
+                val deviceFromIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    intent.getParcelableExtra(UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
+                } else {
+                    @Suppress("DEPRECATION")
+                    intent.getParcelableExtra(UsbManager.EXTRA_DEVICE)
+                }
+                Log.d(TAG, "Device no intent: '${deviceFromIntent?.productName}' VID=0x${"%04X".format(deviceFromIntent?.vendorId ?: 0)}")
+                Log.d(TAG, "Device esperado:  '${device.productName}' VID=0x${"%04X".format(device.vendorId)}")
+
+                val granted = intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)
+                Log.d(TAG, "EXTRA_PERMISSION_GRANTED=$granted")
+
+                if (!granted) {
+                    Log.e(TAG, "Permissão USB NEGADA pelo usuário (ou sistema)")
+                    lastUsbError = "permissão negada"
+                    emitDiag("failed_permission_denied")
+                    mainHandler.post { sink?.endOfStream() }
+                    return
+                }
+
+                // Double-check: mesmo com granted=true, o device precisa ter permissão agora
+                val hasPermissionNow = manager.hasPermission(device)
+                Log.d(TAG, "hasPermission após granted: $hasPermissionNow")
+                if (!hasPermissionNow) {
+                    Log.e(TAG, "granted=true mas manager.hasPermission()=false — device mudou?")
+                    lastUsbError = "inconsistência de permissão"
+                    emitDiag("failed_permission_denied")
+                    mainHandler.post { sink?.endOfStream() }
+                    return
+                }
+
+                emitDiag("permission_granted")
+                openAndStream(manager, device, sink)
             }
         }
+
+        Log.d(TAG, "Registrando BroadcastReceiver para action=$action SDK=${Build.VERSION.SDK_INT}")
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             context.registerReceiver(receiver, IntentFilter(action), Context.RECEIVER_NOT_EXPORTED)
+            Log.d(TAG, "Receiver registrado com RECEIVER_NOT_EXPORTED")
         } else {
             context.registerReceiver(receiver, IntentFilter(action))
+            Log.d(TAG, "Receiver registrado sem flag de exportação")
         }
+
+        Log.d(TAG, "Chamando manager.requestPermission() — aguardando diálogo do usuário")
         manager.requestPermission(device, pi)
+        Log.d(TAG, "requestPermission() retornou — dialog deve estar visível")
+
+        // Timeout: se o usuário não responder em 60s (ou dialog não aparecer), cancela
+        permissionTimeoutRunnable = Runnable {
+            Log.e(TAG, "TIMEOUT: permissão USB não chegou em 60s — receiver nunca disparou?")
+            try { context.unregisterReceiver(receiver) } catch (_: Exception) {}
+            lastUsbError = "timeout aguardando permissão (60s)"
+            emitDiag("failed_permission_timeout")
+            mainHandler.post { sink?.endOfStream() }
+        }.also { mainHandler.postDelayed(it, 60_000) }
     }
 
     private fun openAndStream(
@@ -300,12 +377,13 @@ class LapzyGpsChannels(private val context: Context) {
         sink: EventChannel.EventSink?,
     ) {
         Log.d(TAG, "openAndStream: device='${device.productName}' VID=0x${"%04X".format(device.vendorId)} PID=0x${"%04X".format(device.productId)}")
+        emitDiag("opening_port")
 
         val connection = manager.openDevice(device)
         if (connection == null) {
             Log.e(TAG, "openDevice() retornou null — sem permissão ou driver exclusivo?")
             lastUsbError = "openDevice=null"
-            emitDiag("error_open")
+            emitDiag("failed_open")
             mainHandler.post { sink?.endOfStream() }
             return
         }
@@ -318,11 +396,12 @@ class LapzyGpsChannels(private val context: Context) {
         windowStartMs = System.currentTimeMillis()
         lastUsbError = null
 
+        emitDiag("configuring_serial")
         val found = findBulkInEndpoint(device, connection)
         if (found == null) {
             Log.e(TAG, "Nenhum endpoint bulk-IN encontrado em ${device.interfaceCount} interface(s) — stream encerrado")
             lastUsbError = "sem endpoint bulk-IN"
-            emitDiag("error_endpoint")
+            emitDiag("failed_endpoint")
             connection.close()
             mainHandler.post { sink?.endOfStream() }
             return
@@ -331,7 +410,12 @@ class LapzyGpsChannels(private val context: Context) {
         val (endpoint, ifaceIndex) = found
         endpointInfo = "intf=$ifaceIndex addr=0x${"%02X".format(endpoint.address)} maxPkt=${endpoint.maxPacketSize}"
         Log.d(TAG, "Endpoint selecionado: $endpointInfo baud=$currentBaud")
-        emitDiag("opened")
+
+        // Configura 5 Hz por padrão — mínimo útil para kart
+        // UBX-CFG-RATE via bulk-OUT (u-blox USB nativo, throughput não é limitado por baud)
+        sendUbxCfgRate(5)
+
+        emitDiag("starting_reader")
 
         usbRunning = true
         usbDataThread = Thread {
@@ -443,6 +527,20 @@ class LapzyGpsChannels(private val context: Context) {
             Log.e(TAG, "Falhou claimInterface — kernel pode estar segurando a interface")
         }
 
+        // Encontrar endpoint bulk-OUT na mesma interface (necessário para envio de comandos UBX)
+        usbOutEndpoint = null
+        for (j in 0 until intf.endpointCount) {
+            val ep = intf.getEndpoint(j)
+            if (ep.direction == UsbConstants.USB_DIR_OUT && ep.type == UsbConstants.USB_ENDPOINT_XFER_BULK) {
+                usbOutEndpoint = ep
+                Log.d(TAG, "  Bulk-OUT encontrado em intf[${best.ifaceIndex}] ep[$j] addr=0x${"%02X".format(ep.address)} maxPkt=${ep.maxPacketSize}")
+                break
+            }
+        }
+        if (usbOutEndpoint == null) {
+            Log.w(TAG, "Nenhum endpoint bulk-OUT — envio de comandos UBX indisponível")
+        }
+
         configureCdcAcm(connection, best.ifaceIndex)
         return Pair(best.endpoint, best.ifaceIndex)
     }
@@ -465,6 +563,60 @@ class LapzyGpsChannels(private val context: Context) {
         Log.d(TAG, "SET_CONTROL_LINE_STATE (DTR+RTS) → resultado=$r2")
     }
 
+    /**
+     * Envia comando UBX-CFG-RATE para configurar o measurement rate do u-blox.
+     *
+     * O u-blox responde com UBX-ACK-ACK (binário), que o parser ignora por não
+     * começar com '$'. Para USB CDC nativo, o throughput é USB full speed
+     * (~12 Mbit/s) — o baud rate CDC-ACM é irrelevante e não limita a taxa.
+     *
+     * Suporte de taxa pelo módulo u-blox M8/M9:
+     *   1 Hz  → measRate=1000ms (padrão de fábrica)
+     *   5 Hz  → measRate=200ms (recomendado para kart)
+     *   10 Hz → measRate=100ms (u-blox M8 suporta)
+     *   20 Hz → measRate=50ms (apenas u-blox M9 e superior)
+     */
+    private fun sendUbxCfgRate(hz: Int) {
+        val outEp = usbOutEndpoint
+        val conn = usbConnection
+        if (outEp == null || conn == null) {
+            Log.w(TAG, "sendUbxCfgRate($hz Hz): sem endpoint OUT ou conexão ativa — ignorado")
+            return
+        }
+        val measRateMs = (1000.0 / hz.coerceIn(1, 20)).toInt()
+        val payload = byteArrayOf(
+            (measRateMs and 0xFF).toByte(),           // measRate LSB
+            ((measRateMs shr 8) and 0xFF).toByte(),   // measRate MSB
+            0x01, 0x00,                                // navRate = 1 (navigation per measurement)
+            0x00, 0x00,                                // timeRef = 0 (UTC)
+        )
+        val cmd = buildUbx(0x06.toByte(), 0x08.toByte(), payload)
+        val n = conn.bulkTransfer(outEp, cmd, cmd.size, 1000)
+        configuredHz = hz
+        Log.d(TAG, "UBX-CFG-RATE: hz=$hz measRate=${measRateMs}ms cmd=${cmd.size}B → bulkTransfer=$n (>=0=OK)")
+        emitDiag(usbSerialState)
+    }
+
+    /**
+     * Constrói um frame UBX binário com checksum Fletcher.
+     *
+     * Formato: 0xB5 0x62 [cls] [id] [lenLo] [lenHi] [payload] [CK_A] [CK_B]
+     * Checksum calculado sobre: cls + id + lenLo + lenHi + payload
+     */
+    private fun buildUbx(cls: Byte, id: Byte, payload: ByteArray): ByteArray {
+        val lenLo = (payload.size and 0xFF).toByte()
+        val lenHi = ((payload.size shr 8) and 0xFF).toByte()
+        var ckA = 0
+        var ckB = 0
+        for (b in listOf(cls, id, lenLo, lenHi) + payload.toList()) {
+            ckA = (ckA + (b.toInt() and 0xFF)) and 0xFF
+            ckB = (ckB + ckA) and 0xFF
+        }
+        return byteArrayOf(0xB5.toByte(), 0x62.toByte(), cls, id, lenLo, lenHi) +
+            payload +
+            byteArrayOf(ckA.toByte(), ckB.toByte())
+    }
+
     private fun emitDiag(state: String) {
         usbSerialState = state
         val windowMs = System.currentTimeMillis() - windowStartMs
@@ -477,12 +629,15 @@ class LapzyGpsChannels(private val context: Context) {
             "baudRate" to currentBaud,
             "endpoint" to endpointInfo,
             "lastError" to (lastUsbError ?: ""),
+            "configuredHz" to configuredHz,
         )
         mainHandler.post { usbDiagSink?.success(diag) }
     }
 
     private fun stopUsb() {
         Log.d(TAG, "stopUsb() — totalBytes=$rawBytesTotal")
+        permissionTimeoutRunnable?.let { mainHandler.removeCallbacks(it) }
+        permissionTimeoutRunnable = null
         usbSerialState = "idle"
         usbRunning = false
         usbDataSink?.endOfStream()
@@ -491,6 +646,8 @@ class LapzyGpsChannels(private val context: Context) {
         usbConnection = null
         usbDataThread?.interrupt()
         usbDataThread = null
+        usbOutEndpoint = null
+        configuredHz = 1
         rawBytesTotal = 0
         rawBytesInWindow = 0
         endpointInfo = "—"
