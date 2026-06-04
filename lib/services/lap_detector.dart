@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import '../models/track.dart';
+import 'app_lifecycle_tracker.dart';
 import 'telemetry_service.dart';
 
 /// Evento emitido pelo LapDetector.
@@ -189,7 +190,8 @@ class LapDetector {
         ? (1000 / deltaMs).toStringAsFixed(2)
         : '?';
     debugPrint(
-      '[LAPZY/DET] POS #$_positionCount '
+      '[LAPZY/DET] ${AppLifecycleTracker.tag} '
+      'POS #$_positionCount '
       'speed=${(pos.speed * 3.6).toStringAsFixed(1)}km/h '
       'acc=${pos.accuracy.toStringAsFixed(0)}m '
       'Δ=${deltaMs ?? '?'}ms hz=$hz '
@@ -213,7 +215,8 @@ class LapDetector {
         );
         if (sectorTime != null) {
           debugPrint(
-            '[LAPZY/DET] Setor $i cruzado — timestamp=${sectorTime.toIso8601String()}',
+            '[LAPZY/DET] ${AppLifecycleTracker.tag} '
+            'SECTOR_CROSSED i=$i timestamp=${sectorTime.toIso8601String()}',
           );
           TelemetryService.instance.logEvent('sector_crossed',
               gpsTime: sectorTime, sectorIdx: i);
@@ -279,11 +282,18 @@ class LapDetector {
       prev, curr, prevTime, currTime, boundary, index,
     );
 
-    if (crossingTime == null) return null;
+    if (crossingTime == null) {
+      debugPrint(
+        '[LAPZY/DET] ${AppLifecycleTracker.tag} '
+        'SECTOR_MISS i=$index — vetor não cruza (primário+fallback)',
+      );
+      return null;
+    }
 
     // ── 3. CANDIDATO DETECTADO ────────────────────────────────────────────
     debugPrint(
-      '[LapDetector] Setor $index candidato detectado — '
+      '[LAPZY/DET] ${AppLifecycleTracker.tag} '
+      'SECTOR_CANDIDATE i=$index '
       'nextExpected=$_nextExpectedSectorIndex',
     );
     TelemetryService.instance.logEvent(
@@ -294,12 +304,10 @@ class LapDetector {
     );
 
     // ── 5. ORDEM DE SETORES ────────────────────────────────────────────────
-    // Garante que cada setor seja aceito somente uma vez por volta e na ordem
-    // correta. Antes do primeiro S/C (_nextExpectedSectorIndex == -1), a ordem
-    // não é enforçada (apenas cooldown protege contra burst).
     if (_nextExpectedSectorIndex >= 0 && index != _nextExpectedSectorIndex) {
       debugPrint(
-        '[LapDetector] Setor $index rejeitado (fora de ordem) — '
+        '[LAPZY/DET] ${AppLifecycleTracker.tag} '
+        'SECTOR_REJECTED i=$index motivo=fora_de_ordem '
         'esperado=$_nextExpectedSectorIndex',
       );
       TelemetryService.instance.logEvent(
@@ -317,7 +325,8 @@ class LapDetector {
       final ms = crossingTime.difference(lastCrossing).inMilliseconds;
       if (ms < minSectorMs) {
         debugPrint(
-          '[LapDetector] Setor $index rejeitado (cooldown) — '
+          '[LAPZY/DET] ${AppLifecycleTracker.tag} '
+          'SECTOR_REJECTED i=$index motivo=cooldown '
           'ms=$ms < minSectorMs=$minSectorMs',
         );
         TelemetryService.instance.logEvent('sector_rejected_cooldown',
@@ -362,7 +371,8 @@ class LapDetector {
 
     if (perpPrev > threshold && perpCurr > threshold) {
       debugPrint(
-        '[LapDetector] Setor $index fallback rejeitado (distância perp) — '
+        '[LAPZY/DET] ${AppLifecycleTracker.tag} '
+        'SECTOR_FALLBACK_REJECTED i=$index motivo=perp_distance '
         'perpPrev=${perpPrev.toStringAsFixed(1)}m '
         'perpCurr=${perpCurr.toStringAsFixed(1)}m '
         'threshold=${threshold.toStringAsFixed(1)}m',
@@ -386,9 +396,10 @@ class LapDetector {
     );
 
     debugPrint(
-      '[LapDetector] Setor $index via fallback de proximidade — '
+      '[LAPZY/DET] ${AppLifecycleTracker.tag} '
+      'SECTOR_FALLBACK_HIT i=$index '
       'perpPrev=${perpPrev.toStringAsFixed(1)}m '
-      'perpCurr=${perpCurr.toStringAsFixed(1)}m | '
+      'perpCurr=${perpCurr.toStringAsFixed(1)}m '
       'timestamp=${crossingTime.toIso8601String()}',
     );
 
@@ -407,7 +418,12 @@ class LapDetector {
       track.startFinishLine,
     );
 
-    if (crossingTime == null) return;
+    if (crossingTime == null) {
+      debugPrint(
+        '[LAPZY/DET] ${AppLifecycleTracker.tag} SF_MISS — vetor não cruza S/F',
+      );
+      return;
+    }
 
     // ── 1. COOLDOWN ──────────────────────────────────────────────────────────
     if (_lastCrossingTime != null) {
@@ -415,7 +431,8 @@ class LapDetector {
           crossingTime.difference(_lastCrossingTime!).inMilliseconds;
       if (msSinceLast < minLapMs) {
         debugPrint(
-          '[LapDetector] S/C rejeitado (cooldown) — '
+          '[LAPZY/DET] ${AppLifecycleTracker.tag} '
+          'SF_REJECTED motivo=cooldown '
           'msSinceLast=$msSinceLast < minLapMs=$minLapMs',
         );
         TelemetryService.instance.logEvent('lap_rejected_cooldown',
@@ -440,8 +457,8 @@ class LapDetector {
 
         if (isSuspect) {
           debugPrint(
-            '[LapDetector] S/C suspeito — '
-            'lapMs=$lapMs | mediana=$median | desvio=$deviation',
+            '[LAPZY/DET] ${AppLifecycleTracker.tag} '
+            'SF_SUSPECT lapMs=$lapMs | mediana=$median | desvio=$deviation',
           );
           TelemetryService.instance.logEvent('lap_suspect',
               gpsTime: crossingTime, valueMs: lapMs, medianMs: median);
@@ -452,7 +469,8 @@ class LapDetector {
           );
         } else {
           debugPrint(
-            '[LapDetector] S/C válido — lapMs=$lapMs | mediana=$median',
+            '[LAPZY/DET] ${AppLifecycleTracker.tag} '
+            'SF_VALID lapMs=$lapMs | mediana=$median',
           );
           TelemetryService.instance.logEvent('lap_crossed',
               gpsTime: crossingTime, valueMs: lapMs, medianMs: median);
@@ -461,7 +479,8 @@ class LapDetector {
         }
       } else {
         debugPrint(
-          '[LapDetector] S/C válido (sem mediana ainda) — lapMs=$lapMs',
+          '[LAPZY/DET] ${AppLifecycleTracker.tag} '
+          'SF_VALID (sem mediana) lapMs=$lapMs',
         );
         TelemetryService.instance.logEvent('lap_crossed',
             gpsTime: crossingTime, valueMs: lapMs);
@@ -470,8 +489,8 @@ class LapDetector {
       }
     } else {
       debugPrint(
-        '[LapDetector] S/C inicial — '
-        'timestamp=${crossingTime.toIso8601String()}',
+        '[LAPZY/DET] ${AppLifecycleTracker.tag} '
+        'SF_INITIAL timestamp=${crossingTime.toIso8601String()}',
       );
       TelemetryService.instance.logEvent('lap_start', gpsTime: crossingTime);
       event = LapCrossedEvent(crossingTime);
@@ -481,7 +500,8 @@ class LapDetector {
     if (_nextExpectedSectorIndex > 0 &&
         _nextExpectedSectorIndex < track.sectorBoundaries.length) {
       debugPrint(
-        '[LapDetector] Volta fechada antes de completar setores — '
+        '[LAPZY/DET] ${AppLifecycleTracker.tag} '
+        'SF_LAP_CLOSED_BEFORE_SECTOR '
         'próximo esperado=$_nextExpectedSectorIndex '
         'total=${track.sectorBoundaries.length}',
       );

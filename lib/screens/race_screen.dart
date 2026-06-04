@@ -13,6 +13,7 @@ import '../models/race_session.dart';
 import '../models/race_session_record.dart';
 import '../models/track.dart';
 import '../repositories/race_session_repository.dart';
+import '../services/app_lifecycle_tracker.dart';
 import '../services/delta_calculator.dart';
 import '../services/foreground_location_service.dart';
 import '../services/gps_source_manager.dart';
@@ -133,7 +134,7 @@ class RaceScreen extends StatefulWidget {
   State<RaceScreen> createState() => _RaceScreenState();
 }
 
-class _RaceScreenState extends State<RaceScreen> {
+class _RaceScreenState extends State<RaceScreen> with WidgetsBindingObserver {
   Timer? _lapTimer;
   DateTime? _lapStartTime;
   bool _hasStarted = false;
@@ -194,6 +195,7 @@ class _RaceScreenState extends State<RaceScreen> {
       gpsSource: gpsInfo.connectionType.name,
       gpsSourceName: gpsInfo.name,
     );
+    WidgetsBinding.instance.addObserver(this);
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.landscapeLeft,
       DeviceOrientation.landscapeRight,
@@ -238,7 +240,23 @@ class _RaceScreenState extends State<RaceScreen> {
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final isBackground = state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached;
+    AppLifecycleTracker.setBackground(value: isBackground);
+    debugPrint(
+      '[LAPZY/LIFE] lifecycle=${state.name} '
+      'tag=${AppLifecycleTracker.tag} '
+      'hasStarted=$_hasStarted '
+      'completedLaps=${_completedLaps.length} '
+      'detectorSub=${_detectorSub != null} '
+      'speedSub=${_speedSub != null}',
+    );
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _hintShowTimer?.cancel();
     _hintDismissTimer?.cancel();
     _lapTimer?.cancel();
@@ -275,6 +293,12 @@ class _RaceScreenState extends State<RaceScreen> {
   }
 
   void _onLapEvent(LapEvent event) {
+    debugPrint(
+      '[LAPZY/RACE] ${AppLifecycleTracker.tag} '
+      'LAP_EVENT=${event.runtimeType} '
+      'hasStarted=$_hasStarted '
+      'mounted=$mounted',
+    );
     if (event is LapCrossedEvent) {
       if (!_hasStarted) {
         setState(() {

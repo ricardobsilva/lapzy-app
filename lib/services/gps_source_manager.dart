@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'app_lifecycle_tracker.dart';
 import 'gps_diagnostics_service.dart';
 import 'gps_source.dart';
 import 'internal_gps_service.dart';
@@ -299,6 +300,7 @@ class GpsSourceManager {
     }
 
     _log(
+      '${AppLifecycleTracker.tag} '
       'POS #$_positionCount '
       'lat=${pos.latitude.toStringAsFixed(6)} '
       'lng=${pos.longitude.toStringAsFixed(6)} '

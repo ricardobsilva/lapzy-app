@@ -6,6 +6,8 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
+import android.content.pm.ServiceInfo
+import android.os.Build
 import android.os.IBinder
 
 class LapzyLocationService : Service() {
@@ -30,12 +32,20 @@ class LapzyLocationService : Service() {
     private fun startRaceService() {
         createNotificationChannel()
         try {
-            startForeground(NOTIFICATION_ID, buildNotification())
+            // API 29+ exige que o tipo de serviço seja passado em startForeground()
+            // para que o Android conceda acesso ao GPS em background.
+            // Sem o tipo, o GPS fica sujeito a throttling mesmo com o serviço ativo.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(
+                    NOTIFICATION_ID,
+                    buildNotification(),
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION,
+                )
+            } else {
+                startForeground(NOTIFICATION_ID, buildNotification())
+            }
         } catch (_: SecurityException) {
-            // Permissão de localização não concedida ainda — o serviço não pode
-            // iniciar como foreground. Isso não deve ocorrer em produção (a permissão
-            // é solicitada antes da corrida), mas garante que o app não crasha em
-            // ambientes de teste onde as permissões podem não estar pré-concedidas.
+            // Permissão de localização não concedida — não deve ocorrer em produção.
             stopSelf()
         }
     }

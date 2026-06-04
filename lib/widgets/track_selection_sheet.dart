@@ -34,7 +34,15 @@ class _TrackSelectionSheetState extends State<_TrackSelectionSheet> {
   @override
   void initState() {
     super.initState();
-    _tracks = TrackRepository().tracks.toList();
+    _tracks = TrackRepository().tracks.toList()
+      ..sort((a, b) {
+        final ca = a.createdAt;
+        final cb = b.createdAt;
+        if (ca == null && cb == null) return 0;
+        if (ca == null) return 1;
+        if (cb == null) return -1;
+        return cb.compareTo(ca);
+      });
     _filtered = List.from(_tracks);
     _searchController.addListener(_onSearch);
   }
