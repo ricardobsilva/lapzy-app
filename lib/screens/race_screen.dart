@@ -15,7 +15,7 @@ import '../models/track.dart';
 import '../repositories/race_session_repository.dart';
 import '../services/app_lifecycle_tracker.dart';
 import '../services/delta_calculator.dart';
-import '../services/foreground_location_service.dart';
+// import '../services/foreground_location_service.dart'; // DEBT: modo bolso — ver TASKS.md DEBT-001
 import '../services/gps_source_manager.dart';
 import '../services/lap_detector.dart';
 import '../services/telemetry_service.dart';
@@ -202,7 +202,7 @@ class _RaceScreenState extends State<RaceScreen> with WidgetsBindingObserver {
     ]);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     WakelockPlus.enable();
-    unawaited(ForegroundLocationService.start());
+    // unawaited(ForegroundLocationService.start()); // DEBT: modo bolso desativado temporariamente — ver TASKS.md
     _detector = widget.detectorFactory != null
         ? widget.detectorFactory!(widget.track)
         : LapDetector(
@@ -270,7 +270,7 @@ class _RaceScreenState extends State<RaceScreen> with WidgetsBindingObserver {
     GpsSourceManager.instance.notifyScreenDetached('RaceScreen');
     TelemetryService.instance.endSession(note: 'screen_disposed');
     WakelockPlus.disable();
-    unawaited(ForegroundLocationService.stop());
+    // unawaited(ForegroundLocationService.stop()); // DEBT: modo bolso desativado temporariamente — ver TASKS.md
     SystemChrome.setEnabledSystemUIMode(
       SystemUiMode.manual,
       overlays: SystemUiOverlay.values,

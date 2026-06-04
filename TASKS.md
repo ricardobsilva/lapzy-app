@@ -2,6 +2,12 @@
 
 ## Doing
 
+## Backlog
+
+- [ ] DEBT-001 · Débito Técnico — Reativar modo bolso (coleta de localização em segundo plano)
+  O `ForegroundLocationService.start/stop` foi comentado em `lib/screens/race_screen.dart` para permitir gravação de vídeo para o Google Play (o gravador de tela nativo para quando a tela bloqueia). Reativar após aprovação na Play Store.
+  refs: lib/screens/race_screen.dart, lib/services/foreground_location_service.dart, android/app/src/main/kotlin/com/lapzy/lapzy/LapzyLocationService.kt
+
 ## Done
 
 - [x] TASK-025 · Feature — Seleção de Fonte GPS e Suporte a GPS Externo (US GPS-001)
