@@ -6,7 +6,6 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../models/race_session.dart';
 import '../models/track.dart';
-import '../services/export_service.dart';
 import '../services/gps_source.dart';
 import '../services/lap_filter.dart';
 import '../widgets/pressable.dart';
@@ -48,16 +47,11 @@ class RaceSummaryScreen extends StatefulWidget {
   /// Nullable para compatibilidade com sessões salvas antes de TASK-025.
   final GpsSourceInfo? gpsSource;
 
-  /// ID da sessão — usado para exportar apenas esta corrida.
-  /// Nullable para compatibilidade com entrypoints que não passam o ID.
-  final String? sessionId;
-
   const RaceSummaryScreen({
     required this.laps,
     required this.bestLapMs,
     required this.track,
     this.gpsSource,
-    this.sessionId,
     super.key,
   });
 
@@ -66,44 +60,10 @@ class RaceSummaryScreen extends StatefulWidget {
 }
 
 class _RaceSummaryScreenState extends State<RaceSummaryScreen> {
-  bool _exporting = false;
-
   @override
   void initState() {
     super.initState();
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
-  }
-
-  Future<void> _export() async {
-    if (_exporting) return;
-    setState(() => _exporting = true);
-    try {
-      final path = await ExportService.export(sessionId: widget.sessionId);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          backgroundColor: _kSurface,
-          duration: const Duration(seconds: 8),
-          content: Text(
-            'Exportado:\n$path',
-            style: GoogleFonts.spaceMono(fontSize: 10, color: _kGreen),
-          ),
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          backgroundColor: _kSurface,
-          content: Text(
-            'Erro ao exportar: $e',
-            style: GoogleFonts.spaceMono(fontSize: 10, color: _kRed),
-          ),
-        ),
-      );
-    } finally {
-      if (mounted) setState(() => _exporting = false);
-    }
   }
 
   int get _totalRaceMs => widget.laps.fold(0, (sum, l) => sum + l.lapMs);
@@ -176,8 +136,6 @@ class _RaceSummaryScreenState extends State<RaceSummaryScreen> {
               lapCount: widget.laps.length,
               totalRaceMs: _totalRaceMs,
               avgLapMs: _computedAvgLapMs,
-              onExport: _export,
-              exporting: _exporting,
             ),
             const Divider(color: _kDivider, height: 1),
             Expanded(
@@ -266,8 +224,6 @@ class _SummaryHero extends StatelessWidget {
   final int lapCount;
   final int totalRaceMs;
   final int? avgLapMs;
-  final VoidCallback onExport;
-  final bool exporting;
 
   const _SummaryHero({
     required this.track,
@@ -276,8 +232,6 @@ class _SummaryHero extends StatelessWidget {
     required this.lapCount,
     required this.totalRaceMs,
     required this.avgLapMs,
-    required this.onExport,
-    required this.exporting,
   });
 
   @override
@@ -298,42 +252,14 @@ class _SummaryHero extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 4),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Expanded(
-                child: Text(
-                  track.name,
-                  key: const Key('summary_track_name'),
-                  style: GoogleFonts.rajdhani(
-                    fontSize: 26,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
-                  ),
-                ),
-              ),
-              GestureDetector(
-                key: const Key('summary_export_button'),
-                onTap: exporting ? null : onExport,
-                child: Padding(
-                  padding: const EdgeInsets.only(left: 12),
-                  child: exporting
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: _kGreen,
-                          ),
-                        )
-                      : Icon(
-                          Icons.download_outlined,
-                          size: 22,
-                          color: Colors.white.withAlpha(100),
-                        ),
-                ),
-              ),
-            ],
+          Text(
+            track.name,
+            key: const Key('summary_track_name'),
+            style: GoogleFonts.rajdhani(
+              fontSize: 26,
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+            ),
           ),
           const SizedBox(height: 16),
           Row(

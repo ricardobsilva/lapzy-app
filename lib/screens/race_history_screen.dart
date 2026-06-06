@@ -155,7 +155,6 @@ class _SessionCard extends StatelessWidget {
         bestLapMs: session.bestLapMs,
         track: track,
         gpsSource: session.gpsSource,
-        sessionId: session.id,
       ),
     ));
   }
