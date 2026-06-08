@@ -96,6 +96,7 @@ class GpsSourceManager {
   DateTime? _lastGpsTime;
 
   /// Timer de watchdog: reinicia a subscription se nenhum dado chegar em tempo.
+  /// Também usado para agendar retry após erro do GPS interno.
   Timer? _firstPositionTimer;
 
   /// Quanto tempo esperar pelo primeiro dado antes de reiniciar.
@@ -105,8 +106,17 @@ class GpsSourceManager {
   static const _kMaxWatchdogRetries = 2;
 
   /// Timeout efetivo do watchdog — injetável via [forTesting].
-  /// Duration.zero desabilita o watchdog completamente.
+  /// Duration.zero desabilita o watchdog e o retry de erro completamente.
   final Duration _watchdogTimeout;
+
+  /// Delay entre tentativas de reconexão após erro do GPS interno.
+  static const _kInternalErrorRetryDelay = Duration(seconds: 3);
+
+  /// Máximo de retries automáticos por erro do GPS interno.
+  static const _kMaxInternalErrorRetries = 3;
+
+  /// Contador de erros consecutivos do GPS interno — reset ao receber 1ª posição.
+  int _internalErrorRetries = 0;
 
   // ── interface pública ──────────────────────────────────────────────────────
 
@@ -284,6 +294,7 @@ class GpsSourceManager {
     if (_positionCount == 1) {
       _firstPositionTimer?.cancel();
       _firstPositionTimer = null;
+      _internalErrorRetries = 0;
       final subStartedAt =
           GpsDiagnosticsService.instance.current.subscriptionStartedAt;
       final deltaFromSub = subStartedAt != null
@@ -347,9 +358,36 @@ class GpsSourceManager {
     } else {
       _firstPositionTimer?.cancel();
       _firstPositionTimer = null;
-      _log('GPS interno com erro — aguardando recuperação do sistema');
-      TelemetryService.instance.logEvent('gps_source_error',
-          reason: 'internal_gps_error');
+      _sourceSub = null;
+      _internalErrorRetries++;
+      if (_watchdogTimeout != Duration.zero &&
+          _internalErrorRetries <= _kMaxInternalErrorRetries) {
+        _log(
+          'GPS interno com erro — reiniciando em ${_kInternalErrorRetryDelay.inSeconds}s '
+          '(tentativa $_internalErrorRetries/$_kMaxInternalErrorRetries)',
+        );
+        TelemetryService.instance.logEvent(
+          'gps_source_error',
+          reason: 'internal_gps_error_retry_scheduled',
+          extra: {'attempt': _internalErrorRetries},
+        );
+        _firstPositionTimer = Timer(_kInternalErrorRetryDelay, () {
+          _firstPositionTimer = null;
+          if (_activeSource.info.connectionType == GpsConnectionType.internal) {
+            unawaited(_subscribeToSource(_activeSource));
+          }
+        });
+      } else {
+        _log(
+          'GPS interno com erro — sem mais tentativas '
+          '(${_internalErrorRetries > _kMaxInternalErrorRetries ? 'máx atingido' : 'watchdog desabilitado'})',
+        );
+        TelemetryService.instance.logEvent(
+          'gps_source_error',
+          reason: 'internal_gps_error_no_more_retries',
+          extra: {'attempts': _internalErrorRetries},
+        );
+      }
     }
   }
 
