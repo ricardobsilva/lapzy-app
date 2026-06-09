@@ -41,9 +41,10 @@ class _GpsDiagnosticsScreenState extends State<GpsDiagnosticsScreen> {
       if (mounted) setState(() => _snap = snap);
     });
     GpsSourceManager.instance.notifyScreenAttached('DiagnosticsScreen');
-    // Tick every second to refresh elapsed times
+    // Tick every second: atualiza elapsed times e sincroniza com o serviço
+    // como fallback caso algum evento do stream seja perdido.
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) setState(() {});
+      if (mounted) setState(() => _snap = _service.current);
     });
   }
 
@@ -181,33 +182,40 @@ class _StateSection extends StatelessWidget {
     final (label, color) = _stateDisplay(snap.fixState);
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Container(
-            width: 10,
-            height: 10,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: color,
-            ),
+          Row(
+            children: [
+              Container(
+                width: 10,
+                height: 10,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: color,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                label,
+                style: GoogleFonts.spaceMono(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: color,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                snap.sourceName,
+                style: GoogleFonts.rajdhani(
+                  fontSize: 13,
+                  color: Colors.white.withAlpha(115),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 10),
-          Text(
-            label,
-            style: GoogleFonts.spaceMono(
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-              color: color,
-            ),
-          ),
-          const Spacer(),
-          Text(
-            snap.sourceName,
-            style: GoogleFonts.rajdhani(
-              fontSize: 13,
-              color: Colors.white.withAlpha(115),
-            ),
-          ),
+          if (snap.fixState == GpsFixState.permissionDenied)
+            _PermissionButton(snap: snap),
         ],
       ),
     );
@@ -221,7 +229,43 @@ class _StateSection extends StatelessWidget {
         GpsFixState.stale => ('SEM SINAL', _kOrange),
         GpsFixState.error => ('ERRO', _kRed),
         GpsFixState.disconnected => ('DESCONECTADO', _kRed),
+        GpsFixState.permissionDenied => ('PERMISSÃO NEGADA', _kRed),
       };
+}
+
+// ── PERMISSION BUTTON ─────────────────────────────────────────────────────────
+
+class _PermissionButton extends StatelessWidget {
+  final GpsDiagnosticsSnapshot snap;
+
+  const _PermissionButton({required this.snap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Pressable(
+        onTap: () => GpsSourceManager.instance.requestLocationPermission(),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          decoration: BoxDecoration(
+            color: _kRed.withAlpha(25),
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: _kRed.withAlpha(100)),
+          ),
+          child: Text(
+            'CONCEDER PERMISSÃO',
+            textAlign: TextAlign.center,
+            style: GoogleFonts.spaceMono(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: _kRed,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 // ── POSITION SECTION ──────────────────────────────────────────────────────────

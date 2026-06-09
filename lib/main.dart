@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:google_maps_flutter_android/google_maps_flutter_android.dart';
+import 'package:google_maps_flutter_platform_interface/google_maps_flutter_platform_interface.dart';
 import 'debug/seed_data.dart';
 import 'repositories/race_session_repository.dart';
 import 'repositories/track_repository.dart';
@@ -9,6 +11,10 @@ import 'services/telemetry_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  final mapsImpl = GoogleMapsFlutterPlatform.instance;
+  if (mapsImpl is GoogleMapsFlutterAndroid) {
+    await mapsImpl.initializeWithRenderer(AndroidMapRenderer.latest);
+  }
   SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   await TrackRepository().load();
   await RaceSessionRepository().load();

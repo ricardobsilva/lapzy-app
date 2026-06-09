@@ -38,10 +38,14 @@ class GpsSourceManager {
     required InternalGpsService internalFallback,
     SharedPreferences? prefs,
     Duration? watchdogTimeout,
+    Future<LocationPermission> Function()? permissionRequester,
+    Future<bool> Function()? appSettingsOpener,
   })  : _activeSource = initialSource,
         _internalFallback = internalFallback,
         _prefs = prefs,
-        _watchdogTimeout = watchdogTimeout ?? _kFirstPositionTimeout;
+        _watchdogTimeout = watchdogTimeout ?? _kFirstPositionTimeout,
+        _permissionRequester = permissionRequester ?? Geolocator.requestPermission,
+        _appSettingsOpener = appSettingsOpener ?? Geolocator.openAppSettings;
 
   // ── singleton ──────────────────────────────────────────────────────────────
 
@@ -66,6 +70,8 @@ class GpsSourceManager {
     InternalGpsService? internalFallback,
     SharedPreferences? prefs,
     Duration watchdogTimeout = Duration.zero,
+    Future<LocationPermission> Function()? permissionRequester,
+    Future<bool> Function()? appSettingsOpener,
   }) {
     return GpsSourceManager._(
       initialSource: activeSource,
@@ -73,6 +79,8 @@ class GpsSourceManager {
           InternalGpsService(streamFactory: () => const Stream.empty()),
       prefs: prefs,
       watchdogTimeout: watchdogTimeout,
+      permissionRequester: permissionRequester,
+      appSettingsOpener: appSettingsOpener,
     );
   }
 
@@ -100,10 +108,15 @@ class GpsSourceManager {
   Timer? _firstPositionTimer;
 
   /// Quanto tempo esperar pelo primeiro dado antes de reiniciar.
-  static const _kFirstPositionTimeout = Duration(seconds: 15);
+  ///
+  /// 90s cobre cold start de GPS (45–90s sem cache de satélites).
+  /// Valor curto interrompe a inicialização antes do fix chegar.
+  static const _kFirstPositionTimeout = Duration(seconds: 90);
 
   /// Número máximo de tentativas automáticas de restart do watchdog.
-  static const _kMaxWatchdogRetries = 2;
+  ///
+  /// 1 retry é suficiente para o caso de "stream silenciosa" do Android.
+  static const _kMaxWatchdogRetries = 1;
 
   /// Timeout efetivo do watchdog — injetável via [forTesting].
   /// Duration.zero desabilita o watchdog e o retry de erro completamente.
@@ -117,6 +130,10 @@ class GpsSourceManager {
 
   /// Contador de erros consecutivos do GPS interno — reset ao receber 1ª posição.
   int _internalErrorRetries = 0;
+
+  /// Callbacks injetáveis para permissão e configurações (override em testes).
+  final Future<LocationPermission> Function() _permissionRequester;
+  final Future<bool> Function() _appSettingsOpener;
 
   // ── interface pública ──────────────────────────────────────────────────────
 
@@ -233,7 +250,7 @@ class GpsSourceManager {
       _onPositionReceived,
       onError: (Object err) {
         _log('ERRO na stream GPS (${source.info.name}): $err');
-        _handleSourceError();
+        _handleSourceError(err);
       },
       onDone: () {
         _log('Stream GPS encerrada (${source.info.name})');
@@ -341,8 +358,8 @@ class GpsSourceManager {
   ///
   /// O `_sourceSub` é anulado antes de chamar [_subscribeToSource] para que
   /// a nova subscription não tente await-cancelar uma stream já em erro.
-  void _handleSourceError() {
-    GpsDiagnosticsService.instance.onSourceError(_activeSource, 'stream_error');
+  void _handleSourceError(Object err) {
+    GpsDiagnosticsService.instance.onSourceError(_activeSource, err);
     if (_activeSource.info.isExternal) {
       _log('source_selected: ${_internalFallback.info.name} reason=fallback_error from=${_activeSource.info.name}');
       TelemetryService.instance.logEvent('gps_fallback',
@@ -356,6 +373,10 @@ class GpsSourceManager {
         reason: GpsSourceChangeReason.fallback,
       ));
     } else {
+      if (_isPermissionError(err)) {
+        _handlePermissionDenied();
+        return;
+      }
       _firstPositionTimer?.cancel();
       _firstPositionTimer = null;
       _sourceSub = null;
@@ -389,6 +410,49 @@ class GpsSourceManager {
         );
       }
     }
+  }
+
+  bool _isPermissionError(Object err) {
+    final msg = err.toString().toLowerCase();
+    return msg.contains('permission') || msg.contains('denied');
+  }
+
+  void _handlePermissionDenied() {
+    _firstPositionTimer?.cancel();
+    _firstPositionTimer = null;
+    _sourceSub = null;
+    _log('GPS interno: permissão negada — solicitando ao usuário');
+    TelemetryService.instance.logEvent('gps_permission_denied');
+    unawaited(_requestPermissionAndRetry());
+  }
+
+  Future<void> _requestPermissionAndRetry() async {
+    final perm = await _permissionRequester();
+    if (perm == LocationPermission.whileInUse ||
+        perm == LocationPermission.always) {
+      _log('GPS: permissão concedida — reiniciando');
+      TelemetryService.instance.logEvent('gps_permission_granted');
+      _internalErrorRetries = 0;
+      await _subscribeToSource(_activeSource);
+    } else if (perm == LocationPermission.deniedForever) {
+      _log('GPS: permissão negada permanentemente — abrindo configurações');
+      TelemetryService.instance.logEvent('gps_permission_denied_forever');
+      GpsDiagnosticsService.instance.onPermissionDenied(_activeSource);
+      await _appSettingsOpener();
+    } else {
+      _log('GPS: permissão negada pelo usuário');
+      TelemetryService.instance.logEvent('gps_permission_rejected_by_user');
+      GpsDiagnosticsService.instance.onPermissionDenied(_activeSource);
+    }
+  }
+
+  /// Solicita permissão de localização ao usuário.
+  ///
+  /// Mostra o dialog do sistema se a permissão não foi negada definitivamente.
+  /// Se negada definitivamente, abre as configurações do app.
+  /// Se concedida, reinicia a subscription GPS automaticamente.
+  Future<void> requestLocationPermission() async {
+    await _requestPermissionAndRetry();
   }
 
   /// Chamado quando a stream termina (GPS externo desconectado ou stream vazia).

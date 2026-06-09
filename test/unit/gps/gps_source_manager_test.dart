@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:lapzy/services/gps_diagnostics.dart';
+import 'package:lapzy/services/gps_diagnostics_service.dart';
 import 'package:lapzy/services/gps_source.dart';
 import 'package:lapzy/services/gps_source_manager.dart';
 import 'package:lapzy/services/internal_gps_service.dart';
@@ -283,6 +285,302 @@ void main() {
           equals(GpsConnectionType.internal));
 
       await btController.close();
+    });
+  });
+
+  group('watchdog de primeira posição', () {
+    const kTimeout = Duration(milliseconds: 10);
+    const kWait = Duration(milliseconds: 60);
+
+    test('reinicia subscription uma vez após timeout sem dados', () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      var subscribeCount = 0;
+      final controllers = <StreamController<Position>>[];
+
+      final manager = GpsSourceManager.forTesting(
+        activeSource: InternalGpsService(
+          streamFactory: () {
+            subscribeCount++;
+            final ctrl = StreamController<Position>();
+            controllers.add(ctrl);
+            return ctrl.stream;
+          },
+        ),
+        prefs: prefs,
+        watchdogTimeout: kTimeout,
+      );
+      GpsSourceManager.resetForTesting(manager);
+      await manager.init();
+      expect(subscribeCount, equals(1));
+
+      await Future<void>.delayed(kWait);
+      expect(subscribeCount, equals(2));
+
+      await Future<void>.delayed(kWait);
+      expect(subscribeCount, equals(2));
+
+      for (final c in controllers) {
+        await c.close();
+      }
+      GpsSourceManager.resetForTesting();
+    });
+
+    test('watchdog não dispara se posição chegou antes do timeout', () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      var subscribeCount = 0;
+      final ctrl = StreamController<Position>();
+
+      final manager = GpsSourceManager.forTesting(
+        activeSource: InternalGpsService(streamFactory: () {
+          subscribeCount++;
+          return ctrl.stream;
+        }),
+        prefs: prefs,
+        watchdogTimeout: kTimeout,
+      );
+      GpsSourceManager.resetForTesting(manager);
+      await manager.init();
+
+      ctrl.add(_pos(-23.5, -46.6, DateTime(2026)));
+      await Future<void>.delayed(kWait);
+      expect(subscribeCount, equals(1));
+
+      await ctrl.close();
+      GpsSourceManager.resetForTesting();
+    });
+
+    test('posições chegam normalmente após watchdog esgotar retries', () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      late StreamController<Position> lastCtrl;
+      var subscribeCount = 0;
+
+      final manager = GpsSourceManager.forTesting(
+        activeSource: InternalGpsService(
+          streamFactory: () {
+            subscribeCount++;
+            lastCtrl = StreamController<Position>();
+            return lastCtrl.stream;
+          },
+        ),
+        prefs: prefs,
+        watchdogTimeout: kTimeout,
+      );
+      GpsSourceManager.resetForTesting(manager);
+
+      final received = <Position>[];
+      final sub = manager.positionStream.listen(received.add);
+
+      await manager.init();
+      await Future<void>.delayed(kWait * 3);
+      expect(subscribeCount, equals(2));
+
+      lastCtrl.add(_pos(-23.5, -46.6, DateTime(2026)));
+      await Future<void>.delayed(Duration.zero);
+      expect(received.length, equals(1));
+
+      await sub.cancel();
+      await lastCtrl.close();
+      GpsSourceManager.resetForTesting();
+    });
+
+    test('watchdog de externo não interfere em interno após fallback', () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      var internalCount = 0;
+      final externalCtrl = StreamController<Position>();
+      final internalCtrls = <StreamController<Position>>[];
+
+      final external = ExternalGpsService(
+        info: _kBtInfo,
+        streamFactory: () => externalCtrl.stream,
+      );
+
+      final manager = GpsSourceManager.forTesting(
+        activeSource: external,
+        internalFallback: InternalGpsService(streamFactory: () {
+          internalCount++;
+          final c = StreamController<Position>();
+          internalCtrls.add(c);
+          return c.stream;
+        }),
+        prefs: prefs,
+        watchdogTimeout: kTimeout,
+      );
+      GpsSourceManager.resetForTesting(manager);
+      await manager.init();
+
+      externalCtrl.addError(Exception('BT disconnect'));
+      await Future<void>.delayed(Duration.zero);
+      expect(manager.activeSource, isA<InternalGpsService>());
+      expect(internalCount, equals(1));
+
+      await Future<void>.delayed(kWait);
+      expect(internalCount, equals(2));
+
+      await Future<void>.delayed(kWait);
+      expect(internalCount, equals(2));
+
+      await externalCtrl.close();
+      for (final c in internalCtrls) {
+        await c.close();
+      }
+      GpsSourceManager.resetForTesting();
+    });
+  });
+
+  group('permissão de localização', () {
+    test('erro de permissão não dispara retry normal — solicita permissão ao usuário', () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      var subscribeCount = 0;
+      final ctrl = StreamController<Position>();
+      var permissionRequested = false;
+
+      final manager = GpsSourceManager.forTesting(
+        activeSource: InternalGpsService(
+          streamFactory: () {
+            subscribeCount++;
+            return ctrl.stream;
+          },
+        ),
+        prefs: prefs,
+        permissionRequester: () async {
+          permissionRequested = true;
+          return LocationPermission.denied;
+        },
+      );
+      GpsSourceManager.resetForTesting(manager);
+      await manager.init();
+
+      ctrl.addError(Exception('User denied permissions to access the device location'));
+      await Future<void>.delayed(Duration.zero);
+
+      expect(permissionRequested, isTrue);
+      expect(subscribeCount, equals(1));
+
+      await ctrl.close();
+      GpsSourceManager.resetForTesting();
+    });
+
+    test('quando permissão é concedida, GPS reinicia automaticamente', () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      var subscribeCount = 0;
+      final ctrls = <StreamController<Position>>[];
+
+      final manager = GpsSourceManager.forTesting(
+        activeSource: InternalGpsService(
+          streamFactory: () {
+            subscribeCount++;
+            final c = StreamController<Position>();
+            ctrls.add(c);
+            return c.stream;
+          },
+        ),
+        prefs: prefs,
+        permissionRequester: () async => LocationPermission.whileInUse,
+      );
+      GpsSourceManager.resetForTesting(manager);
+      await manager.init();
+      expect(subscribeCount, equals(1));
+
+      ctrls.first.addError(Exception('User denied permissions'));
+      await Future<void>.delayed(Duration.zero);
+
+      expect(subscribeCount, equals(2));
+
+      for (final c in ctrls) { await c.close(); }
+      GpsSourceManager.resetForTesting();
+    });
+
+    test('quando permissão é negada permanentemente, abre configurações', () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      final ctrl = StreamController<Position>();
+      var settingsOpened = false;
+
+      final manager = GpsSourceManager.forTesting(
+        activeSource: InternalGpsService(streamFactory: () => ctrl.stream),
+        prefs: prefs,
+        permissionRequester: () async => LocationPermission.deniedForever,
+        appSettingsOpener: () async {
+          settingsOpened = true;
+          return true;
+        },
+      );
+      GpsSourceManager.resetForTesting(manager);
+      await manager.init();
+
+      ctrl.addError(Exception('permission denied'));
+      await Future<void>.delayed(Duration.zero);
+
+      expect(settingsOpened, isTrue);
+
+      await ctrl.close();
+      GpsSourceManager.resetForTesting();
+    });
+
+    test('quando permissão é negada, estado diagnóstico muda para permissionDenied', () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      GpsDiagnosticsService.resetForTesting();
+      final ctrl = StreamController<Position>();
+
+      final manager = GpsSourceManager.forTesting(
+        activeSource: InternalGpsService(streamFactory: () => ctrl.stream),
+        prefs: prefs,
+        permissionRequester: () async => LocationPermission.denied,
+      );
+      GpsSourceManager.resetForTesting(manager);
+      await manager.init();
+
+      ctrl.addError(Exception('User denied permissions'));
+      await Future<void>.delayed(Duration.zero);
+
+      expect(
+        GpsDiagnosticsService.instance.current.fixState,
+        equals(GpsFixState.permissionDenied),
+      );
+
+      await ctrl.close();
+      GpsSourceManager.resetForTesting();
+      GpsDiagnosticsService.resetForTesting();
+    });
+
+    test('erro de permissão em GPS externo não bloqueia — faz fallback normal', () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      var permissionRequested = false;
+      final externalCtrl = StreamController<Position>();
+
+      final external = ExternalGpsService(
+        info: _kBtInfo,
+        streamFactory: () => externalCtrl.stream,
+      );
+
+      final manager = GpsSourceManager.forTesting(
+        activeSource: external,
+        internalFallback: InternalGpsService(streamFactory: () => const Stream.empty()),
+        prefs: prefs,
+        permissionRequester: () async {
+          permissionRequested = true;
+          return LocationPermission.denied;
+        },
+      );
+      GpsSourceManager.resetForTesting(manager);
+      await manager.init();
+
+      externalCtrl.addError(Exception('denied permissions'));
+      await Future<void>.delayed(Duration.zero);
+
+      expect(permissionRequested, isFalse);
+      expect(manager.activeSource, isA<InternalGpsService>());
+
+      await externalCtrl.close();
+      GpsSourceManager.resetForTesting();
     });
   });
 

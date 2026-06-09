@@ -2,13 +2,14 @@ import 'gps_source.dart';
 
 /// Estado da fonte GPS no pipeline de diagnóstico.
 enum GpsFixState {
-  idle,           // não subscrito ainda
-  initializing,   // subscription criada, zero dados recebidos
-  waitingFix,     // dados chegando (NMEA ou posição), sem fix válido ainda
-  fixAcquired,    // ao menos uma Position válida recebida
-  stale,          // tinha fix, mas nenhuma posição nos últimos 5s
-  error,          // stream emitiu erro
-  disconnected,   // stream fechou (fonte desconectada)
+  idle,             // não subscrito ainda
+  initializing,     // subscription criada, zero dados recebidos
+  waitingFix,       // dados chegando (NMEA ou posição), sem fix válido ainda
+  fixAcquired,      // ao menos uma Position válida recebida
+  stale,            // tinha fix, mas nenhuma posição nos últimos 5s
+  error,            // stream emitiu erro
+  disconnected,     // stream fechou (fonte desconectada)
+  permissionDenied, // permissão de localização negada pelo usuário
 }
 
 /// Linha NMEA individual com resultado do parse.

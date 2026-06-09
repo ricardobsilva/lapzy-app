@@ -42,6 +42,29 @@ class InternalGpsService implements GpsSource {
       '[LAPZY/GPS] InternalGpsService — solicitando: '
       'accuracy=best distanceFilter=0 intervalDuration=${interval.inMilliseconds}ms',
     );
-    return Geolocator.getPositionStream(locationSettings: settings);
+    final liveStream = Geolocator.getPositionStream(locationSettings: settings);
+    return _withLastKnownPrefix(liveStream);
+  }
+
+  /// Emite a última posição conhecida do cache do Android imediatamente,
+  /// depois repassa tudo da stream ao vivo.
+  ///
+  /// Isso evita a tela em branco durante o cold start do GPS: o mapa já
+  /// carrega com a última localização conhecida (pode ser de minutos ou horas
+  /// atrás) enquanto o chip GPS busca um fix fresco.
+  Stream<Position> _withLastKnownPrefix(Stream<Position> liveStream) async* {
+    Position? last;
+    try {
+      last = await Geolocator.getLastKnownPosition();
+    } catch (_) {}
+    if (last != null) {
+      final age = DateTime.now().difference(last.timestamp);
+      debugPrint(
+        '[LAPZY/GPS] InternalGpsService — última posição conhecida: '
+        'age=${age.inSeconds}s lat=${last.latitude.toStringAsFixed(6)}',
+      );
+      yield last;
+    }
+    yield* liveStream;
   }
 }

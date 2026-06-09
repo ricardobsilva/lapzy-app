@@ -97,6 +97,15 @@ class GpsDiagnosticsService {
     _emit();
   }
 
+  /// Chamado por [GpsSourceManager] quando a permissão de localização foi negada.
+  void onPermissionDenied(GpsSource source) {
+    debugPrint('[LAPZY/DIAG] Permissão de localização negada → ${source.info.name}');
+    _staleTimer?.cancel();
+    _staleTimer = null;
+    _snap = _snap.copyWith(fixState: GpsFixState.permissionDenied);
+    _emit();
+  }
+
   /// Chamado por [GpsSourceManager] quando a stream GPS fecha (done).
   void onSourceDone(GpsSource source) {
     debugPrint('[LAPZY/DIAG] Stream fechada → ${source.info.name}');
