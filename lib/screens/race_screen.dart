@@ -150,6 +150,7 @@ class _RaceScreenState extends State<RaceScreen> with WidgetsBindingObserver {
   StreamSubscription<LapEvent>? _detectorSub;
   StreamSubscription<Position>? _speedSub;
   double? _speedKmh;
+  final List<double> _currentLapSpeedSamples = [];
 
   Timer? _resetBorderTimer;
   int _nextSectorIndex = 0;
@@ -235,7 +236,10 @@ class _RaceScreenState extends State<RaceScreen> with WidgetsBindingObserver {
         '[LAPZY/UI] velocidade=${kmh.toStringAsFixed(1)}km/h '
         'Δ=${deltaMs ?? '?'}ms hz=$hz',
       );
-      if (mounted) setState(() => _speedKmh = kmh);
+      if (mounted) {
+        setState(() => _speedKmh = kmh);
+        if (_hasStarted) _currentLapSpeedSamples.add(kmh);
+      }
     });
   }
 
@@ -307,6 +311,7 @@ class _RaceScreenState extends State<RaceScreen> with WidgetsBindingObserver {
           _lapStartTime = event.timestamp;
           _hasStarted = true;
         });
+        _currentLapSpeedSamples.clear();
       } else {
         _onLapCompleted(event.timestamp, suspect: false);
       }
@@ -316,6 +321,7 @@ class _RaceScreenState extends State<RaceScreen> with WidgetsBindingObserver {
           _lapStartTime = event.timestamp;
           _hasStarted = true;
         });
+        _currentLapSpeedSamples.clear();
       } else {
         _onLapCompleted(event.timestamp, suspect: true);
       }
@@ -336,10 +342,21 @@ class _RaceScreenState extends State<RaceScreen> with WidgetsBindingObserver {
       prThresholdMs: widget.prThresholdMs,
     );
 
+    final speedSamples = List<double>.from(_currentLapSpeedSamples);
+    _currentLapSpeedSamples.clear();
+    final maxSpeedKmh = speedSamples.isEmpty
+        ? null
+        : speedSamples.reduce((a, b) => a > b ? a : b);
+    final avgSpeedKmh = speedSamples.isEmpty
+        ? null
+        : speedSamples.reduce((a, b) => a + b) / speedSamples.length;
+
     setState(() {
       _completedLaps.add(LapResult(
         lapMs: lapMs,
         sectors: List<int?>.from(_currentSectors),
+        maxSpeedKmh: maxSpeedKmh,
+        avgSpeedKmh: avgSpeedKmh,
       ));
       _bestLapMs = result.newBestLapMs;
       _deltaMs = result.deltaMs;

@@ -33,6 +33,10 @@ const _lapA = LapResult(lapMs: 83887, sectors: [28441, 31203, 24243]);
 const _lapB = LapResult(lapMs: 85441, sectors: [29000, 32000, 24441]);
 const _lapC = LapResult(lapMs: 83654);
 
+// voltas com dados de velocidade
+const _lapSpeed1 = LapResult(lapMs: 83887, maxSpeedKmh: 82.0, avgSpeedKmh: 61.0);
+const _lapSpeed2 = LapResult(lapMs: 85441, maxSpeedKmh: 79.0, avgSpeedKmh: 58.0);
+
 // 7 setores — volta rápida (melhor)
 const _lap7Best = LapResult(
   lapMs: 83654,
@@ -785,6 +789,118 @@ void main() {
         final avgWidget = tester.widget<Text>(find.byKey(const Key('summary_avg_lap')));
         // Média correta sem outlier = (65000+64000+66000)/3 = 65000ms = 1:05.000
         expect(avgWidget.data, '1:05.000');
+      });
+    });
+
+    group('velocidade — hero e linhas de volta', () {
+      testWidgets('exibe VEL. MÁX no hero quando há dados de velocidade', (tester) async {
+        // _lapSpeed1 (82 km/h) > _lapSpeed2 (79 km/h) → máx na V1
+        await tester.pumpWidget(_buildScreen(
+          laps: [_lapSpeed1, _lapSpeed2],
+        ));
+
+        expect(find.byKey(const Key('summary_max_speed')), findsOneWidget);
+        final maxWidget = tester.widget<Text>(find.byKey(const Key('summary_max_speed')));
+        expect(maxWidget.data, '82 km/h');
+        expect(find.text('VEL. MÁX · V1'), findsOneWidget);
+      });
+
+      testWidgets('exibe VEL. MÉD no hero ao lado de VOLTAS quando há dados', (tester) async {
+        // média das avgSpeedKmh: (61 + 58) / 2 = 59.5 → arredonda para 60
+        await tester.pumpWidget(_buildScreen(
+          laps: [_lapSpeed1, _lapSpeed2],
+        ));
+
+        expect(find.byKey(const Key('summary_avg_speed')), findsOneWidget);
+        final avgWidget = tester.widget<Text>(find.byKey(const Key('summary_avg_speed')));
+        expect(avgWidget.data, '60 km/h');
+      });
+
+      testWidgets('NÃO exibe stats de velocidade quando voltas não têm dados', (tester) async {
+        await tester.pumpWidget(_buildScreen(
+          laps: [_lapA, _lapB],
+        ));
+
+        expect(find.byKey(const Key('summary_max_speed')), findsNothing);
+        expect(find.byKey(const Key('summary_avg_speed')), findsNothing);
+      });
+
+      testWidgets('exibe legenda de velocidade em cada linha de volta', (tester) async {
+        await tester.pumpWidget(_buildScreen(
+          laps: [_lapSpeed1, _lapSpeed2],
+        ));
+
+        expect(find.byKey(const Key('summary_lap_speed_1')), findsOneWidget);
+
+        final scrollable = find.descendant(
+          of: find.byType(CustomScrollView),
+          matching: find.byType(Scrollable),
+        ).first;
+        await tester.scrollUntilVisible(
+          find.byKey(const Key('summary_lap_speed_2')), 100,
+          scrollable: scrollable,
+        );
+        expect(find.byKey(const Key('summary_lap_speed_2')), findsOneWidget);
+      });
+
+      testWidgets('legenda de V1 exibe max e med corretos', (tester) async {
+        await tester.pumpWidget(_buildScreen(
+          laps: [_lapSpeed1],
+        ));
+
+        final subtitle = tester.widget<Text>(
+          find.descendant(
+            of: find.byKey(const Key('summary_lap_speed_1')),
+            matching: find.byType(Text),
+          ),
+        );
+        expect(subtitle.data, 'MÁX 82  ·  MÉD 61 km/h');
+      });
+
+      testWidgets('NÃO exibe legenda de velocidade em linha sem dados', (tester) async {
+        await tester.pumpWidget(_buildScreen(
+          laps: [_lapA],
+        ));
+
+        expect(find.byKey(const Key('summary_lap_speed_1')), findsNothing);
+      });
+    });
+
+    group('velocidade — detalhe de volta', () {
+      Future<void> openSheet(WidgetTester tester, int lapNumber) async {
+        final scrollable = find.descendant(
+          of: find.byType(CustomScrollView),
+          matching: find.byType(Scrollable),
+        ).first;
+        final rowKey = Key('summary_lap_row_$lapNumber');
+        await tester.scrollUntilVisible(find.byKey(rowKey), 100, scrollable: scrollable);
+        await tester.ensureVisible(find.byKey(rowKey));
+        await tester.pump();
+        await tester.tap(find.byKey(rowKey));
+        await tester.pumpAndSettle();
+      }
+
+      testWidgets('detail sheet exibe max e med de velocidade', (tester) async {
+        await tester.pumpWidget(_buildScreen(
+          laps: [_lapSpeed1],
+        ));
+
+        await openSheet(tester, 1);
+
+        expect(find.byKey(const Key('lap_detail_max_speed')), findsOneWidget);
+        expect(find.byKey(const Key('lap_detail_avg_speed')), findsOneWidget);
+      });
+
+      testWidgets('detail sheet NÃO exibe velocidade quando dados ausentes', (tester) async {
+        await tester.pumpWidget(_buildScreen(
+          laps: [_lapA],
+          bestLapMs: _lapA.lapMs,
+        ));
+
+        await openSheet(tester, 1);
+
+        expect(find.byKey(const Key('lap_detail_max_speed')), findsNothing);
+        expect(find.byKey(const Key('lap_detail_avg_speed')), findsNothing);
       });
     });
 

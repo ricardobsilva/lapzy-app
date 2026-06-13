@@ -25,9 +25,19 @@ class LapResult {
   /// Vazio quando a pista não possui setores definidos.
   final List<int?> sectors;
 
+  /// Velocidade máxima registrada pelo GPS nesta volta (km/h).
+  /// Null em sessões antigas (salvas antes da coleta de velocidade por volta).
+  final double? maxSpeedKmh;
+
+  /// Velocidade média registrada pelo GPS nesta volta (km/h).
+  /// Null em sessões antigas (salvas antes da coleta de velocidade por volta).
+  final double? avgSpeedKmh;
+
   const LapResult({
     required this.lapMs,
     this.sectors = const [],
+    this.maxSpeedKmh,
+    this.avgSpeedKmh,
   });
 
   // Getters de conveniência mantidos para compatibilidade.
@@ -38,6 +48,8 @@ class LapResult {
   Map<String, dynamic> toJson() => {
         'lapMs': lapMs,
         'sectors': sectors,
+        if (maxSpeedKmh != null) 'maxSpeedKmh': maxSpeedKmh,
+        if (avgSpeedKmh != null) 'avgSpeedKmh': avgSpeedKmh,
       };
 
   factory LapResult.fromJson(Map<String, dynamic> json) => LapResult(
@@ -45,6 +57,8 @@ class LapResult {
         sectors: ((json['sectors'] as List<dynamic>?) ?? const [])
             .map((s) => s as int?)
             .toList(),
+        maxSpeedKmh: (json['maxSpeedKmh'] as num?)?.toDouble(),
+        avgSpeedKmh: (json['avgSpeedKmh'] as num?)?.toDouble(),
       );
 }
 

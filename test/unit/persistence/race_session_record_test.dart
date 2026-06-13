@@ -35,6 +35,39 @@ void main() {
       expect(json['lapMs'], equals(60000));
       expect(json['sectors'], equals([30000, 30000]));
     });
+
+    test('toJson/fromJson preserva maxSpeedKmh e avgSpeedKmh', () {
+      const original = LapResult(lapMs: 62450, maxSpeedKmh: 87.4, avgSpeedKmh: 63.1);
+      final restored = LapResult.fromJson(original.toJson());
+
+      expect(restored.maxSpeedKmh, closeTo(87.4, 0.001));
+      expect(restored.avgSpeedKmh, closeTo(63.1, 0.001));
+    });
+
+    test('toJson omite campos de velocidade quando nulos', () {
+      const lap = LapResult(lapMs: 62450);
+      final json = lap.toJson();
+
+      expect(json.containsKey('maxSpeedKmh'), isFalse);
+      expect(json.containsKey('avgSpeedKmh'), isFalse);
+    });
+
+    test('fromJson aceita JSON sem campos de velocidade (sessões antigas)', () {
+      final json = {'lapMs': 62450, 'sectors': <dynamic>[]};
+      final lap = LapResult.fromJson(json);
+
+      expect(lap.lapMs, equals(62450));
+      expect(lap.maxSpeedKmh, isNull);
+      expect(lap.avgSpeedKmh, isNull);
+    });
+
+    test('fromJson aceita apenas maxSpeedKmh sem avgSpeedKmh', () {
+      final json = {'lapMs': 62450, 'sectors': <dynamic>[], 'maxSpeedKmh': 90.0};
+      final lap = LapResult.fromJson(json);
+
+      expect(lap.maxSpeedKmh, closeTo(90.0, 0.001));
+      expect(lap.avgSpeedKmh, isNull);
+    });
   });
 
   group('RaceSessionRecord', () {

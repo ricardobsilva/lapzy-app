@@ -85,6 +85,29 @@ class _RaceSummaryScreenState extends State<RaceSummaryScreen> {
     return idx >= 0 ? widget.laps[idx] : null;
   }
 
+  ({double kmh, int lapNumber})? get _maxSpeedRecord {
+    double? best;
+    int? lapNumber;
+    for (int i = 0; i < widget.laps.length; i++) {
+      final s = widget.laps[i].maxSpeedKmh;
+      if (s != null && (best == null || s > best)) {
+        best = s;
+        lapNumber = i + 1;
+      }
+    }
+    if (best == null) return null;
+    return (kmh: best, lapNumber: lapNumber!);
+  }
+
+  double? get _sessionAvgSpeedKmh {
+    final speeds = widget.laps
+        .map((l) => l.avgSpeedKmh)
+        .whereType<double>()
+        .toList();
+    if (speeds.isEmpty) return null;
+    return speeds.reduce((a, b) => a + b) / speeds.length;
+  }
+
   int _activeSectorCount() {
     return widget.laps.fold(0, (m, l) => l.sectors.length > m ? l.sectors.length : m);
   }
@@ -122,6 +145,7 @@ class _RaceSummaryScreenState extends State<RaceSummaryScreen> {
     final sectorCount = _activeSectorCount();
     final bestLapIndex = _bestLapIndex;
     final computedBestLapMs = _computedBestLapMs;
+    final maxSpeed = _maxSpeedRecord;
 
     return Scaffold(
       backgroundColor: _kBg,
@@ -136,6 +160,9 @@ class _RaceSummaryScreenState extends State<RaceSummaryScreen> {
               lapCount: widget.laps.length,
               totalRaceMs: _totalRaceMs,
               avgLapMs: _computedAvgLapMs,
+              sessionMaxSpeedKmh: maxSpeed?.kmh,
+              sessionMaxSpeedLapNumber: maxSpeed?.lapNumber,
+              sessionAvgSpeedKmh: _sessionAvgSpeedKmh,
             ),
             const Divider(color: _kDivider, height: 1),
             Expanded(
@@ -224,6 +251,9 @@ class _SummaryHero extends StatelessWidget {
   final int lapCount;
   final int totalRaceMs;
   final int? avgLapMs;
+  final double? sessionMaxSpeedKmh;
+  final int? sessionMaxSpeedLapNumber;
+  final double? sessionAvgSpeedKmh;
 
   const _SummaryHero({
     required this.track,
@@ -232,6 +262,9 @@ class _SummaryHero extends StatelessWidget {
     required this.lapCount,
     required this.totalRaceMs,
     required this.avgLapMs,
+    this.sessionMaxSpeedKmh,
+    this.sessionMaxSpeedLapNumber,
+    this.sessionAvgSpeedKmh,
   });
 
   @override
@@ -281,8 +314,28 @@ class _SummaryHero extends StatelessWidget {
                 color: Colors.white,
                 valueKey: const Key('summary_lap_count'),
               ),
+              if (sessionAvgSpeedKmh != null) ...[
+                const SizedBox(width: 32),
+                _HeroStat(
+                  label: 'VEL. MÉD',
+                  value: '${sessionAvgSpeedKmh!.round()} km/h',
+                  color: Colors.white,
+                  valueKey: const Key('summary_avg_speed'),
+                ),
+              ],
             ],
           ),
+          if (sessionMaxSpeedKmh != null) ...[
+            const SizedBox(height: 12),
+            _HeroStat(
+              label: sessionMaxSpeedLapNumber != null
+                  ? 'VEL. MÁX · V$sessionMaxSpeedLapNumber'
+                  : 'VEL. MÁX',
+              value: '${sessionMaxSpeedKmh!.round()} km/h',
+              color: Colors.white.withAlpha(153),
+              valueKey: const Key('summary_max_speed'),
+            ),
+          ],
           const SizedBox(height: 12),
           _HeroStat(
             label: 'TEMPO TOTAL',
@@ -592,43 +645,58 @@ class _LapRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final delta = _deltaMs;
+    final hasSpeed = lap.maxSpeedKmh != null || lap.avgSpeedKmh != null;
 
     return GestureDetector(
       key: Key('summary_lap_row_$lapNumber'),
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-        child: Row(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SizedBox(
-              width: 32,
-              child: Text(
-                '$lapNumber',
-                key: Key('summary_lap_number_$lapNumber'),
-                style: GoogleFonts.rajdhani(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.white.withAlpha(71),
+            Row(
+              children: [
+                SizedBox(
+                  width: 32,
+                  child: Text(
+                    '$lapNumber',
+                    key: Key('summary_lap_number_$lapNumber'),
+                    style: GoogleFonts.rajdhani(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white.withAlpha(71),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: Text(
+                    _formatMs(lap.lapMs),
+                    key: Key('summary_lap_time_$lapNumber'),
+                    style: GoogleFonts.rajdhani(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w700,
+                      color: isBest ? _kPurple : Colors.white,
+                    ),
+                  ),
+                ),
+                SizedBox(
+                  width: 72,
+                  child: _DeltaText(deltaMs: delta, lapNumber: lapNumber),
+                ),
+                if (isBest) _PrBadge(),
+              ],
+            ),
+            if (hasSpeed)
+              Padding(
+                padding: const EdgeInsets.only(left: 32, top: 2),
+                child: _LapSpeedSubtitle(
+                  key: Key('summary_lap_speed_$lapNumber'),
+                  maxKmh: lap.maxSpeedKmh,
+                  avgKmh: lap.avgSpeedKmh,
                 ),
               ),
-            ),
-            Expanded(
-              child: Text(
-                _formatMs(lap.lapMs),
-                key: Key('summary_lap_time_$lapNumber'),
-                style: GoogleFonts.rajdhani(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w700,
-                  color: isBest ? _kPurple : Colors.white,
-                ),
-              ),
-            ),
-            SizedBox(
-              width: 72,
-              child: _DeltaText(deltaMs: delta, lapNumber: lapNumber),
-            ),
-            if (isBest) _PrBadge(),
           ],
         ),
       ),
@@ -670,6 +738,30 @@ class _DeltaText extends StatelessWidget {
         fontSize: 13,
         fontWeight: FontWeight.w700,
         color: color,
+      ),
+    );
+  }
+}
+
+class _LapSpeedSubtitle extends StatelessWidget {
+  final double? maxKmh;
+  final double? avgKmh;
+
+  const _LapSpeedSubtitle({super.key, this.maxKmh, this.avgKmh});
+
+  @override
+  Widget build(BuildContext context) {
+    final parts = <String>[];
+    if (maxKmh != null) parts.add('MÁX ${maxKmh!.round()}');
+    if (avgKmh != null) parts.add('MÉD ${avgKmh!.round()}');
+    if (parts.isEmpty) return const SizedBox.shrink();
+    return Text(
+      '${parts.join('  ·  ')} km/h',
+      style: GoogleFonts.rajdhani(
+        fontSize: 11,
+        fontWeight: FontWeight.w600,
+        letterSpacing: 0.5,
+        color: Colors.white.withAlpha(71),
       ),
     );
   }
@@ -814,6 +906,13 @@ class _LapDetailSheet extends StatelessWidget {
                       color: Colors.white,
                     ),
                   ),
+                  if (lap.maxSpeedKmh != null || lap.avgSpeedKmh != null) ...[
+                    const SizedBox(height: 4),
+                    _LapDetailSpeedRow(
+                      maxKmh: lap.maxSpeedKmh,
+                      avgKmh: lap.avgSpeedKmh,
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -849,6 +948,68 @@ class _LapDetailSheet extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _LapDetailSpeedRow extends StatelessWidget {
+  final double? maxKmh;
+  final double? avgKmh;
+
+  const _LapDetailSpeedRow({this.maxKmh, this.avgKmh});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        if (maxKmh != null)
+          _SpeedChip(
+            key: const Key('lap_detail_max_speed'),
+            label: 'MÁX',
+            value: '${maxKmh!.round()} km/h',
+          ),
+        if (maxKmh != null && avgKmh != null) const SizedBox(width: 16),
+        if (avgKmh != null)
+          _SpeedChip(
+            key: const Key('lap_detail_avg_speed'),
+            label: 'MÉD',
+            value: '${avgKmh!.round()} km/h',
+          ),
+      ],
+    );
+  }
+}
+
+class _SpeedChip extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _SpeedChip({super.key, required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          label,
+          style: GoogleFonts.rajdhani(
+            fontSize: 10,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 1.5,
+            color: Colors.white.withAlpha(71),
+          ),
+        ),
+        const SizedBox(width: 6),
+        Text(
+          value,
+          style: GoogleFonts.rajdhani(
+            fontSize: 15,
+            fontWeight: FontWeight.w700,
+            color: Colors.white.withAlpha(153),
+          ),
+        ),
+      ],
     );
   }
 }
