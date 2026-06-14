@@ -65,6 +65,13 @@ android {
                 "proguard-rules.pro"
             )
         }
+        getByName("profile") {
+            signingConfig = if (keystorePropertiesFile.exists()) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
+        }
     }
 }
 

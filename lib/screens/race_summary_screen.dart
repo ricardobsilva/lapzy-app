@@ -1,13 +1,19 @@
+import 'dart:convert';
+import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:path_provider/path_provider.dart';
 
 import '../models/race_session.dart';
 import '../models/track.dart';
+import '../repositories/race_session_repository.dart';
+import '../repositories/track_repository.dart';
 import '../services/gps_source.dart';
 import '../services/lap_filter.dart';
+import '../services/telemetry_service.dart';
 import '../widgets/pressable.dart';
 
 const _kBg = Color(0xFF0A0A0A);
@@ -236,7 +242,16 @@ class _RaceSummaryScreenState extends State<RaceSummaryScreen> {
             const Divider(color: _kDivider, height: 1),
             if (widget.gpsSource != null)
               _GpsSourceFooter(info: widget.gpsSource!),
-            const _ShareButton(),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 12, 24, 16),
+              child: Row(
+                children: [
+                  const Expanded(child: _ShareButton()),
+                  const SizedBox(width: 8),
+                  const Expanded(child: _ExportButton()),
+                ],
+              ),
+            ),
           ],
         ),
       ),
@@ -817,29 +832,118 @@ class _ShareButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 12, 24, 16),
-      child: Pressable(
-        onTap: () {},
-        child: Container(
-          key: const Key('summary_share_button'),
-          alignment: Alignment.center,
-          padding: const EdgeInsets.symmetric(vertical: 14),
-          decoration: BoxDecoration(
-            color: Colors.white.withAlpha(13),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.white.withAlpha(26), width: 1),
-          ),
-          child: Text(
-            'COMPARTILHAR',
-            style: GoogleFonts.rajdhani(
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 2,
-              color: Colors.white.withAlpha(180),
-            ),
+    return Pressable(
+      onTap: () {},
+      child: Container(
+        key: const Key('summary_share_button'),
+        alignment: Alignment.center,
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        decoration: BoxDecoration(
+          color: Colors.white.withAlpha(13),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.white.withAlpha(26), width: 1),
+        ),
+        child: Text(
+          'COMPARTILHAR',
+          style: GoogleFonts.rajdhani(
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 2,
+            color: Colors.white.withAlpha(180),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _ExportButton extends StatefulWidget {
+  const _ExportButton();
+
+  @override
+  State<_ExportButton> createState() => _ExportButtonState();
+}
+
+class _ExportButtonState extends State<_ExportButton> {
+  bool _exporting = false;
+
+  Future<void> _export() async {
+    if (_exporting) return;
+    setState(() => _exporting = true);
+    try {
+      final dir = await getExternalStorageDirectory();
+      if (dir == null) throw Exception('storage não disponível');
+
+      const encoder = JsonEncoder.withIndent('  ');
+
+      final tracks = TrackRepository().tracks;
+      await File('${dir.path}/lapzy_tracks.json')
+          .writeAsString(encoder.convert(tracks.map((t) => t.toJson()).toList()));
+
+      final sessions = RaceSessionRepository().sessions;
+      await File('${dir.path}/lapzy_sessions.json')
+          .writeAsString(encoder.convert(sessions.map((s) => s.toJson()).toList()));
+
+      final telem = TelemetryService.instance;
+      final telemSessions = await telem.querySessions();
+      final telemData = <Map<String, dynamic>>[];
+      for (final s in telemSessions) {
+        final events = await telem.queryEvents(s['id'] as String);
+        telemData.add({'session': s, 'events': events});
+      }
+      await File('${dir.path}/lapzy_telemetry.json')
+          .writeAsString(encoder.convert(telemData));
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Exportado: ${dir.path}'),
+            duration: const Duration(seconds: 6),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro ao exportar: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _exporting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Pressable(
+      onTap: _exporting ? () {} : _export,
+      child: Container(
+        key: const Key('summary_export_button'),
+        alignment: Alignment.center,
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        decoration: BoxDecoration(
+          color: Colors.white.withAlpha(13),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.white.withAlpha(26), width: 1),
+        ),
+        child: _exporting
+            ? const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white54,
+                ),
+              )
+            : Text(
+                'EXPORTAR',
+                style: GoogleFonts.rajdhani(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 2,
+                  color: Colors.white.withAlpha(180),
+                ),
+              ),
       ),
     );
   }

@@ -461,6 +461,25 @@ void main() {
         expect(find.byKey(const Key('summary_share_button')), findsOneWidget);
         expect(find.text('COMPARTILHAR'), findsOneWidget);
       });
+
+      testWidgets('exibe botão EXPORTAR no rodapé', (tester) async {
+        await tester.pumpWidget(_buildScreen(laps: []));
+
+        expect(find.byKey(const Key('summary_export_button')), findsOneWidget);
+        expect(find.text('EXPORTAR'), findsOneWidget);
+      });
+
+      testWidgets('COMPARTILHAR e EXPORTAR aparecem lado a lado', (tester) async {
+        await tester.pumpWidget(_buildScreen(laps: []));
+
+        final sharePos = tester.getCenter(find.byKey(const Key('summary_share_button')));
+        final exportPos = tester.getCenter(find.byKey(const Key('summary_export_button')));
+
+        // EXPORTAR está à direita de COMPARTILHAR
+        expect(exportPos.dx, greaterThan(sharePos.dx));
+        // mesma linha vertical (margem de 2px)
+        expect((exportPos.dy - sharePos.dy).abs(), lessThan(2));
+      });
     });
 
     group('TASK-005: bottom sheet detalhe de volta (3 setores)', () {
